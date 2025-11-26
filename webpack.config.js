@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
     mode: 'development',
@@ -7,7 +8,9 @@ module.exports = {
     output: {
         filename: 'bundle.js',
         path: path.resolve(__dirname, 'dist'),
-        publicPath: '/', // 確保資源路徑從根目錄開始
+        clean: true, // Webpack 5 建議加上這個，每次打包前清空 dist
+        // publicPath: process.env.NODE_ENV === 'production' ? '/demoMyself/' : '/'
+        publicPath: '/demoMyself/'
     },
     resolve: {
         extensions: ['.tsx', '.ts', '.js'],
@@ -40,6 +43,11 @@ module.exports = {
         new HtmlWebpackPlugin({
             template: 'public/index.html',
         }),
+        // new CopyWebpackPlugin({
+        //     patterns: [
+        //         { from: 'res', to: '/' } // 假設您的模型放在 public/assets
+        //     ],
+        // }),
     ],
     watchOptions: {
         poll: 500, // 每500毫秒檢查一次文件系統的變化

@@ -1,5 +1,7 @@
 # babylon_8_test
 
+- [demo url](https://momowu910.github.io/demoMyself/)
+
 ## 專案簡介
 本專案以 TypeScript 與 BABYLON.js 開發，採用 MVC 架構，目標打造賭場場景的博弈遊戲（如百家樂、slot）。
 - 目前以 搶莊二八槓 為主要開發遊戲
