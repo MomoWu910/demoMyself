@@ -1,0 +1,35 @@
+{
+    "compilerOptions": {
+        "baseUrl": ".",
+        "sourceMap": true,
+        "allowJs": true,
+        "outDir": "./dist",
+        "removeComments": false,
+        "resolveJsonModule": true,
+        "target": "es5",
+        "module": "esnext",
+        "moduleResolution": "node",
+        "forceConsistentCasingInFileNames": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "noImplicitAny": true,
+        "importHelpers": true,
+        "esModuleInterop": true,
+        "strictNullChecks": true,
+        "allowSyntheticDefaultImports": true,
+        "jsx": "react",
+        "paths": {
+            "@src/*": [
+                "./src/*"
+            ]
+        }
+    },
+    "include": [
+        "src",
+        "types"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist"
+    ]
+}
