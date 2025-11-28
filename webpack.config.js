@@ -2,15 +2,23 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 
+const pixiTemplate = './src/pixiJSDemo/index.html'; // 建立一個共用模板
+const isDev = process.env.NODE_ENV === 'development';
+
 module.exports = {
-    mode: 'development',
-    entry: './src/app.ts',
+    mode: isDev ? 'development' : 'production',
+    entry: {
+        main: './src/home/index.ts',                             // 入口首頁的 JS
+        babylon: './src/babylonJSDemo/src/app.ts',               // Babylon.js 選單頁
+        pixi_hub: './src/pixiJSDemo/pixiHub/index.ts',           // Pixi.js 選單頁
+        pixi_stress: './src/pixiJSDemo/stressTest/index.ts',     // Pixi.js 壓力測試
+    },
     output: {
-        filename: 'bundle.js',
+        filename: '[name].bundle.js',
         path: path.resolve(__dirname, 'dist'),
         clean: true, // Webpack 5 建議加上這個，每次打包前清空 dist
         // publicPath: process.env.NODE_ENV === 'production' ? '/demoMyself/' : '/'
-        publicPath: '/demoMyself/'
+        publicPath: isDev ? '/' : '/demoMyself/',
     },
     resolve: {
         extensions: ['.tsx', '.ts', '.js'],
@@ -41,13 +49,34 @@ module.exports = {
     },
     plugins: [
         new HtmlWebpackPlugin({
-            template: 'public/index.html',
+            filename: 'index.html',
+            template: './src/home/index.html',
+            chunks: ['main'],
+            title: 'Eric Wu - Portfolio',
         }),
-        // new CopyWebpackPlugin({
-        //     patterns: [
-        //         { from: 'res', to: '/' } // 假設您的模型放在 public/assets
-        //     ],
-        // }),
+        new HtmlWebpackPlugin({
+            filename: 'babylon.html',
+            template: './src/babylonJSDemo/index.html',
+            chunks: ['babylon'],
+            title: '3D Casino Demo',
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'pixi_hub.html',
+            template: './src/pixiJSDemo/pixiHub/index.html',
+            chunks: ['pixi_hub'],
+            title: 'PixiJS Demos',
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'pixi_stress.html',
+            template: pixiTemplate,
+            chunks: ['pixi_stress'],
+            title: 'PixiJS Stress Test',
+        }),
+        new CopyWebpackPlugin({
+            patterns: [
+                { from: 'public', to: 'public' } 
+            ],
+        }),
     ],
     watchOptions: {
         poll: 500, // 每500毫秒檢查一次文件系統的變化
@@ -55,10 +84,11 @@ module.exports = {
     },
     devServer: {
         static: {
-            directory: path.join(__dirname, 'dist'),
+            directory: path.join(__dirname, 'dist'), // 讓 dev server 讀得到靜態資源
         },
         compress: true,
-        port: 3000,
-        open: true,
+        port: 8080, // 指定 port
+        open: true, // 啟動時自動打開瀏覽器
+        hot: true,  // 啟用熱更新 (Hot Module Replacement)
     },
-};
+};  
