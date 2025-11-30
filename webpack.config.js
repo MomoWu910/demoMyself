@@ -12,6 +12,7 @@ module.exports = {
         babylon: './src/babylonJSDemo/src/app.ts',               // Babylon.js 選單頁
         pixi_hub: './src/pixiJSDemo/pixiHub/index.ts',           // Pixi.js 選單頁
         pixi_stress: './src/pixiJSDemo/stressTest/index.ts',     // Pixi.js 壓力測試
+        pixi_stress2: './src/pixiJSDemo/stressTest2/index.ts',   // Pixi.js 壓力測試2
     },
     output: {
         filename: '[name].bundle.js',
@@ -71,6 +72,12 @@ module.exports = {
             template: pixiTemplate,
             chunks: ['pixi_stress'],
             title: 'PixiJS Stress Test',
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'pixi_stress2.html',
+            template: pixiTemplate,
+            chunks: ['pixi_stress2'],
+            title: 'GPU-Driven Particle System',
         }),
         new CopyWebpackPlugin({
             patterns: [
