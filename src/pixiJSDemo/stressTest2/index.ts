@@ -22,7 +22,7 @@ import { UIManager } from './src/UIManager';
 
     (globalThis as any).__PIXI_APP__ = app;
     // 顯示 FPS 和 Renderer 資訊
-    showGameInfosPannel(app, ['fps', 'renderer']);
+    showGameInfosPannel(app, ['fps', 'drawcalls']);
 
     const stats = new Stats();
     document.body.appendChild(stats.dom);

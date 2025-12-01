@@ -13,6 +13,7 @@ module.exports = {
         pixi_hub: './src/pixiJSDemo/pixiHub/index.ts',           // Pixi.js 選單頁
         pixi_stress: './src/pixiJSDemo/stressTest/index.ts',     // Pixi.js 壓力測試
         pixi_stress2: './src/pixiJSDemo/stressTest2/index.ts',   // Pixi.js 壓力測試2
+        pixi_optimization: './src/pixiJSDemo/optimization/index.ts', // Pixi.js 最佳實踐
     },
     output: {
         filename: '[name].bundle.js',
@@ -82,6 +83,12 @@ module.exports = {
             template: pixiTemplate,
             chunks: ['pixi_stress2'],
             title: 'GPU-Driven Particle System',
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'pixi_optimization.html',
+            template: pixiTemplate,
+            chunks: ['pixi_optimization'],
+            title: 'PixiJS Optimization Lab',
         }),
         new CopyWebpackPlugin({
             patterns: [
