@@ -273,7 +273,7 @@ export class GameView {
 
         this.guiManager.registerPlanesToRayManager();
 
-        this._showInspector(); // 顯示場景偵測器（開發用）
+        // this._showInspector(); // 顯示場景偵測器（開發用）
 
         // await this.doFrameGraph(); // 套用一個編輯器拉節點，注意輸入輸出，效果有點類似shader
         // await this.doNodeMaterial(); // 基本上就是shader

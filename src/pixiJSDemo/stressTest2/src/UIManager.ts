@@ -1,88 +1,76 @@
 import GUI from 'lil-gui';
-import { ColorMatrixFilter, Container } from 'pixi.js';
 
 export class UIManager {
-    private onAddShibas: (count: number) => void;
-    private onFilterChange: (enable: boolean) => void;
-    private settings: {
-        enableFilter: boolean;
-        shibaCount: number;
-        addShibas: (count: number) => void;
-    };
     private gui: GUI;
+    private params: {
+        count: number;
+        renderer: string;
+        actualRenderer: string;
+        addAmount: number;
+        add: () => void;
+        reset: () => void;
+    };
 
     constructor(
-        onAddShibas: (count: number) => void,
-        onFilterChange: (enable: boolean) => void
+        initialRenderer: string,
+        actualRenderer: string,
+        onAddShibas: (amount: number) => void,
+        onReset: () => void,
+        onRendererChange: (renderer: string) => void
     ) {
-        this.onAddShibas = onAddShibas;
-        this.onFilterChange = onFilterChange;
-        
-        this.settings = {
-            enableFilter: false,
-            shibaCount: 0,
-            addShibas: () => this.onAddShibas(100)
+        this.params = {
+            count: 0,
+            renderer: initialRenderer,
+            actualRenderer: actualRenderer,
+            addAmount: 5000,
+            add: () => onAddShibas(this.params.addAmount),
+            reset: onReset
         };
 
-        this.gui = new GUI();
-        this.createUI();
-        this.createGUI();
+        this.gui = new GUI({ title: 'PixiJS v8 Benchmark' });
+        this.createGUI(onRendererChange);
+        this.createBackButton();
     }
 
-    private createUI() {
-        // Back Button
+    private createGUI(onRendererChange: (renderer: string) => void) {
+        // Info Folder
+        const folderInfo = this.gui.addFolder('Info');
+        folderInfo.add(this.params, 'actualRenderer').name('Backend').disable().listen();
+        folderInfo.add(this.params, 'count').name('Object Count').listen().disable();
+        folderInfo.open();
+
+        // Actions Folder
+        const folderAction = this.gui.addFolder('Actions');
+        folderAction.add(this.params, 'addAmount', 1000, 10000, 1000).name('Step Size');
+        folderAction.add(this.params, 'add').name('Add Shibas 🐕');
+        folderAction.add(this.params, 'reset').name('Reset 🗑️');
+        folderAction.open();
+
+        // System Folder
+        const folderSystem = this.gui.addFolder('System');
+        folderSystem.add(this.params, 'renderer', ['webgpu', 'webgl'])
+            .name('Change Renderer')
+            .onChange((v: string) => onRendererChange(v));
+    }
+
+    private createBackButton() {
         const backBtn = document.createElement('a');
         backBtn.innerText = '← Back';
         backBtn.href = './pixi_hub.html';
-        Object.assign(backBtn.style, {
-             position: 'absolute',
-             top: '55px',
-             left: '20px',
-             color: 'white',
-             textDecoration: 'none',
-             background: 'rgba(0,0,0,0.3)',
-             padding: '10px 15px',
-             borderRadius: '8px',
-             fontFamily: 'Segoe UI, Roboto, Helvetica, Arial, sans-serif',
-             backdropFilter: 'blur(5px)',
-             transition: 'background 0.3s'
+        Object.assign(backBtn.style, { 
+            position: 'absolute', 
+            top: '55px', 
+            left: '20px', 
+            color: 'white', 
+            background: 'rgba(0,0,0,0.5)', 
+            padding: '5px',
+            textDecoration: 'none',
+            borderRadius: '4px'
         });
-        backBtn.onmouseenter = () => backBtn.style.background = 'rgba(0,0,0,0.5)';
-        backBtn.onmouseleave = () => backBtn.style.background = 'rgba(0,0,0,0.3)';
-
         document.body.appendChild(backBtn);
     }
 
-    private createGUI() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const useWebGPU = urlParams.get('preference') === 'webgpu';
-
-        // Add WebGPU toggle
-        const engineSettings = { useWebGPU };
-        this.gui.add(engineSettings, 'useWebGPU')
-            .name('Use WebGPU ⚡')
-            .onChange((value: boolean) => {
-                const params = new URLSearchParams(window.location.search);
-                params.set('preference', value ? 'webgpu' : 'webgl');
-                window.location.search = params.toString();
-            });
-
-        this.gui.add(this.settings, 'enableFilter')
-            .name('Enable Filter (B&W)')
-            .onChange((value: boolean) => {
-                this.onFilterChange(value);
-            });
-        
-        this.gui.add(this.settings, 'shibaCount')
-            .name('Shiba Count')
-            .listen()
-            .disable();
-            
-        this.gui.add(this.settings, 'addShibas')
-            .name('Add 100 Shibas 🐕');
-    }
-
-    public updateShibaCount(count: number) {
-        this.settings.shibaCount = count;
+    public updateCount(count: number) {
+        this.params.count = count;
     }
 }

@@ -46,6 +46,10 @@ module.exports = {
                     // filename: `assets/[name].[contenthash][ext]`,
                 },
             },
+            {
+                test: /\.css$/i,
+                use: ['style-loader', 'css-loader'],
+            },
         ],
     },
     plugins: [

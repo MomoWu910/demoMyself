@@ -1,20 +1,53 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW" style="background-color: #0f0f11;">
 <head>
-    <title>PixiJS Demos</title>
-    </head>
+    <meta charset="UTF-8">
+    <meta name="theme-color" content="#0f0f11">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixiJS Experiments | Eric Wu</title>
+</head>
 <body>
-    <a href="./index.html" class="back-btn">← Back to Home</a>
-    <h1>PixiJS Experiments</h1>
-    
-    <div class="list">
-        <a href="./pixi_stress.html" class="demo-link">
-            Filter Stress Testing
+    <div class="nav-header">
+        <div>
+            <h1>PixiJS Experiments</h1>
+            <div style="color: var(--text-muted); font-size: 0.95rem; margin-top: 5px;">
+                Rendering performance tests & prototypes
+            </div>
+        </div>
+        <a href="./index.html" class="back-btn">
+            ← Back to Home
         </a>
     </div>
-    <div class="list">
-        <a href="./pixi_stress2.html" class="demo-link">
-            GPU-Driven Particle System
+
+    <div class="grid">
+        <a href="./pixi_stress.html" class="card">
+            <div class="card-content">
+                <h3>⚠️ Filter Stress Test</h3>
+                <p>Render Pipeline Stress Test "Benchmarking render pass overhead in WebGL vs WebGPU by intentionally breaking batching with per-object filters."</p>
+            </div>
+            <div class="tags">
+                <span class="tag">Unbatched</span>
+                <span class="tag">Stress Test</span>
+            </div>
+            <div class="card-footer">
+                <span style="font-size: 0.8rem; color: #666;">Render Pass Analysis</span>
+                <span class="btn-launch">Run Test ▶</span>
+            </div>
+        </a>
+
+        <a href="./pixi_stress2.html" class="card">
+            <div class="card-content">
+                <h3>Super Shiba Mark</h3>
+                <p>Stress testing PixiJS's batch renderer with 100k+ sprites. Benchmarking CPU-bound transformation logic vs GPU rasterization.</p>
+            </div>
+            <div class="tags">
+                <span class="tag">Benchmark</span>
+                <span class="tag">Batched</span>
+                <span class="tag">CPU Bound</span> </div>
+            <div class="card-footer">
+                <span style="font-size: 0.8rem; color: #666;">Stability Test</span>
+                <span class="btn-launch">Launch ▶</span>
+            </div>
         </a>
     </div>
 </body>

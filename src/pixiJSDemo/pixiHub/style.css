@@ -76,7 +76,19 @@ h1 { margin: 0 0 10px 0; font-weight: 600; }
     font-size: 0.95rem;
     line-height: 1.6;
 }
-
+/* --- 新增：施工中標籤 --- */
+.badge-wip {
+    font-size: 0.7rem;
+    background: #ffb700; /* 工地黃 */
+    color: #000;         /* 黑色文字對比高 */
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: 10px;   /* 與標題的距離 */
+    font-weight: 700;
+    vertical-align: middle;
+    letter-spacing: 0.5px;
+    border: 1px solid #e6a600;
+}
 /* --- 標籤區 --- */
 .tags {
     display: flex;
@@ -107,19 +119,6 @@ h1 { margin: 0 0 10px 0; font-weight: 600; }
     margin-top: auto; /* 推到底部 */
     padding-top: 16px;
     border-top: 1px solid rgba(255,255,255,0.05);
-}
-/* --- 新增：施工中標籤 --- */
-.badge-wip {
-    font-size: 0.7rem;
-    background: #ffb700; /* 工地黃 */
-    color: #000;         /* 黑色文字對比高 */
-    padding: 2px 8px;
-    border-radius: 4px;
-    margin-left: 10px;   /* 與標題的距離 */
-    font-weight: 700;
-    vertical-align: middle;
-    letter-spacing: 0.5px;
-    border: 1px solid #e6a600;
 }
 
 /* 主按鈕樣式 */
