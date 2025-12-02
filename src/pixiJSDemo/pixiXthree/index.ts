@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Text, TextStyle, Assets, Sprite } from 'pixi.js';
+import { Application, Container, Graphics, Text, TextStyle, Assets, Sprite, WebGLRenderer } from 'pixi.js';
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import gsap from 'gsap';
@@ -12,7 +12,7 @@ import { showGameInfosPannel } from '../../tools';
     document.body.appendChild(root);
 
     const threeCanvas = document.createElement('canvas');
-    Object.assign(threeCanvas.style, { position: 'absolute', top: '0', left: '0', zIndex: '0' });
+    Object.assign(threeCanvas.style, { position: 'absolute', top: '0', left: '0', zIndex: '0', pointerEvents: 'auto' });
     root.appendChild(threeCanvas);
 
     // ==========================================
@@ -38,7 +38,7 @@ import { showGameInfosPannel } from '../../tools';
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.z = 8; // 視角拉遠
     
-    const renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true });
+    const renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true, stencil: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
     const light = new THREE.DirectionalLight(0xffffff, 1);
@@ -180,18 +180,28 @@ import { showGameInfosPannel } from '../../tools';
     // 5. PixiJS UI (介面層)
     // ==========================================
     const pixiApp = new Application();
-    await pixiApp.init({ backgroundAlpha: 0, resizeTo: window, preference: 'webgl', antialias: true });
-    Object.assign(pixiApp.canvas.style, { position: 'absolute', top: '0', left: '0', zIndex: '1', pointerEvents: 'auto' });
-    root.appendChild(pixiApp.canvas);
+    const pixiRenderer = new WebGLRenderer();
+    await pixiRenderer.init({
+        context: renderer.getContext() as WebGL2RenderingContext,
+        canvas: threeCanvas,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        clearBeforeRender: false,
+    })
+    pixiApp.renderer = pixiRenderer;
+
+    await pixiApp.init({ canvas: threeCanvas, backgroundAlpha: 0, preference: 'webgl', antialias: true });
     
     (globalThis as any).__PIXI_APP__ = pixiApp;
     showGameInfosPannel(pixiApp, ['fps', 'drawcalls']);
 
     const uiContainer = new Container();
+    uiContainer.sortableChildren = true;
     pixiApp.stage.addChild(uiContainer);
 
     // Avatar
     const avatarContainer = new Container();
+    avatarContainer.zIndex = 10;
     avatarContainer.position.set(150, 50);
     try {
         const shibaTex = await Assets.load(shibaPng);
@@ -220,6 +230,7 @@ import { showGameInfosPannel } from '../../tools';
         dropShadow: { color: '#000000', blur: 4, angle: Math.PI / 6, distance: 6 },
     });
     const balanceText = new Text({ text: '$ 10,000', style: balanceStyle });
+    balanceText.zIndex = 10;
     balanceText.position.set(250, 65);
     uiContainer.addChild(balanceText);
     
@@ -227,11 +238,13 @@ import { showGameInfosPannel } from '../../tools';
     const btnContainer = new Container();
     btnContainer.interactive = true;
     btnContainer.cursor = 'pointer';
+    btnContainer.zIndex = 9;
     btnContainer.position.set(window.innerWidth / 2, window.innerHeight - 100);
     const btnBg = new Graphics().roundRect(-100, -40, 200, 80, 40).fill(0x28a745).stroke({ width: 4, color: 0xffffff });
     const btnText = new Text({ text: 'SPIN', style: { fontFamily: 'Arial', fontSize: 30, fontWeight: 'bold', fill: 'white' } });
     btnText.anchor.set(0.5);
-    btnContainer.addChild(btnBg, btnText);
+    btnBg.addChild(btnText);
+    btnContainer.addChild(btnBg);
     uiContainer.addChild(btnContainer);
 
 
@@ -289,7 +302,25 @@ import { showGameInfosPannel } from '../../tools';
     pixiApp.ticker.stop(); 
 
     function animate() {
-        requestAnimationFrame(animate);
+        // // Render the Three.js scene
+        renderer.resetState();
+        renderer.render(scene, camera);
+
+        // // Render the PixiJS stage
+        // Reset PixiJS internal state because Three.js has modified the WebGL state
+        const gl = renderer.getContext() as WebGL2RenderingContext;
+        
+        // Essential State Resets for Shared Context
+        gl.disable(gl.DEPTH_TEST);
+        gl.disable(gl.CULL_FACE);
+        gl.clear(gl.STENCIL_BUFFER_BIT); // ★ 必須清空 Stencil，否則 Mask (頭像) 會因為髒資料而消失
+        gl.bindVertexArray(null);
+
+        if ((pixiRenderer as any).reset) {
+            (pixiRenderer as any).reset();
+        }
+        pixiRenderer.render({ container: pixiApp.stage });
+
 
         const elapsedTime = clock.getElapsedTime();
         const deltaTime = elapsedTime - oldTime;
@@ -308,17 +339,22 @@ import { showGameInfosPannel } from '../../tools';
             item.mesh.quaternion.copy(item.body.quaternion as any);
         });
 
-        renderer.render(scene, camera);
-        pixiApp.render();
+        requestAnimationFrame(animate);
     }
 
     animate();
 
     window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+
+        camera.aspect = w / h;
         camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        btnContainer.position.set(window.innerWidth / 2, window.innerHeight - 100);
+        
+        renderer.setSize(w, h);
+        pixiRenderer.resize(w, h); // Sync PixiJS size
+        
+        btnContainer.position.set(w / 2, h - 100);
     });
 
     // Back Button
