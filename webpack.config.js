@@ -14,6 +14,7 @@ module.exports = {
         pixi_stress: './src/pixiJSDemo/stressTest/index.ts',     // Pixi.js 壓力測試
         pixi_stress2: './src/pixiJSDemo/stressTest2/index.ts',   // Pixi.js 壓力測試2
         pixi_optimization: './src/pixiJSDemo/optimization/index.ts', // Pixi.js 最佳實踐
+        pixi_x_three: './src/pixiJSDemo/pixiXthree/index.ts', // Pixi.js X Three.js
     },
     output: {
         filename: '[name].bundle.js',
@@ -89,6 +90,12 @@ module.exports = {
             template: pixiTemplate,
             chunks: ['pixi_optimization'],
             title: 'PixiJS Optimization Lab',
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'pixi_x_three.html',
+            template: pixiTemplate,
+            chunks: ['pixi_x_three'],
+            title: 'PixiJS X Three.js',
         }),
         new CopyWebpackPlugin({
             patterns: [

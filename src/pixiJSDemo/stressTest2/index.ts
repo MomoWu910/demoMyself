@@ -93,5 +93,5 @@ import { UIManager } from './src/UIManager';
     });
 
     // 預先加一點
-    addShibas(10000); // 起手 1 萬隻
+    addShibas(100); // 起手 1 萬隻
 })();

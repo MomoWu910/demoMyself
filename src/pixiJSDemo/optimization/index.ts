@@ -202,10 +202,11 @@ import { createDescriptionPanel } from './src/DescriptionPanel'; // ★ 引入�
             if (!isOptimized) {
                 // ★ Naive 模式致命傷：每一幀都重畫 (Redraw per frame)
                 // 這會觸發 CPU 的 "Tessellation" (將圓形算成三角形)，非常耗效能
+                const color = obj.color;
                 const g = obj as Graphics;
                 g.clear(); 
                 g.circle(0, 0, radius); 
-                g.fill(0xffffff); 
+                g.fill(color); 
                 // g.tint 這裡沒用，因為我們是直接重畫 fill
             } else {
                 // ★ Optimized 模式：只改變 Scale
@@ -278,7 +279,18 @@ import { createDescriptionPanel } from './src/DescriptionPanel'; // ★ 引入�
     const backBtn = document.createElement('a');
     backBtn.innerText = '← Back';
     backBtn.href = './pixi_hub.html';
-    Object.assign(backBtn.style, { position: 'absolute', top: '55px', left: '20px', color: 'white', background: 'rgba(0,0,0,0.5)', padding: '5px' });
+    Object.assign(backBtn.style, { position: 'absolute',
+        top: '55px',
+        left: '20px',
+        color: 'white',
+        textDecoration: 'none',
+        background: 'rgba(0,0,0,0.3)',
+        padding: '10px 15px',
+        borderRadius: '8px',
+        fontFamily: 'Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+        backdropFilter: 'blur(5px)',
+        transition: 'background 0.3s',
+        zIndex: '100' });
     document.body.appendChild(backBtn);
 
 })();

@@ -18,13 +18,17 @@
     "@babylonjs/loaders": "8.2.0",
     "@babylonjs/materials": "8.2.0",
     "@babylonjs/serializers": "8.2.0",
+    "@types/three": "^0.181.0",
+    "cannon-es": "^0.20.0",
     "css-loader": "^7.1.2",
     "esbuild": "^0.25.9",
     "esbuild-loader": "^4.3.0",
+    "gsap": "^3.13.0",
     "lil-gui": "^0.21.0",
     "md5-file": "^5.0.0",
     "pixi.js": "^8.14.3",
-    "style-loader": "^4.0.0"
+    "style-loader": "^4.0.0",
+    "three": "^0.181.2"
   },
   "devDependencies": {
     "@types/node": "^24.2.1",

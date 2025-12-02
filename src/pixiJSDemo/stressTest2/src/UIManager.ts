@@ -58,14 +58,18 @@ export class UIManager {
         backBtn.innerText = '← Back';
         backBtn.href = './pixi_hub.html';
         Object.assign(backBtn.style, { 
-            position: 'absolute', 
-            top: '55px', 
-            left: '20px', 
-            color: 'white', 
-            background: 'rgba(0,0,0,0.5)', 
-            padding: '5px',
+            position: 'absolute',
+            top: '55px',
+            left: '20px',
+            color: 'white',
             textDecoration: 'none',
-            borderRadius: '4px'
+            background: 'rgba(0,0,0,0.3)',
+            padding: '10px 15px',
+            borderRadius: '8px',
+            fontFamily: 'Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+            backdropFilter: 'blur(5px)',
+            transition: 'background 0.3s',
+            zIndex: '100'
         });
         document.body.appendChild(backBtn);
     }
