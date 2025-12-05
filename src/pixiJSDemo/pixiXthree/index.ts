@@ -193,7 +193,7 @@ import { showGameInfosPannel } from '../../tools';
     await pixiApp.init({ canvas: threeCanvas, backgroundAlpha: 0, preference: 'webgl', antialias: true });
     
     (globalThis as any).__PIXI_APP__ = pixiApp;
-    showGameInfosPannel(pixiApp, ['fps', 'drawcalls']);
+    // showGameInfosPannel(pixiApp, ['fps', 'drawcalls']);
 
     const uiContainer = new Container();
     uiContainer.sortableChildren = true;
