@@ -1,10 +1,10 @@
-# babylon_8_test
+# Babylon.js 3D Interactive Scene
 
 - [demo url](https://momowu910.github.io/demoMyself/)
 
 ## 專案簡介
-本專案以 TypeScript 與 BABYLON.js 開發，採用 MVC 架構，目標打造賭場場景的博弈遊戲（如百家樂、slot）。
-- 目前以 搶莊二八槓 為主要開發遊戲
+以 TypeScript 與 Babylon.js 開發、採 MVC 架構的多人 3D 互動場景，作為深入 3D frontend 工程（架構、資源管理、物理互動、效能）的實作載體。
+- 場景取材自一款多人卡牌/骰子互動玩法，用以驗證即時輸入、射線揀選與物理互動的完整互動鏈。
 
 ## 專案初始化
 ```bash
