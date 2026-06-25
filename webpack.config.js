@@ -9,7 +9,7 @@ module.exports = {
     mode: isDev ? 'development' : 'production',
     entry: {
         main: './src/home/index.ts',                             // 入口首頁的 JS
-        babylon: './src/babylonJSDemo/src/app.ts',               // Babylon.js 選單頁
+        configurator: './src/babylonJSDemo/src/configurator/index.ts', // Babylon.js 產品配置器
         pixi_hub: './src/pixiJSDemo/pixiHub/index.ts',           // Pixi.js 選單頁
         pixi_stress: './src/pixiJSDemo/stressTest/index.ts',     // Pixi.js 壓力測試
         pixi_stress2: './src/pixiJSDemo/stressTest2/index.ts',   // Pixi.js 壓力測試2
@@ -41,7 +41,7 @@ module.exports = {
                 exclude: /node_modules/,
             },
             {
-                test: /\.(png|jpe?g|gif|glb|gltf)$/i,
+                test: /\.(png|jpe?g|gif|glb|gltf|env|hdr|dds)$/i,
                 type: 'asset/resource',
                 generator: {
                     filename: 'res/[path][name][ext]', // 保留原始路徑和文件名
@@ -62,10 +62,10 @@ module.exports = {
             title: 'Eric Wu - Portfolio',
         }),
         new HtmlWebpackPlugin({
-            filename: 'babylon.html',
-            template: './src/babylonJSDemo/index.html',
-            chunks: ['babylon'],
-            title: '3D Casino Demo',
+            filename: 'configurator.html',
+            template: './src/babylonJSDemo/src/configurator/index.html',
+            chunks: ['configurator'],
+            title: 'Product Configurator',
         }),
         new HtmlWebpackPlugin({
             filename: 'pixi_hub.html',
