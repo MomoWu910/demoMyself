@@ -8,11 +8,13 @@
     <style>
         :root {
             --accent: #00d2ff;
-            --panel-bg: rgba(20, 20, 24, 0.55);
+            --panel-bg: rgba(18, 18, 22, 0.62);
             --panel-border: rgba(255, 255, 255, 0.08);
             --text: #f4f4f5;
             --text-muted: #a1a1aa;
+            --chip-bg: rgba(255, 255, 255, 0.06);
         }
+        * { box-sizing: border-box; }
         html, body { overflow: hidden; width: 100%; height: 100%; margin: 0; padding: 0; background: #0f0f11; font-family: 'Segoe UI', Inter, system-ui, sans-serif; }
         #renderCanvas { width: 100%; height: 100%; touch-action: none; display: block; outline: none; }
 
@@ -25,40 +27,78 @@
         }
         .back-btn:hover { background: rgba(0,0,0,0.7); }
 
-        /* 左上角標題 */
+        /* 頂部標題 */
         .title-block { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10; text-align: center; pointer-events: none; }
         .title-block h1 { margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--text); letter-spacing: 0.5px; }
-        .title-block p { margin: 2px 0 0; font-size: 0.75rem; color: var(--text-muted); }
+        .title-block p { margin: 2px 0 0; font-size: 0.72rem; color: var(--text-muted); }
 
-        /* 底部控制面板 */
-        .panel {
-            position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 10;
-            display: flex; align-items: center; gap: 22px;
+        /* 右側控制面板 */
+        .side-panel {
+            position: absolute; top: 50%; right: 22px; transform: translateY(-50%); z-index: 10;
+            width: 268px; max-height: calc(100vh - 120px); overflow-y: auto;
+            display: flex; flex-direction: column; gap: 18px;
             background: var(--panel-bg); border: 1px solid var(--panel-border);
-            border-radius: 16px; padding: 16px 22px; backdrop-filter: blur(16px);
+            border-radius: 16px; padding: 20px 18px; backdrop-filter: blur(18px);
+            box-shadow: 0 8px 40px rgba(0,0,0,0.45);
+        }
+        .side-panel::-webkit-scrollbar { width: 6px; }
+        .side-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+        .section { display: flex; flex-direction: column; gap: 9px; }
+        .section.hidden { display: none; }
+        .section > .label {
+            font-size: 0.63rem; color: var(--text-muted); text-transform: uppercase;
+            letter-spacing: 1.2px; font-weight: 600;
+        }
+
+        /* pill 群組（finish / lighting / background） */
+        .pills { display: flex; flex-wrap: wrap; gap: 7px; }
+        .pill {
+            background: var(--chip-bg); color: var(--text); border: 1px solid var(--panel-border);
+            padding: 6px 11px; border-radius: 999px; font-size: 0.72rem; cursor: pointer;
+            transition: all 0.16s; white-space: nowrap;
+        }
+        .pill:hover { background: rgba(255,255,255,0.12); }
+        .pill.active { color: var(--accent); border-color: rgba(0,210,255,0.45); background: rgba(0,210,255,0.12); }
+
+        /* 顏色 / colorway 色塊 */
+        .swatches { display: flex; flex-wrap: wrap; gap: 9px; }
+        .swatch {
+            width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; transition: transform 0.15s, border-color 0.15s; position: relative;
+        }
+        .swatch:hover { transform: scale(1.1); }
+        .swatch.active { border-color: var(--accent); box-shadow: 0 0 10px rgba(0,210,255,0.5); }
+        .swatch.none { background: #2b2b30; display: flex; align-items: center; justify-content: center; }
+        .swatch.none::after { content: '∅'; color: var(--text-muted); font-size: 0.8rem; }
+
+        /* 滑桿 */
+        .slider-row { display: flex; flex-direction: column; gap: 5px; }
+        .slider-row .slabel { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--text-muted); }
+        .slider-row .slabel .val { color: var(--text); }
+        input[type=range] {
+            -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px;
+            background: rgba(255,255,255,0.14); outline: none; cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%;
+            background: var(--accent); box-shadow: 0 0 6px rgba(0,210,255,0.6); cursor: pointer;
+        }
+
+        .divider { height: 1px; background: var(--panel-border); margin: 2px 0; }
+
+        /* 底部小工具列 */
+        .bottom-bar {
+            position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 10;
+            display: flex; align-items: center; gap: 10px;
+            background: var(--panel-bg); border: 1px solid var(--panel-border);
+            border-radius: 14px; padding: 10px 14px; backdrop-filter: blur(16px);
             box-shadow: 0 8px 40px rgba(0,0,0,0.4);
         }
-        .panel .group { display: flex; flex-direction: column; gap: 8px; }
-        .panel .label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
-        .swatches { display: flex; gap: 10px; }
-        .swatch {
-            width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
-            border: 2px solid transparent; transition: transform 0.15s, border-color 0.15s;
-            position: relative;
-        }
-        .swatch:hover { transform: scale(1.08); }
-        .swatch.active { border-color: var(--accent); box-shadow: 0 0 12px rgba(0,210,255,0.5); }
-        .swatch span {
-            position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
-            font-size: 0.6rem; color: var(--text-muted); white-space: nowrap; text-transform: capitalize;
-        }
-
-        .divider { width: 1px; align-self: stretch; background: var(--panel-border); }
-
         .ctrl-btn {
-            background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--panel-border);
-            padding: 9px 14px; border-radius: 10px; font-size: 0.8rem; cursor: pointer;
-            display: inline-flex; align-items: center; gap: 7px; transition: all 0.18s;
+            background: var(--chip-bg); color: var(--text); border: 1px solid var(--panel-border);
+            padding: 8px 13px; border-radius: 10px; font-size: 0.78rem; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 6px; transition: all 0.18s;
         }
         .ctrl-btn:hover { background: rgba(255,255,255,0.12); }
         .ctrl-btn.on { color: var(--accent); border-color: rgba(0,210,255,0.4); background: rgba(0,210,255,0.1); }
@@ -76,6 +116,11 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         #loading p { margin: 0; font-size: 0.85rem; letter-spacing: 0.5px; }
+
+        @media (max-width: 720px) {
+            .side-panel { right: 12px; left: 12px; width: auto; top: auto; bottom: 86px; transform: none; max-height: 46vh; }
+            .title-block { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -83,21 +128,64 @@
 
     <div class="title-block">
         <h1>Product Configurator</h1>
-        <p>Babylon.js · PBR · glTF material variants · IBL studio lighting</p>
+        <p>Babylon.js · PBR 即時材質 / 光照 · 自動依模型部件生成 UI</p>
     </div>
 
     <canvas id="renderCanvas"></canvas>
 
-    <div class="panel" id="panel" style="display:none;">
-        <div class="group">
-            <span class="label">Colorway</span>
+    <aside class="side-panel" id="panel" style="display:none;">
+        <div class="section hidden" id="sec-parts">
+            <span class="label">Part 部件</span>
+            <div class="pills" id="parts"></div>
+        </div>
+
+        <div class="section" id="sec-finish">
+            <span class="label">Finish 質感</span>
+            <div class="pills" id="finishes"></div>
+        </div>
+
+        <div class="section" id="sec-color">
+            <span class="label">Color 顏色</span>
+            <div class="swatches" id="tints"></div>
+        </div>
+
+        <div class="section hidden" id="sec-colorway">
+            <span class="label">Colorway 配色</span>
             <div class="swatches" id="swatches"></div>
         </div>
+
         <div class="divider"></div>
-        <div class="group" style="flex-direction:row; align-items:flex-end; gap:10px;">
-            <button class="ctrl-btn on" id="autorotate">◐ Auto-rotate</button>
-            <button class="ctrl-btn" id="reset">⟲ Reset</button>
+
+        <div class="section">
+            <span class="label">Lighting 打光</span>
+            <div class="pills" id="lighting-presets"></div>
+            <div class="slider-row">
+                <div class="slabel"><span>環境光強度</span><span class="val" id="env-int-val">1.1</span></div>
+                <input type="range" id="env-intensity" min="0" max="3" step="0.05" value="1.1">
+            </div>
+            <div class="slider-row">
+                <div class="slabel"><span>環境旋轉</span><span class="val" id="env-rot-val">0°</span></div>
+                <input type="range" id="env-rotation" min="0" max="360" step="1" value="0">
+            </div>
+            <div class="slider-row">
+                <div class="slabel"><span>主光強度</span><span class="val" id="key-int-val">2.2</span></div>
+                <input type="range" id="key-intensity" min="0" max="6" step="0.05" value="2.2">
+            </div>
+            <div class="slider-row">
+                <div class="slabel"><span>主光色溫</span><span class="val" id="key-temp-val">6500K</span></div>
+                <input type="range" id="key-temp" min="2700" max="9000" step="100" value="6500">
+            </div>
         </div>
+
+        <div class="section">
+            <span class="label">Background 背景</span>
+            <div class="pills" id="backgrounds"></div>
+        </div>
+    </aside>
+
+    <div class="bottom-bar" id="bottom-bar" style="display:none;">
+        <button class="ctrl-btn on" id="autorotate">◐ Auto-rotate</button>
+        <button class="ctrl-btn" id="reset">⟲ Reset View</button>
     </div>
 
     <div id="loading">
