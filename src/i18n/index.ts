@@ -30,8 +30,8 @@ const DICT: Record<string, Entry> = {
     'home.crossEngine.cta': { en: 'Open Demo →', zh: '開啟 Demo →' },
     'home.configurator.title': { en: '3D Product Configurator', zh: '3D 產品配置器' },
     'home.configurator.desc': {
-        en: 'Babylon.js 3D product viewer: real-time material variants (glTF KHR_materials_variants), PBR + IBL studio lighting, soft shadows, post-processing, and turntable orbit controls.',
-        zh: 'Babylon.js 3D 產品檢視器：即時材質變體（glTF KHR_materials_variants）、PBR + IBL 棚拍打光、柔和陰影、後製，與轉盤式 orbit 控制。',
+        en: 'Babylon.js real-time configurator: swap finishes (matte / leather / glossy / metallic) and colors, tune studio lighting & background live, with PBR + IBL, soft shadows, post-processing, and colorway variants (glTF KHR_materials_variants).',
+        zh: 'Babylon.js 即時配置器：切換質感（matte / leather / glossy / metallic）與顏色、即時調整棚拍打光與背景，搭配 PBR + IBL、柔和陰影、後製，與 colorway 變體（glTF KHR_materials_variants）。',
     },
     'home.configurator.cta': { en: 'Configure →', zh: '進入配置 →' },
     'home.lab.title': { en: 'Rendering Performance Lab', zh: '渲染效能實驗室' },
