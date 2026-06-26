@@ -389,7 +389,7 @@ import gsap from 'gsap';
     // --- Back ---
     const backBtn = document.createElement('a');
     backBtn.innerText = '← Back';
-    backBtn.href = './pixi_hub.html';
+    backBtn.href = './index.html'; // pixiXthree 是首頁的獨立大分類，back 直接回首頁
     Object.assign(backBtn.style, {
         position: 'absolute', top: '24px', left: '24px', color: '#cfe0ff', textDecoration: 'none',
         background: 'rgba(14,19,32,0.55)', padding: '10px 16px', borderRadius: '10px',
