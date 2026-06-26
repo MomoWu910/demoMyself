@@ -1,5 +1,6 @@
 import GUI from 'lil-gui';
 import { ColorMatrixFilter, Container } from 'pixi.js';
+import { t, onLangChange, mountLangToggle } from '../../../i18n';
 
 export class UIManager {
     private onAddShibas: (count: number) => void;
@@ -10,6 +11,8 @@ export class UIManager {
         addShibas: (count: number) => void;
     };
     private gui: GUI;
+    private backBtn!: HTMLAnchorElement;
+    private ctrls: { c: { name(s: string): unknown }; key: string }[] = [];
 
     constructor(
         onAddShibas: (count: number) => void,
@@ -17,7 +20,7 @@ export class UIManager {
     ) {
         this.onAddShibas = onAddShibas;
         this.onFilterChange = onFilterChange;
-        
+
         this.settings = {
             enableFilter: false,
             shibaCount: 0,
@@ -27,12 +30,19 @@ export class UIManager {
         this.gui = new GUI();
         this.createUI();
         this.createGUI();
+        onLangChange(() => this.applyLang());
+    }
+
+    private applyLang() {
+        this.backBtn.innerText = t('nav.back');
+        this.ctrls.forEach(({ c, key }) => c.name(t(key)));
     }
 
     private createUI() {
         // Back Button
         const backBtn = document.createElement('a');
-        backBtn.innerText = '← Back';
+        this.backBtn = backBtn;
+        backBtn.innerText = t('nav.back');
         backBtn.href = './pixi_hub.html';
         Object.assign(backBtn.style, {
              position: 'absolute',
@@ -51,6 +61,9 @@ export class UIManager {
         backBtn.onmouseleave = () => backBtn.style.background = 'rgba(0,0,0,0.3)';
 
         document.body.appendChild(backBtn);
+
+        // 語言切換鈕：放在 back 右側（右上角為 lil-gui）
+        mountLangToggle({ style: { top: '55px', left: '110px' } });
     }
 
     private createGUI() {
@@ -59,27 +72,34 @@ export class UIManager {
 
         // Add WebGPU toggle
         const engineSettings = { useWebGPU };
-        this.gui.add(engineSettings, 'useWebGPU')
-            .name('Use WebGPU ⚡')
+        const cWebGPU = this.gui.add(engineSettings, 'useWebGPU')
+            .name(t('gui.useWebGPU'))
             .onChange((value: boolean) => {
                 const params = new URLSearchParams(window.location.search);
                 params.set('preference', value ? 'webgpu' : 'webgl');
                 window.location.search = params.toString();
             });
 
-        this.gui.add(this.settings, 'enableFilter')
-            .name('Enable Filter (B&W)')
+        const cFilter = this.gui.add(this.settings, 'enableFilter')
+            .name(t('gui.enableFilter'))
             .onChange((value: boolean) => {
                 this.onFilterChange(value);
             });
-        
-        this.gui.add(this.settings, 'shibaCount')
-            .name('Shiba Count')
+
+        const cCount = this.gui.add(this.settings, 'shibaCount')
+            .name(t('gui.shibaCount'))
             .listen()
             .disable();
-            
-        this.gui.add(this.settings, 'addShibas')
-            .name('Add 100 Shibas 🐕');
+
+        const cAdd = this.gui.add(this.settings, 'addShibas')
+            .name(t('gui.add100'));
+
+        this.ctrls = [
+            { c: cWebGPU, key: 'gui.useWebGPU' },
+            { c: cFilter, key: 'gui.enableFilter' },
+            { c: cCount, key: 'gui.shibaCount' },
+            { c: cAdd, key: 'gui.add100' },
+        ];
     }
 
     public updateShibaCount(count: number) {

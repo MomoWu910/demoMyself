@@ -1,82 +1,33 @@
-# Babylon.js 3D Interactive Scene
+# 3D Product Configurator (Babylon.js)
 
-- [demo url](https://momowu910.github.io/demoMyself/)
+以 Babylon.js 打造的即時 3D 產品配置器，聚焦 PBR 渲染質感與即時可配置性。
 
-## 專案簡介
-以 TypeScript 與 Babylon.js 開發、採 MVC 架構的多人 3D 互動場景，作為深入 3D frontend 工程（架構、資源管理、物理互動、效能）的實作載體。
-- 場景取材自一款多人卡牌/骰子互動玩法，用以驗證即時輸入、射線揀選與物理互動的完整互動鏈。
+## 重點
 
-## 專案初始化
-```bash
-yarn install
-```
-或
-```bash
-npm install
-```
+- **即時材質配置**：質感 preset（Matte / Leather / Glossy / Metallic）+ 顏色 tint + glTF `KHR_materials_variants` colorway 變體。
+- **即時打光**：打光 preset（柔光棚 / 戲劇側光 / 電商白）+ 環境光強度 / 旋轉、主光強度 / 色溫滑桿 + 背景切換（studio / 漸層 / 深色 / 純白）。
+- **model-agnostic UI**：自動掃描 sub-mesh，多部件長出分件配置 UI、單一 mesh 退回整件，換模型免改程式。
+- **IBL 環境光照**：prefiltered `.env` 環境貼圖（studio 攝影棚質感）。
+- **後製管線**：ACES tone mapping、bloom、FXAA / MSAA、vignette、film grain、SSAO2。
+- **柔和陰影** + **ArcRotateCamera 轉盤** + **HTML overlay 控制面板**。
 
-## 啟動方式
-```bash
-yarn start
-```
-或
-```bash
-npm start
-```
+## 結構
 
-## 目錄結構與說明
-
-```
-├── app.ts                # 專案啟動入口
-├── public/               # 靜態資源（index.html等）
-├── res/                  # 遊戲素材（音效、模型、貼圖、UI等）
-├── src/
-│   ├── components/       # 可重用遊戲物件（Mesh、UI元件、卡牌、骰子等）
-│   │   ├── cameras/      # 相機元件（如開發相機、玩家相機）
-│   │   ├── cards/        # 卡牌元件（如多米諾、麻將）
-│   │   ├── chips/        # 籌碼元件
-│   │   ├── dealer/       # 荷官元件
-│   │   ├── dices/        # 骰子元件（如骰子、骰盅）
-│   │   ├── gui/          # GUI 元件（如玩家小卡、按鈕、座位）
-│   │   ├── lights/       # 燈光元件（如方向光、半球光、點光源）
-│   │   ├── players/      # 玩家元件
-│   │   └── scene/        # 場景物件（如桌子、天花板、牆壁）
-│   ├── constants/        # 常數、設定、工具
-│   │   ├── assets.ts     # 資源鍵值對應
-│   │   ├── config.ts     # 配置檔案
-│   │   ├── enums.ts      # 列舉類型
-│   │   ├── interfaces.ts # 介面定義
-│   │   └── utils.ts      # 工具函數
-│   ├── controllers/      # 遊戲流程控制（如發牌、下注、結算）
-│   ├── engine/           # 物理引擎相關邏輯
-│   ├── managers/         # 管理系統（如燈光、模型、UI）
-│   │   ├── animationManager.ts # 動畫管理
-│   │   ├── audioManager.ts     # 音效管理
-│   │   ├── chipsManager.ts     # 籌碼管理
-│   │   ├── guiManager.ts       # GUI 管理
-│   │   ├── inputManager.ts     # 輸入管理
-│   │   ├── interactManager.ts  # 互動管理
-│   │   ├── lightsManager.ts    # 燈光管理
-│   │   ├── modelsManager.ts    # 模型管理
-│   │   ├── physicsManager.ts   # 物理管理
-│   │   └── rayManager.ts       # 射線管理(目前用在gui元件互動)
-│   ├── models/           # 資料模型（如玩家、遊戲狀態）
-│   ├── states/           # 狀態機管理（遊戲階段切換）
-│   └── views/            # 場景與視覺呈現（BABYLON.js場景、UI）
-├── package.json            # 專案依賴與腳本
-├── tsconfig.json           # TypeScript 設定
-├── webpack.config.js       # Webpack 設定
+```text
+src/
+├── configurator/
+│   ├── configuratorView.ts     # 場景：相機、光照、載入模型、變體切換、轉盤
+│   ├── materialConfigurator.ts # 掃描 sub-mesh → 部件 / 質感 preset / 顏色 tint 引擎
+│   ├── index.ts                # 進入點 + UI 綁定（質感 / 顏色 / 打光 / 背景 / 自動旋轉 / 重置）
+│   └── index.html              # canvas + 玻璃擬態控制面板 + 載入畫面
+├── managers/                 # 可重用渲染質感層
+│   ├── environmentManager.ts # IBL 環境貼圖 + skybox + ACES tone mapping
+│   ├── shadowManager.ts      # 柔和陰影（自動註冊投影者）
+│   └── postProcessManager.ts # DefaultRenderingPipeline + SSAO2
+├── config/scene/renderConfig.ts  # 渲染參數集中設定
+└── constants/assets.ts       # 資產鍵（環境貼圖）
 ```
 
-## 主要技術
-- TypeScript
-- BABYLON.js
-- Webpack
-- Yarn / npm
+## 執行
 
-## 開發建議
-- 依照 MVC 架構分離資料、邏輯、視覺，方便擴充與維護。
-- 遊戲物件請盡量模組化，方便重用。
-
----
-
+從專案根目錄 `yarn start`，開啟 `http://localhost:8080/configurator.html`。

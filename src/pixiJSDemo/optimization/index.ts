@@ -3,6 +3,7 @@ import Stats from 'stats.js';
 import GUI from 'lil-gui';
 import { showGameInfosPannel } from '../../tools';
 import { createDescriptionPanel } from './src/DescriptionPanel'; // ★ 引入元件
+import { t, onLangChange, mountLangToggle } from '../../i18n';
 
 (async () => {
     // 1. 初始化
@@ -245,20 +246,20 @@ import { createDescriptionPanel } from './src/DescriptionPanel'; // ★ 引入�
     };
 
     const gui = new GUI({ title: 'Optimization Lab' });
-    
-    gui.add(params, 'testCase', ['Tint vs Filter', 'Text vs Bitmap', 'Sprite vs Graphics'])
-        .name('Test Scenario')
+
+    const cScenario = gui.add(params, 'testCase', ['Tint vs Filter', 'Text vs Bitmap', 'Sprite vs Graphics'])
+        .name(t('gui.testScenario'))
         .onChange(runTest);
 
-    gui.add(params, 'mode', ['Naive (Slow)', 'Optimized (Fast)'])
-        .name('Mode')
+    const cMode = gui.add(params, 'mode', ['Naive (Slow)', 'Optimized (Fast)'])
+        .name(t('gui.mode'))
         .onChange((v: string) => {
             isOptimized = v === 'Optimized (Fast)';
             runTest(); // 重跑
         });
 
-    gui.add(params, 'count', 100, 5000, 100)
-        .name('Object Count')
+    const cCount = gui.add(params, 'count', 100, 5000, 100)
+        .name(t('gui.objectCount'))
         .onChange((v: number) => {
             objectCount = v;
             runTest();
@@ -277,7 +278,7 @@ import { createDescriptionPanel } from './src/DescriptionPanel'; // ★ 引入�
 
     // Back Button
     const backBtn = document.createElement('a');
-    backBtn.innerText = '← Back';
+    backBtn.innerText = t('nav.back');
     backBtn.href = './pixi_hub.html';
     Object.assign(backBtn.style, { position: 'absolute',
         top: '55px',
@@ -292,5 +293,16 @@ import { createDescriptionPanel } from './src/DescriptionPanel'; // ★ 引入�
         transition: 'background 0.3s',
         zIndex: '100' });
     document.body.appendChild(backBtn);
+
+    // 語言切換鈕：放在 back 右側（右上角為 lil-gui）
+    mountLangToggle({ style: { top: '55px', left: '110px' } });
+
+    // 語言切換時更新 back 與 GUI 控制項名稱（說明面板自行訂閱）
+    onLangChange(() => {
+        backBtn.innerText = t('nav.back');
+        cScenario.name(t('gui.testScenario'));
+        cMode.name(t('gui.mode'));
+        cCount.name(t('gui.objectCount'));
+    });
 
 })();

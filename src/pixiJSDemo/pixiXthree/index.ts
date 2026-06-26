@@ -1,380 +1,429 @@
-import { Application, Container, Graphics, Text, TextStyle, Assets, Sprite, WebGLRenderer } from 'pixi.js';
+import { Application, Container, Graphics, Text, TextStyle, WebGLRenderer } from 'pixi.js';
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import gsap from 'gsap';
-import shibaPng from './res/shiba.png';
-import { showGameInfosPannel } from '../../tools';
+import { t, onLangChange, mountLangToggle } from '../../i18n';
 
+/**
+ * Cross-Engine Sandbox — PixiJS (2D HUD) + Three.js (3D scene) + cannon-es (physics)
+ * 全部畫進「同一個 WebGL2 context」。重點展示：
+ *   1. 兩個渲染引擎共用同一張 canvas / 同一個 GL context。
+ *   2. 每幀手動隔離 GL 狀態（depth / cull / stencil / VAO），避免 Three 污染 Pixi。
+ *   3. Three 渲染的 3D 物理場景，疊上 Pixi 渲染的即時 2D HUD。
+ */
 (async () => {
-    // Root setup
+    // ==========================================
+    // 0. Root / Canvas
+    // ==========================================
     const root = document.createElement('div');
-    Object.assign(root.style, { position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#000' });
+    Object.assign(root.style, { position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#0d0f14' });
     document.body.appendChild(root);
 
-    const threeCanvas = document.createElement('canvas');
-    Object.assign(threeCanvas.style, { position: 'absolute', top: '0', left: '0', zIndex: '0', pointerEvents: 'auto' });
-    root.appendChild(threeCanvas);
+    const canvas = document.createElement('canvas');
+    Object.assign(canvas.style, { position: 'absolute', inset: '0', zIndex: '0', touchAction: 'none' });
+    root.appendChild(canvas);
+
+    const PALETTE = [0xe63946, 0xf4a261, 0xe9c46a, 0x2a9d8f, 0x4895ef, 0x9b5de5, 0xf15bb5];
 
     // ==========================================
-    // 1. 初始化物理世界
+    // 1. 物理世界 (cannon-es)
     // ==========================================
+    const GRAVITY_NORMAL = -18;
+    const GRAVITY_LOW = -3;
     const world = new CANNON.World();
-    world.gravity.set(0, -9.82, 0); 
-    world.broadphase = new CANNON.SAPBroadphase(world); 
-    
-    // 調整材質屬性：增加摩擦力，減少彈力 (避免球亂噴)
-    const defaultMaterial = new CANNON.Material('default');
-    const defaultContactMaterial = new CANNON.ContactMaterial(defaultMaterial, defaultMaterial, {
-        friction: 0.9,     // 摩擦力低一點，讓球容易滾動
-        restitution: 0.2,  // 彈力低一點，避免球越彈越高飛出去
-    });
-    world.addContactMaterial(defaultContactMaterial);
+    world.gravity.set(0, GRAVITY_NORMAL, 0);
+    world.broadphase = new CANNON.SAPBroadphase(world);
+    world.allowSleep = true;
+    (world.solver as CANNON.GSSolver).iterations = 18; // 多疊代 → 牆角不漏球
+
+    const objMat = new CANNON.Material('obj');
+    world.addContactMaterial(new CANNON.ContactMaterial(objMat, objMat, { friction: 0.4, restitution: 0.3 }));
 
     // ==========================================
-    // 2. Three.js 初始化
+    // 2. Three.js 場景
     // ==========================================
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1a1a);
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 8; // 視角拉遠
-    
-    const renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true, stencil: true });
+    scene.background = makeGradientTexture('#1b2030', '#0a0c11');
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 8.5, 11);
+    camera.lookAt(0, 1, 0);
+
+    // 兩個 renderer 共用一張 canvas，必須用「同一個」解析度，否則 retina 下會各自縮放 → 畫面爆掉。
+    const DPR = Math.min(window.devicePixelRatio, 2);
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
+    renderer.setPixelRatio(DPR);
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
 
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(0, 10, 10);
-    scene.add(light);
-    scene.add(new THREE.AmbientLight(0x606060));
+    // --- 燈光：克制的 studio 三點 ---
+    scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x202833, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 2.4);
+    key.position.set(6, 12, 7);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.near = 1;
+    key.shadow.camera.far = 40;
+    key.shadow.camera.left = key.shadow.camera.bottom = -12;
+    key.shadow.camera.right = key.shadow.camera.top = 12;
+    key.shadow.bias = -0.0005;
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.5);
+    fill.position.set(-8, 5, -4);
+    scene.add(fill);
+
+    // --- 接影地板 ---
+    const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(60, 60),
+        new THREE.ShadowMaterial({ opacity: 0.35 }),
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.001;
+    ground.receiveShadow = true;
+    scene.add(ground);
 
     // ==========================================
-    // 3. 建立密封滾輪 (Sealed Reel)
+    // 3. 托盤 (Tray) —— 視覺(Three) + 物理(Kinematic cannon)
     // ==========================================
-    
-    // 參數設定
-    const reelRadius = 3;
-    const reelDepth = 3;
-    const segments = 16; // 增加分段數，讓圓更圓
+    const INNER = 3.4;     // 內部半徑 (x/z)
+    const WALL_H = 2.2;     // 牆高
+    const T = 0.25;         // 厚度
 
-    // --- A. 視覺 (Three.js) ---
-    const reelGroup = new THREE.Group();
-    scene.add(reelGroup);
+    const trayGroup = new THREE.Group();
+    scene.add(trayGroup);
 
-    // 1. 圓柱本體
-    const cylinderGeo = new THREE.CylinderGeometry(reelRadius, reelRadius, reelDepth, 32, 1, true);
-    const reelMat = new THREE.MeshBasicMaterial({ color: 0xffd700, wireframe: true, transparent: true, opacity: 0.2 });
-    const cylinderMesh = new THREE.Mesh(cylinderGeo, reelMat);
-    cylinderMesh.rotation.z = Math.PI / 2; // 讓圓柱躺在 X 軸上
-    reelGroup.add(cylinderMesh);
-
-    // 2. 兩側蓋子 (視覺)
-    const capGeo = new THREE.CircleGeometry(reelRadius, 32);
-    const capMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.1, side: THREE.DoubleSide });
-    
-    const leftCap = new THREE.Mesh(capGeo, capMat);
-    leftCap.position.x = -reelDepth / 2;
-    leftCap.rotation.y = Math.PI / 2;
-    
-    const rightCap = new THREE.Mesh(capGeo, capMat);
-    rightCap.position.x = reelDepth / 2;
-    rightCap.rotation.y = Math.PI / 2;
-
-    reelGroup.add(leftCap);
-    reelGroup.add(rightCap);
-
-    // --- B. 物理 (Cannon.js) ---
-    // 我們要手動拼出一個「躺在 X 軸上」的八角籠
-    const reelBody = new CANNON.Body({
-        mass: 0, // Kinematic
-        type: CANNON.Body.KINEMATIC,
-        material: defaultMaterial
+    const glassMat = new THREE.MeshStandardMaterial({
+        color: 0x9fb4d4, metalness: 0.1, roughness: 0.15, transparent: true, opacity: 0.12,
+        side: THREE.DoubleSide,
     });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x2a3142, metalness: 0.2, roughness: 0.6 });
+    const edgeMat = new THREE.LineBasicMaterial({ color: 0x6fb7ff, transparent: true, opacity: 0.9 });
 
-    // 1. 計算牆壁寬度 (關鍵數學)
-    // 為了保證無縫隙，板子寬度必須大於弦長
-    // 弦長公式 = 2 * r * sin(PI / segments)
-    // 我們乘上 1.1 做為安全係數，讓板子互相穿插重疊，防止漏球
-    const plankWidth = (2 * reelRadius * Math.sin(Math.PI / segments)) * 1.1;
-    const plankThickness = 0.5; // ★ 加厚牆壁防止穿模
+    const addPanel = (w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material) => {
+        const geo = new THREE.BoxGeometry(w, h, d);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, y, z);
+        mesh.receiveShadow = true;
+        trayGroup.add(mesh);
+        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+        edges.position.set(x, y, z);
+        trayGroup.add(edges);
+    };
+    // 地板 + 四面牆 (視覺)
+    addPanel(INNER * 2 + T * 2, T, INNER * 2 + T * 2, 0, -T / 2, 0, floorMat);
+    addPanel(T, WALL_H, INNER * 2, INNER + T / 2, WALL_H / 2, 0, glassMat);
+    addPanel(T, WALL_H, INNER * 2, -(INNER + T / 2), WALL_H / 2, 0, glassMat);
+    addPanel(INNER * 2 + T * 2, WALL_H, T, 0, WALL_H / 2, INNER + T / 2, glassMat);
+    addPanel(INNER * 2 + T * 2, WALL_H, T, 0, WALL_H / 2, -(INNER + T / 2), glassMat);
 
-    for (let i = 0; i < segments; i++) {
-        const angle = (i / segments) * Math.PI * 2;
-        
-        // 建立牆壁 (板子)
-        const wallShape = new CANNON.Box(new CANNON.Vec3(reelDepth / 2, plankThickness, plankWidth / 2));
-        
-        // 計算位置 (在 Y-Z 平面上圍成一圈)
-        // 注意：我們要讓板子中心點向外擴一點 (radius + thickness/2)，這樣球才會在 radius 內部滾
-        const y = Math.cos(angle) * (reelRadius + plankThickness / 2);
-        const z = Math.sin(angle) * (reelRadius + plankThickness / 2);
-        
-        // 計算旋轉 (繞 X 軸轉，讓板子面向圓心)
-        const q = new CANNON.Quaternion();
-        q.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), angle);
+    // 托盤物理 (Kinematic：可由互動旋轉，推動內部 dynamic body)
+    const trayBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: objMat });
+    const box = (hx: number, hy: number, hz: number, x: number, y: number, z: number) =>
+        trayBody.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz)), new CANNON.Vec3(x, y, z));
+    // 物理碰撞體刻意加厚（內面位置與視覺玻璃對齊，往外/往下加厚），傾斜時才不會被薄牆掃穿。
+    const WT = 0.6;          // 牆/地板物理半厚
+    const WH = WALL_H * 0.9; // 物理牆半高（比視覺略高，Shake 時不易翻出）
+    box(INNER + WT, WT, INNER + WT, 0, -WT, 0);              // floor：頂面對齊 y=0
+    box(WT, WH, INNER + WT, INNER + WT, WH, 0);              // +x：內面對齊 x=INNER
+    box(WT, WH, INNER + WT, -(INNER + WT), WH, 0);           // -x
+    box(INNER + WT, WH, WT, 0, WH, INNER + WT);              // +z：內面對齊 z=INNER
+    box(INNER + WT, WH, WT, 0, WH, -(INNER + WT));           // -z
+    world.addBody(trayBody);
 
-        // 加到 Body (注意這裡 x=0，因為圓柱中心在 x=0)
-        reelBody.addShape(wallShape, new CANNON.Vec3(0, y, z), q);
+    // ==========================================
+    // 4. 物理物件 (球 + 方塊)
+    // ==========================================
+    type Obj = { mesh: THREE.Mesh; body: CANNON.Body };
+    const objects: Obj[] = [];
+    const sphereGeo = new THREE.SphereGeometry(0.38, 24, 18);
+    const boxGeo = new THREE.BoxGeometry(0.66, 0.66, 0.66);
 
-        // 加入內部肋條 (Lifters/Ribs)
-        // 每隔 4 個面 (90度) 加一個向內突出的板子，負責把球鏟起來
-        if (i % 4 === 0) {
-            const ribHeight = 0.3; // 肋條突出高度
-            const ribShape = new CANNON.Box(new CANNON.Vec3(reelDepth / 2, ribHeight, 0.1)); // 薄板
-            
-            // 位置：在牆壁內側
-            const ribY = Math.cos(angle) * (reelRadius - ribHeight); 
-            const ribZ = Math.sin(angle) * (reelRadius - ribHeight);
-            
-            reelBody.addShape(ribShape, new CANNON.Vec3(0, ribY, ribZ), q);
-            
-            // (選用) 如果你想在視覺上也看到這個肋條，可以在這裡加 Three.js Mesh 到 reelGroup
-            // 但為了簡化，我們讓它保持隱形，讓球看起來像是被摩擦力帶起來的
+    const spawn = (n: number) => {
+        for (let i = 0; i < n && objects.length < 140; i++) {
+            const color = PALETTE[(Math.random() * PALETTE.length) | 0];
+            const isBox = Math.random() > 0.5;
+            const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.25, roughness: 0.45 });
+            const mesh = new THREE.Mesh(isBox ? boxGeo : sphereGeo, mat);
+            mesh.castShadow = true;
+            scene.add(mesh);
+
+            const pos = new CANNON.Vec3((Math.random() - 0.5) * INNER * 1.4, WALL_H + 0.6 + Math.random() * 2, (Math.random() - 0.5) * INNER * 1.4);
+            const body = new CANNON.Body({
+                mass: 1, material: objMat, position: pos,
+                shape: isBox ? new CANNON.Box(new CANNON.Vec3(0.33, 0.33, 0.33)) : new CANNON.Sphere(0.38),
+            });
+            body.linearDamping = 0.05;
+            body.angularDamping = 0.05;
+            world.addBody(body);
+            objects.push({ mesh, body });
         }
-    }
-
-    // 2. 物理封蓋 (Physics Caps)
-    // 在左右兩側加上超級大的牆壁
-    const capThickness = 0.5;
-    const capShape = new CANNON.Box(new CANNON.Vec3(capThickness, reelRadius * 1.5, reelRadius * 1.5));
-    
-    // 左蓋
-    reelBody.addShape(capShape, new CANNON.Vec3(-(reelDepth / 2 + capThickness / 2), 0, 0));
-    // 右蓋
-    reelBody.addShape(capShape, new CANNON.Vec3((reelDepth / 2 + capThickness / 2), 0, 0));
-
-    world.addBody(reelBody);
-
+    };
+    const clearObjects = () => {
+        objects.forEach((o) => { scene.remove(o.mesh); world.removeBody(o.body); });
+        objects.length = 0;
+    };
+    spawn(28);
 
     // ==========================================
-    // 4. 建立球體
+    // 5. PixiJS —— 共用 Three 的 GL context
     // ==========================================
-    const balls: { mesh: THREE.Mesh, body: CANNON.Body }[] = [];
-    const ballGeo = new THREE.SphereGeometry(0.3, 16, 16);
-    
-    // 增加球的數量，測試穩定性
-    for (let i = 0; i < 20; i++) {
-        const color = new THREE.Color().setHSL(Math.random(), 1, 0.5);
-        const ballMesh = new THREE.Mesh(ballGeo, new THREE.MeshStandardMaterial({ color }));
-        scene.add(ballMesh);
-
-        const ballBody = new CANNON.Body({
-            mass: 1,
-            shape: new CANNON.Sphere(0.3), // 碰撞半徑
-            material: defaultMaterial,
-            // 讓球從圓心稍微散開的地方生成
-            position: new CANNON.Vec3(
-                (Math.random() - 0.5) * (reelDepth - 1), 
-                (Math.random() - 0.5) * 2-1, 
-                (Math.random() - 0.5) * 1
-            )
-        });
-        
-        // 增加阻尼，讓球滾動稍微黏一點，不會像彈力球亂飛
-        ballBody.linearDamping = 0.01;
-        ballBody.angularDamping = 0.01;
-
-        world.addBody(ballBody);
-        balls.push({ mesh: ballMesh, body: ballBody });
-    }
-
-    // ==========================================
-    // 5. PixiJS UI (介面層)
-    // ==========================================
-    const pixiApp = new Application();
     const pixiRenderer = new WebGLRenderer();
     await pixiRenderer.init({
         context: renderer.getContext() as WebGL2RenderingContext,
-        canvas: threeCanvas,
+        canvas,
         width: window.innerWidth,
         height: window.innerHeight,
+        resolution: DPR,        // 對齊 Three 的 pixelRatio
+        autoDensity: false,     // 不讓 Pixi 去動 canvas.style（交給 Three 管尺寸）
         clearBeforeRender: false,
-    })
+        antialias: true,
+    });
+    const pixiApp = new Application();
     pixiApp.renderer = pixiRenderer;
-
-    await pixiApp.init({ canvas: threeCanvas, backgroundAlpha: 0, preference: 'webgl', antialias: true });
-    
+    await pixiApp.init({ canvas, backgroundAlpha: 0, preference: 'webgl', resolution: DPR, autoDensity: false, antialias: true });
+    pixiApp.ticker.stop();
     (globalThis as any).__PIXI_APP__ = pixiApp;
-    // showGameInfosPannel(pixiApp, ['fps', 'drawcalls']);
 
-    const uiContainer = new Container();
-    uiContainer.sortableChildren = true;
-    pixiApp.stage.addChild(uiContainer);
+    const ui = new Container();
+    ui.sortableChildren = true;
+    pixiApp.stage.addChild(ui);
 
-    // Avatar
-    const avatarContainer = new Container();
-    avatarContainer.zIndex = 10;
-    avatarContainer.position.set(150, 50);
-    try {
-        const shibaTex = await Assets.load(shibaPng);
-        const shiba = new Sprite(shibaTex);
-        shiba.width = 80;
-        shiba.height = 80;
-        const mask = new Graphics().circle(40, 40, 40).fill(0xffffff);
-        shiba.mask = mask;
-        shiba.addChild(mask);
-        avatarContainer.addChild(shiba);
-    } catch (e) {
-        const circle = new Graphics().circle(40, 40, 40).fill(0x555555);
-        avatarContainer.addChild(circle);
-    }
-    const border = new Graphics().circle(40, 40, 42).stroke({ width: 4, color: 0xffd700 });
-    avatarContainer.addChild(border);
-    uiContainer.addChild(avatarContainer);
+    // --- 玻璃面板小工具 ---
+    const glassPanel = (w: number, h: number) =>
+        new Graphics().roundRect(0, 0, w, h, 14).fill({ color: 0x0e1320, alpha: 0.55 }).stroke({ width: 1, color: 0x5b7fb0, alpha: 0.5 });
 
-    // Balance
-    const balanceStyle = new TextStyle({
-        fontFamily: 'Arial',
-        fontSize: 36,
-        fontWeight: 'bold',
-        fill: 0xffd700, 
-        stroke: { color: '#000000', width: 4 },
-        dropShadow: { color: '#000000', blur: 4, angle: Math.PI / 6, distance: 6 },
+    const label = (text: string, size: number, fill: number, weight: '400' | '700' = '400') =>
+        new Text({ text, style: new TextStyle({ fontFamily: 'Segoe UI, Roboto, sans-serif', fontSize: size, fontWeight: weight, fill }) });
+
+    // --- 標題（無框，置於 Back 按鈕下方）---
+    const titleBox = new Container();
+    titleBox.position.set(26, 78);
+    const titleMain = label('PixiJS  ×  Three.js', 26, 0xffffff, '700'); titleMain.position.set(0, 0);
+    const titleSub = label(t('px3.subtitle'), 13, 0x8fb6e8); titleSub.position.set(0, 36);
+    titleBox.addChild(titleMain, titleSub);
+    ui.addChild(titleBox);
+
+    // --- 即時數據面板 ---
+    const statsBox = new Container();
+    statsBox.addChild(glassPanel(176, 108));
+    const statStyle = new TextStyle({ fontFamily: 'SF Mono, Menlo, monospace', fontSize: 15, fill: 0xd7e6ff });
+    const fpsText = new Text({ text: '', style: statStyle }); fpsText.position.set(16, 14);
+    const bodyText = new Text({ text: '', style: statStyle }); bodyText.position.set(16, 42);
+    const drawText = new Text({ text: '', style: statStyle }); drawText.position.set(16, 70);
+    statsBox.addChild(fpsText, bodyText, drawText);
+    ui.addChild(statsBox);
+
+    // --- 提示 ---
+    const hint = new Text({
+        text: t('px3.hint'),
+        style: new TextStyle({ fontFamily: 'Segoe UI, Roboto, sans-serif', fontSize: 15, fill: 0x8fb6e8 }),
     });
-    const balanceText = new Text({ text: '$ 10,000', style: balanceStyle });
-    balanceText.zIndex = 10;
-    balanceText.position.set(250, 65);
-    uiContainer.addChild(balanceText);
-    
-    // Spin Button
-    const btnContainer = new Container();
-    btnContainer.interactive = true;
-    btnContainer.cursor = 'pointer';
-    btnContainer.zIndex = 9;
-    btnContainer.position.set(window.innerWidth / 2, window.innerHeight - 100);
-    const btnBg = new Graphics().roundRect(-100, -40, 200, 80, 40).fill(0x28a745).stroke({ width: 4, color: 0xffffff });
-    const btnText = new Text({ text: 'SPIN', style: { fontFamily: 'Arial', fontSize: 30, fontWeight: 'bold', fill: 'white' } });
-    btnText.anchor.set(0.5);
-    btnBg.addChild(btnText);
-    btnContainer.addChild(btnBg);
-    uiContainer.addChild(btnContainer);
+    hint.anchor.set(0.5, 0);
+    ui.addChild(hint);
 
+    // --- 按鈕列 ---
+    const makeButton = (label: string, color: number, onTap: () => void, w = 116) => {
+        const c = new Container();
+        c.interactive = true; c.cursor = 'pointer';
+        const h = 48;
+        const bg = new Graphics().roundRect(0, 0, w, h, 12).fill({ color, alpha: 0.92 }).stroke({ width: 1.5, color: 0xffffff, alpha: 0.25 });
+        const txt = new Text({ text: label, style: new TextStyle({ fontFamily: 'Segoe UI, Roboto, sans-serif', fontSize: 16, fontWeight: '700', fill: 0xffffff }) });
+        txt.anchor.set(0.5); txt.position.set(w / 2, h / 2);
+        c.addChild(bg, txt);
+        (c as any)._w = w; (c as any)._h = h;
+        c.on('pointerover', () => gsap.to(c.scale, { x: 1.06, y: 1.06, duration: 0.15 }));
+        c.on('pointerout', () => gsap.to(c.scale, { x: 1, y: 1, duration: 0.15 }));
+        c.on('pointerdown', (e) => { e.stopPropagation(); gsap.fromTo(c.scale, { x: 0.92, y: 0.92 }, { x: 1.06, y: 1.06, duration: 0.18 }); onTap(); });
+        return c;
+    };
 
-    // ==========================================
-    // 6. 旋轉與物理邏輯
-    // ==========================================
-    let isSpinning = false;
-    let balance = 10000;
-    const reelState = { angle: 0 }; 
+    let lowGravity = false;
+    const gravityBtn = makeButton(t('px3.gravity.normal'), 0x6c5ce7, () => {
+        lowGravity = !lowGravity;
+        world.gravity.set(0, lowGravity ? GRAVITY_LOW : GRAVITY_NORMAL, 0);
+        objects.forEach((o) => o.body.wakeUp());
+        (gravityBtn.children[1] as Text).text = lowGravity ? t('px3.gravity.low') : t('px3.gravity.normal');
+    }, 168);
+    const addBtn = makeButton(t('px3.btn.add'), 0x2a9d8f, () => spawn(8));
+    const shakeBtn = makeButton(t('px3.btn.shake'), 0xf4a261, () => objects.forEach((o) => {
+        o.body.wakeUp();
+        o.body.applyImpulse(new CANNON.Vec3((Math.random() - 0.5) * 8, 5 + Math.random() * 3, (Math.random() - 0.5) * 8));
+    }));
+    const resetBtn = makeButton(t('px3.btn.reset'), 0xe63946, () => { clearObjects(); spawn(28); resetTilt(); });
+    const buttons = [addBtn, shakeBtn, resetBtn, gravityBtn];
+    const btnRow = new Container();
+    buttons.forEach((b) => btnRow.addChild(b));
+    ui.addChild(btnRow);
 
-    btnContainer.on('pointerdown', () => {
-        if (isSpinning) return;
-        isSpinning = true;
-        
-        balance -= 100;
-        balanceText.text = `$ ${balance.toLocaleString()}`;
-        
-        gsap.to(btnContainer.scale, { x: 0.9, y: 0.9, duration: 0.1, yoyo: true, repeat: 1 });
-
-        // 轉 3 圈 (6 PI)
-        const targetAngle = reelState.angle + Math.PI * 6; 
-
-        gsap.to(reelState, {
-            angle: targetAngle,
-            duration: 5,
-            ease: "power1.inOut", // 慢進慢出，讓球有時間滾動
-            onUpdate: () => {
-                // ★ 核心：控制物理 Body 旋轉 (繞 X 軸)
-                reelBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), reelState.angle);
-            },
-            onComplete: () => {
-                isSpinning = false;
-                if (Math.random() > 0.5) {
-                    const targetBalance = balance + 200;
-                    const temp = { val: balance };
-                    gsap.to(temp, {
-                        val: targetBalance,
-                        duration: 0.5,
-                        onUpdate: () => {
-                            balanceText.text = `$ ${Math.floor(temp.val).toLocaleString()}`;
-                        },
-                        onComplete: () => { balance = targetBalance; }
-                    });
-                }
-            }
-        });
+    // 語言切換時更新 HUD 文字
+    onLangChange(() => {
+        titleSub.text = t('px3.subtitle');
+        hint.text = t('px3.hint');
+        (addBtn.children[1] as Text).text = t('px3.btn.add');
+        (shakeBtn.children[1] as Text).text = t('px3.btn.shake');
+        (resetBtn.children[1] as Text).text = t('px3.btn.reset');
+        (gravityBtn.children[1] as Text).text = lowGravity ? t('px3.gravity.low') : t('px3.gravity.normal');
     });
 
+    // 依視窗寬度排版（Pixi 端）
+    const layoutHud = () => {
+        const W = window.innerWidth, H = window.innerHeight;
+        statsBox.position.set(W - 176 - 24, 24);
+        const gap = 14;
+        let x = 0;
+        buttons.forEach((b) => { b.position.set(x, 0); x += (b as any)._w + gap; });
+        btnRow.position.set((W - (x - gap)) / 2, H - 48 - 28);
+        hint.position.set(W / 2, H - 48 - 28 - 34);
+    };
+    layoutHud();
+
     // ==========================================
-    // 7. Render Loop
+    // 6. 互動：拖曳傾斜托盤
+    // ==========================================
+    const tilt = { x: 0, z: 0 };        // 實際套用的傾斜
+    const targetTilt = { x: 0, z: 0 };  // 拖曳設定的目標
+    const MAX_TILT = 0.5;
+    const TILT_STEP = 0.03;             // 每幀最大角度變化（限速 → 牆不會「掃」過物件）
+    let dragging = false;
+    let lastX = 0, lastY = 0;
+
+    const applyTilt = () => {
+        const qx = new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(1, 0, 0), tilt.x);
+        const qz = new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(0, 0, 1), tilt.z);
+        trayBody.quaternion.copy(qz.mult(qx));
+    };
+    const resetTilt = () => { targetTilt.x = 0; targetTilt.z = 0; };
+
+    // 每幀限速趨近目標，並把角速度餵給 cannon（接觸求解才知道牆在動、用速度推開物件）
+    const updateTilt = (dt: number) => {
+        const px = tilt.x, pz = tilt.z;
+        tilt.x += THREE.MathUtils.clamp(targetTilt.x - tilt.x, -TILT_STEP, TILT_STEP);
+        tilt.z += THREE.MathUtils.clamp(targetTilt.z - tilt.z, -TILT_STEP, TILT_STEP);
+        applyTilt();
+        const inv = dt > 0 ? 1 / dt : 0;
+        trayBody.angularVelocity.set((tilt.x - px) * inv, 0, (tilt.z - pz) * inv);
+        if (tilt.x !== px || tilt.z !== pz) objects.forEach((o) => o.body.wakeUp());
+    };
+
+    canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+    window.addEventListener('pointerup', () => { if (dragging) { dragging = false; resetTilt(); } });
+    window.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        targetTilt.x = THREE.MathUtils.clamp(targetTilt.x + (e.clientY - lastY) * 0.004, -MAX_TILT, MAX_TILT);
+        targetTilt.z = THREE.MathUtils.clamp(targetTilt.z - (e.clientX - lastX) * 0.004, -MAX_TILT, MAX_TILT);
+        lastX = e.clientX; lastY = e.clientY;
+    });
+
+    // ==========================================
+    // 7. GL Draw Call 計數器（兩引擎合計，誠實的單幀總量）
+    // ==========================================
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    let glDraws = 0;
+    (['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced'] as const).forEach((name) => {
+        const orig = (gl as any)[name].bind(gl);
+        (gl as any)[name] = (...args: any[]) => { glDraws++; return orig(...args); };
+    });
+
+    // FPS
+    let fps = 0, frames = 0, fpsLast = performance.now();
+
+    // ==========================================
+    // 8. Render Loop
     // ==========================================
     const clock = new THREE.Clock();
-    let oldTime = 0;
-
-    pixiApp.ticker.stop(); 
-
     function animate() {
-        // // Render the Three.js scene
+        const dt = Math.min(clock.getDelta(), 1 / 30);
+        glDraws = 0;
+
+        // --- 物理 ---
+        updateTilt(dt);
+        world.step(1 / 60, dt, 6);
+        trayGroup.position.copy(trayBody.position as any);
+        trayGroup.quaternion.copy(trayBody.quaternion as any);
+        objects.forEach((o) => {
+            o.mesh.position.copy(o.body.position as any);
+            o.mesh.quaternion.copy(o.body.quaternion as any);
+        });
+
+        // --- Three (3D) ---
         renderer.resetState();
         renderer.render(scene, camera);
 
-        // // Render the PixiJS stage
-        // Reset PixiJS internal state because Three.js has modified the WebGL state
-        const gl = renderer.getContext() as WebGL2RenderingContext;
-        
-        // Essential State Resets for Shared Context
+        // --- 交棒給 Pixi：隔離 GL 狀態 ---
+        // Three 的 shadow pass 會動到 framebuffer / viewport / scissor。先手動還原成預設，
+        // 再呼叫 pixiRenderer.resetState() 讓 Pixi 重新同步它自己的 GL 狀態快取，
+        // 否則 Pixi 會沿用過期狀態繪製 → HUD 整層消失。(Pixi v8 是 resetState()，不是 reset())
+        const dpr = renderer.getPixelRatio();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, window.innerWidth * dpr, window.innerHeight * dpr);
+        gl.disable(gl.SCISSOR_TEST);
         gl.disable(gl.DEPTH_TEST);
         gl.disable(gl.CULL_FACE);
-        gl.clear(gl.STENCIL_BUFFER_BIT); // ★ 必須清空 Stencil，否則 Mask (頭像) 會因為髒資料而消失
+        gl.colorMask(true, true, true, true);
+        gl.depthMask(true);
         gl.bindVertexArray(null);
-
-        if ((pixiRenderer as any).reset) {
-            (pixiRenderer as any).reset();
-        }
+        pixiRenderer.resetState();
         pixiRenderer.render({ container: pixiApp.stage });
 
-
-        const elapsedTime = clock.getElapsedTime();
-        const deltaTime = elapsedTime - oldTime;
-        oldTime = elapsedTime;
-
-        // 物理更新 (增加 substeps 讓球不會穿牆)
-        // 1/60 是理想幀率，deltaTime 是實際時間，10 是最大子步數
-        world.step(1 / 60, deltaTime, 10);
-
-        // 同步視覺位置
-        reelGroup.position.copy(reelBody.position as any);
-        reelGroup.quaternion.copy(reelBody.quaternion as any);
-
-        balls.forEach(item => {
-            item.mesh.position.copy(item.body.position as any);
-            item.mesh.quaternion.copy(item.body.quaternion as any);
-        });
+        // --- HUD 數據 ---
+        frames++;
+        const now = performance.now();
+        if (now - fpsLast >= 500) {
+            fps = Math.round((frames * 1000) / (now - fpsLast));
+            frames = 0; fpsLast = now;
+            fpsText.text = `FPS     ${fps}`;
+            bodyText.text = `Bodies  ${objects.length}`;
+            drawText.text = `Draws   ${glDraws}`;
+        }
 
         requestAnimationFrame(animate);
     }
-
     animate();
 
+    // ==========================================
+    // 9. Resize
+    // ==========================================
     window.addEventListener('resize', () => {
-        const w = window.innerWidth;
-        const h = window.innerHeight;
-
+        const w = window.innerWidth, h = window.innerHeight;
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
-        
         renderer.setSize(w, h);
-        pixiRenderer.resize(w, h); // Sync PixiJS size
-        
-        btnContainer.position.set(w / 2, h - 100);
+        pixiRenderer.resize(w, h);
+        layoutHud();
     });
 
-    // Back Button
+    // --- Back ---
     const backBtn = document.createElement('a');
     backBtn.innerText = '← Back';
-    backBtn.href = './pixi_hub.html';
-    Object.assign(backBtn.style, { 
-        position: 'absolute',
-        top: '55px',
-        left: '20px',
-        color: 'white',
-        textDecoration: 'none',
-        background: 'rgba(0,0,0,0.3)',
-        padding: '10px 15px',
-        borderRadius: '8px',
-        fontFamily: 'Segoe UI, Roboto, Helvetica, Arial, sans-serif',
-        backdropFilter: 'blur(5px)',
-        transition: 'background 0.3s',
-        zIndex: '100'
+    backBtn.href = './index.html'; // pixiXthree 是首頁的獨立大分類，back 直接回首頁
+    Object.assign(backBtn.style, {
+        position: 'absolute', top: '24px', left: '24px', color: '#cfe0ff', textDecoration: 'none',
+        background: 'rgba(14,19,32,0.55)', padding: '10px 16px', borderRadius: '10px',
+        fontFamily: 'Segoe UI, Roboto, sans-serif', fontSize: '14px',
+        border: '1px solid rgba(91,127,176,0.5)', backdropFilter: 'blur(6px)', zIndex: '100',
     });
-    document.body.appendChild(backBtn);
+    root.appendChild(backBtn);
 
+    // 語言切換鈕：放在 back 右側（右上角已被數據面板佔用）
+    mountLangToggle({ style: { top: '24px', left: '120px' } });
 })();
+
+// ------------------------------------------------
+// helpers
+// ------------------------------------------------
+function makeGradientTexture(top: string, bottom: string): THREE.Texture {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 256;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, top);
+    g.addColorStop(1, bottom);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 16, 256);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+}
