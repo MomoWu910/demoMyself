@@ -1,5 +1,6 @@
 import { ConfiguratorView } from './configuratorView';
 import { PartInfo, FinishInfo, TintInfo } from './materialConfigurator';
+import { initI18n, t } from '../../../i18n';
 
 // colorway 變體對應的色塊顏色（球鞋模型內建 midnight / beach / street）
 const VARIANT_SWATCH: Record<string, string> = {
@@ -8,17 +9,18 @@ const VARIANT_SWATCH: Record<string, string> = {
     street: '#9aa0a6',
 };
 
-const LIGHTING_PRESETS: { id: string; label: string }[] = [
-    { id: 'soft', label: '柔光棚' },
-    { id: 'dramatic', label: '戲劇側光' },
-    { id: 'ecom', label: '電商白' },
+// 動態 pill 用 i18n key；建立時設 dataset.i18n，語言切換時 applyDom() 會自動重譯
+const LIGHTING_PRESETS: { id: string; key: string }[] = [
+    { id: 'soft', key: 'cfg.preset.soft' },
+    { id: 'dramatic', key: 'cfg.preset.dramatic' },
+    { id: 'ecom', key: 'cfg.preset.ecom' },
 ];
 
-const BACKGROUNDS: { id: string; label: string }[] = [
-    { id: 'studio', label: 'Studio' },
-    { id: 'gradient', label: '漸層' },
-    { id: 'dark', label: '深色' },
-    { id: 'white', label: '純白' },
+const BACKGROUNDS: { id: string; key: string }[] = [
+    { id: 'studio', key: 'cfg.bg.studio' },
+    { id: 'gradient', key: 'cfg.bg.gradient' },
+    { id: 'dark', key: 'cfg.bg.dark' },
+    { id: 'white', key: 'cfg.bg.white' },
 ];
 
 // 每個部件目前選用的 finish / tint（供 UI 切換部件時還原 active 狀態）
@@ -33,6 +35,9 @@ function byId<T extends HTMLElement = HTMLElement>(id: string): T | null {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
+    // 套用翻譯 + 右上角語言切換鈕（右上角為空白區，側面板在右側中間）
+    initI18n({ style: { top: '20px', right: '20px' } });
+
     const canvas = byId<HTMLCanvasElement>('renderCanvas');
     if (!canvas) return;
     const view = new ConfiguratorView(canvas);
@@ -189,7 +194,8 @@ function _buildLighting(view: ConfiguratorView) {
         LIGHTING_PRESETS.forEach((p, i) => {
             const pill = document.createElement('button');
             pill.className = 'pill' + (i === 0 ? ' active' : '');
-            pill.textContent = p.label;
+            pill.dataset.i18n = p.key;
+            pill.textContent = t(p.key);
             pill.addEventListener('click', () => {
                 view.applyLightingPreset(p.id);
                 presetBox.querySelectorAll('.pill').forEach((el) => el.classList.remove('active'));
@@ -213,7 +219,8 @@ function _buildBackgrounds(view: ConfiguratorView) {
     BACKGROUNDS.forEach((b, i) => {
         const pill = document.createElement('button');
         pill.className = 'pill' + (i === 0 ? ' active' : '');
-        pill.textContent = b.label;
+        pill.dataset.i18n = b.key;
+        pill.textContent = t(b.key);
         pill.addEventListener('click', () => {
             view.setBackgroundMode(b.id as 'studio' | 'dark' | 'white' | 'gradient');
             container.querySelectorAll('.pill').forEach((el) => el.classList.remove('active'));

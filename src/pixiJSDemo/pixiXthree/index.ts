@@ -2,6 +2,7 @@ import { Application, Container, Graphics, Text, TextStyle, WebGLRenderer } from
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import gsap from 'gsap';
+import { t, onLangChange, mountLangToggle } from '../../i18n';
 
 /**
  * Cross-Engine Sandbox — PixiJS (2D HUD) + Three.js (3D scene) + cannon-es (physics)
@@ -201,7 +202,7 @@ import gsap from 'gsap';
     const titleBox = new Container();
     titleBox.position.set(26, 78);
     const titleMain = label('PixiJS  ×  Three.js', 26, 0xffffff, '700'); titleMain.position.set(0, 0);
-    const titleSub = label('2D HUD · 3D physics · one shared WebGL context', 13, 0x8fb6e8); titleSub.position.set(0, 36);
+    const titleSub = label(t('px3.subtitle'), 13, 0x8fb6e8); titleSub.position.set(0, 36);
     titleBox.addChild(titleMain, titleSub);
     ui.addChild(titleBox);
 
@@ -217,7 +218,7 @@ import gsap from 'gsap';
 
     // --- 提示 ---
     const hint = new Text({
-        text: '✋  Drag the scene to tilt the tray',
+        text: t('px3.hint'),
         style: new TextStyle({ fontFamily: 'Segoe UI, Roboto, sans-serif', fontSize: 15, fill: 0x8fb6e8 }),
     });
     hint.anchor.set(0.5, 0);
@@ -240,24 +241,32 @@ import gsap from 'gsap';
     };
 
     let lowGravity = false;
-    const gravityBtn = makeButton('Gravity: Normal', 0x6c5ce7, () => {
+    const gravityBtn = makeButton(t('px3.gravity.normal'), 0x6c5ce7, () => {
         lowGravity = !lowGravity;
         world.gravity.set(0, lowGravity ? GRAVITY_LOW : GRAVITY_NORMAL, 0);
         objects.forEach((o) => o.body.wakeUp());
-        (gravityBtn.children[1] as Text).text = lowGravity ? 'Gravity: Low' : 'Gravity: Normal';
+        (gravityBtn.children[1] as Text).text = lowGravity ? t('px3.gravity.low') : t('px3.gravity.normal');
     }, 168);
-    const buttons = [
-        makeButton('Add ×8', 0x2a9d8f, () => spawn(8)),
-        makeButton('Shake', 0xf4a261, () => objects.forEach((o) => {
-            o.body.wakeUp();
-            o.body.applyImpulse(new CANNON.Vec3((Math.random() - 0.5) * 8, 5 + Math.random() * 3, (Math.random() - 0.5) * 8));
-        })),
-        makeButton('Reset', 0xe63946, () => { clearObjects(); spawn(28); resetTilt(); }),
-        gravityBtn,
-    ];
+    const addBtn = makeButton(t('px3.btn.add'), 0x2a9d8f, () => spawn(8));
+    const shakeBtn = makeButton(t('px3.btn.shake'), 0xf4a261, () => objects.forEach((o) => {
+        o.body.wakeUp();
+        o.body.applyImpulse(new CANNON.Vec3((Math.random() - 0.5) * 8, 5 + Math.random() * 3, (Math.random() - 0.5) * 8));
+    }));
+    const resetBtn = makeButton(t('px3.btn.reset'), 0xe63946, () => { clearObjects(); spawn(28); resetTilt(); });
+    const buttons = [addBtn, shakeBtn, resetBtn, gravityBtn];
     const btnRow = new Container();
     buttons.forEach((b) => btnRow.addChild(b));
     ui.addChild(btnRow);
+
+    // 語言切換時更新 HUD 文字
+    onLangChange(() => {
+        titleSub.text = t('px3.subtitle');
+        hint.text = t('px3.hint');
+        (addBtn.children[1] as Text).text = t('px3.btn.add');
+        (shakeBtn.children[1] as Text).text = t('px3.btn.shake');
+        (resetBtn.children[1] as Text).text = t('px3.btn.reset');
+        (gravityBtn.children[1] as Text).text = lowGravity ? t('px3.gravity.low') : t('px3.gravity.normal');
+    });
 
     // 依視窗寬度排版（Pixi 端）
     const layoutHud = () => {
@@ -397,6 +406,9 @@ import gsap from 'gsap';
         border: '1px solid rgba(91,127,176,0.5)', backdropFilter: 'blur(6px)', zIndex: '100',
     });
     root.appendChild(backBtn);
+
+    // 語言切換鈕：放在 back 右側（右上角已被數據面板佔用）
+    mountLangToggle({ style: { top: '24px', left: '120px' } });
 })();
 
 // ------------------------------------------------

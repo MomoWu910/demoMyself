@@ -4,17 +4,17 @@
     <meta charset="UTF-8">
     <meta name="theme-color" content="#0f0f11">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Eric Wu | Interactive 3D & Frontend Demos</title>
+    <title data-i18n="title.home">Eric Wu | Interactive 3D & Frontend Demos</title>
 </head>
 <body class="home-page">
     <h1>Eric Wu</h1>
-    <p class="role">Frontend Engineer · 3D / 高互動 / 複雜 Web 應用</p>
+    <p class="role" data-i18n="home.role">Frontend Engineer · 3D / 高互動 / 複雜 Web 應用</p>
 
     <div class="grid">
         <a href="./pixi_x_three.html" class="card">
             <div class="card-content">
-                <h3><span class="icon">🧬</span> Cross-Engine Rendering</h3>
-                <p>PixiJS (2D UI) and Three.js (3D scene) drawing into a <strong>single shared WebGL context</strong> — manual GL state management to avoid depth / stencil / culling pollution, with cannon-es physics.</p>
+                <h3><span class="icon">🧬</span> <span data-i18n="home.crossEngine.title">Cross-Engine Rendering</span></h3>
+                <p data-i18n-html="home.crossEngine.desc">PixiJS (2D UI) and Three.js (3D scene) drawing into a <strong>single shared WebGL context</strong> — manual GL state management to avoid depth / stencil / culling pollution, with cannon-es physics.</p>
             </div>
             <div class="tags">
                 <span class="tag highlight">PixiJS v8</span>
@@ -23,14 +23,14 @@
             </div>
             <div class="card-footer">
                 <span style="font-size: 0.8rem; color: #666;"> </span>
-                <span class="btn-launch">Open Demo →</span>
+                <span class="btn-launch" data-i18n="home.crossEngine.cta">Open Demo →</span>
             </div>
         </a>
 
         <a href="./configurator.html" class="card">
             <div class="card-content">
-                <h3><span class="icon">🧩</span> 3D Product Configurator</h3>
-                <p>Babylon.js 3D product viewer: real-time material variants (glTF KHR_materials_variants), PBR + IBL studio lighting, soft shadows, post-processing, and turntable orbit controls.</p>
+                <h3><span class="icon">🧩</span> <span data-i18n="home.configurator.title">3D Product Configurator</span></h3>
+                <p data-i18n="home.configurator.desc">Babylon.js 3D product viewer: real-time material variants (glTF KHR_materials_variants), PBR + IBL studio lighting, soft shadows, post-processing, and turntable orbit controls.</p>
             </div>
             <div class="tags">
                 <span class="tag">Babylon.js</span>
@@ -39,14 +39,14 @@
             </div>
             <div class="card-footer">
                 <span style="font-size: 0.8rem; color: #666;"> </span>
-                <span class="btn-launch">Configure →</span>
+                <span class="btn-launch" data-i18n="home.configurator.cta">Configure →</span>
             </div>
         </a>
 
         <a href="./pixi_hub.html" class="card">
             <div class="card-content">
-                <h3><span class="icon">🚀</span> Rendering Performance Lab</h3>
-                <p>PixiJS v8 rendering optimization & stress testing — measuring FPS and draw calls under heavy sprite / particle loads.</p>
+                <h3><span class="icon">🚀</span> <span data-i18n="home.lab.title">Rendering Performance Lab</span></h3>
+                <p data-i18n="home.lab.desc">PixiJS v8 rendering optimization & stress testing — measuring FPS and draw calls under heavy sprite / particle loads.</p>
             </div>
             <div class="tags">
                 <span class="tag">PixiJS v8</span>
@@ -55,7 +55,7 @@
             </div>
             <div class="card-footer">
                 <span style="font-size: 0.8rem; color: #666;"> </span>
-                <span class="btn-launch">Explore →</span>
+                <span class="btn-launch" data-i18n="home.lab.cta">Explore →</span>
             </div>
         </a>
     </div>

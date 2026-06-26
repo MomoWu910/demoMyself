@@ -1,7 +1,11 @@
 import GUI from 'lil-gui';
+import { t, onLangChange, mountLangToggle } from '../../../i18n';
 
 export class UIManager {
     private gui: GUI;
+    private backBtn!: HTMLAnchorElement;
+    private ctrls: { c: { name(s: string): unknown }; key: string }[] = [];
+    private folders: { f: { title(s: string): unknown }; key: string }[] = [];
     private params: {
         count: number;
         renderer: string;
@@ -30,34 +34,56 @@ export class UIManager {
         this.gui = new GUI({ title: 'PixiJS v8 Benchmark' });
         this.createGUI(onRendererChange);
         this.createBackButton();
+        onLangChange(() => this.applyLang());
+    }
+
+    private applyLang() {
+        this.backBtn.innerText = t('nav.back');
+        this.ctrls.forEach(({ c, key }) => c.name(t(key)));
+        this.folders.forEach(({ f, key }) => f.title(t(key)));
     }
 
     private createGUI(onRendererChange: (renderer: string) => void) {
         // Info Folder
-        const folderInfo = this.gui.addFolder('Info');
-        folderInfo.add(this.params, 'actualRenderer').name('Backend').disable().listen();
-        folderInfo.add(this.params, 'count').name('Object Count').listen().disable();
+        const folderInfo = this.gui.addFolder(t('gui.folder.info'));
+        const cBackend = folderInfo.add(this.params, 'actualRenderer').name(t('gui.backend')).disable().listen();
+        const cCount = folderInfo.add(this.params, 'count').name(t('gui.objectCount')).listen().disable();
         folderInfo.open();
 
         // Actions Folder
-        const folderAction = this.gui.addFolder('Actions');
-        folderAction.add(this.params, 'addAmount', 1000, 10000, 1000).name('Step Size');
-        folderAction.add(this.params, 'add').name('Add Shibas 🐕');
-        folderAction.add(this.params, 'reset').name('Reset 🗑️');
+        const folderAction = this.gui.addFolder(t('gui.folder.actions'));
+        const cStep = folderAction.add(this.params, 'addAmount', 1000, 10000, 1000).name(t('gui.stepSize'));
+        const cAdd = folderAction.add(this.params, 'add').name(t('gui.addShibas'));
+        const cReset = folderAction.add(this.params, 'reset').name(t('gui.reset'));
         folderAction.open();
 
         // System Folder
-        const folderSystem = this.gui.addFolder('System');
-        folderSystem.add(this.params, 'renderer', ['webgpu', 'webgl'])
-            .name('Change Renderer')
+        const folderSystem = this.gui.addFolder(t('gui.folder.system'));
+        const cRenderer = folderSystem.add(this.params, 'renderer', ['webgpu', 'webgl'])
+            .name(t('gui.changeRenderer'))
             .onChange((v: string) => onRendererChange(v));
+
+        this.ctrls = [
+            { c: cBackend, key: 'gui.backend' },
+            { c: cCount, key: 'gui.objectCount' },
+            { c: cStep, key: 'gui.stepSize' },
+            { c: cAdd, key: 'gui.addShibas' },
+            { c: cReset, key: 'gui.reset' },
+            { c: cRenderer, key: 'gui.changeRenderer' },
+        ];
+        this.folders = [
+            { f: folderInfo, key: 'gui.folder.info' },
+            { f: folderAction, key: 'gui.folder.actions' },
+            { f: folderSystem, key: 'gui.folder.system' },
+        ];
     }
 
     private createBackButton() {
         const backBtn = document.createElement('a');
-        backBtn.innerText = '← Back';
+        this.backBtn = backBtn;
+        backBtn.innerText = t('nav.back');
         backBtn.href = './pixi_hub.html';
-        Object.assign(backBtn.style, { 
+        Object.assign(backBtn.style, {
             position: 'absolute',
             top: '55px',
             left: '20px',
@@ -72,6 +98,9 @@ export class UIManager {
             zIndex: '100'
         });
         document.body.appendChild(backBtn);
+
+        // 語言切換鈕：放在 back 右側（右上角為 lil-gui）
+        mountLangToggle({ style: { top: '55px', left: '110px' } });
     }
 
     public updateCount(count: number) {

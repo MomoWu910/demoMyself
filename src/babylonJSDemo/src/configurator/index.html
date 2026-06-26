@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="theme-color" content="#0f0f11">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Product Configurator</title>
+    <title data-i18n="title.configurator">Product Configurator</title>
     <style>
         :root {
             --accent: #00d2ff;
@@ -124,73 +124,73 @@
     </style>
 </head>
 <body>
-    <a href="./index.html" class="back-btn">← Back to Home</a>
+    <a href="./index.html" class="back-btn" data-i18n="nav.backHome">← Back to Home</a>
 
     <div class="title-block">
-        <h1>Product Configurator</h1>
-        <p>Babylon.js · PBR 即時材質 / 光照 · 自動依模型部件生成 UI</p>
+        <h1 data-i18n="cfg.title">Product Configurator</h1>
+        <p data-i18n="cfg.subtitle">Babylon.js · PBR 即時材質 / 光照 · 自動依模型部件生成 UI</p>
     </div>
 
     <canvas id="renderCanvas"></canvas>
 
     <aside class="side-panel" id="panel" style="display:none;">
         <div class="section hidden" id="sec-parts">
-            <span class="label">Part 部件</span>
+            <span class="label" data-i18n="cfg.section.part">Part</span>
             <div class="pills" id="parts"></div>
         </div>
 
         <div class="section" id="sec-finish">
-            <span class="label">Finish 質感</span>
+            <span class="label" data-i18n="cfg.section.finish">Finish</span>
             <div class="pills" id="finishes"></div>
         </div>
 
         <div class="section" id="sec-color">
-            <span class="label">Color 顏色</span>
+            <span class="label" data-i18n="cfg.section.color">Color</span>
             <div class="swatches" id="tints"></div>
         </div>
 
         <div class="section hidden" id="sec-colorway">
-            <span class="label">Colorway 配色</span>
+            <span class="label" data-i18n="cfg.section.colorway">Colorway</span>
             <div class="swatches" id="swatches"></div>
         </div>
 
         <div class="divider"></div>
 
         <div class="section">
-            <span class="label">Lighting 打光</span>
+            <span class="label" data-i18n="cfg.section.lighting">Lighting</span>
             <div class="pills" id="lighting-presets"></div>
             <div class="slider-row">
-                <div class="slabel"><span>環境光強度</span><span class="val" id="env-int-val">1.1</span></div>
+                <div class="slabel"><span data-i18n="cfg.slider.envInt">環境光強度</span><span class="val" id="env-int-val">1.1</span></div>
                 <input type="range" id="env-intensity" min="0" max="3" step="0.05" value="1.1">
             </div>
             <div class="slider-row">
-                <div class="slabel"><span>環境旋轉</span><span class="val" id="env-rot-val">0°</span></div>
+                <div class="slabel"><span data-i18n="cfg.slider.envRot">環境旋轉</span><span class="val" id="env-rot-val">0°</span></div>
                 <input type="range" id="env-rotation" min="0" max="360" step="1" value="0">
             </div>
             <div class="slider-row">
-                <div class="slabel"><span>主光強度</span><span class="val" id="key-int-val">2.2</span></div>
+                <div class="slabel"><span data-i18n="cfg.slider.keyInt">主光強度</span><span class="val" id="key-int-val">2.2</span></div>
                 <input type="range" id="key-intensity" min="0" max="6" step="0.05" value="2.2">
             </div>
             <div class="slider-row">
-                <div class="slabel"><span>主光色溫</span><span class="val" id="key-temp-val">6500K</span></div>
+                <div class="slabel"><span data-i18n="cfg.slider.keyTemp">主光色溫</span><span class="val" id="key-temp-val">6500K</span></div>
                 <input type="range" id="key-temp" min="2700" max="9000" step="100" value="6500">
             </div>
         </div>
 
         <div class="section">
-            <span class="label">Background 背景</span>
+            <span class="label" data-i18n="cfg.section.background">Background</span>
             <div class="pills" id="backgrounds"></div>
         </div>
     </aside>
 
     <div class="bottom-bar" id="bottom-bar" style="display:none;">
-        <button class="ctrl-btn on" id="autorotate">◐ Auto-rotate</button>
-        <button class="ctrl-btn" id="reset">⟲ Reset View</button>
+        <button class="ctrl-btn on" id="autorotate" data-i18n="cfg.btn.autorotate">◐ Auto-rotate</button>
+        <button class="ctrl-btn" id="reset" data-i18n="cfg.btn.reset">⟲ Reset View</button>
     </div>
 
     <div id="loading">
         <div class="spinner"></div>
-        <p>Loading 3D model…</p>
+        <p data-i18n="cfg.loading">Loading 3D model…</p>
     </div>
 </body>
 </html>
