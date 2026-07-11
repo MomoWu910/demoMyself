@@ -67,6 +67,10 @@ export class ConfiguratorView {
     private materialConfigurator!: MaterialConfigurator;
     private variants: string[] = [];
     private activeVariant = '';
+    private _bottomObstruction = 0; // 被底部 UI 蓋住的高度（px，手機 bottom sheet）
+    private _baseRadius = 0;        // 全螢幕可視時的框景距離（radius 的基準）
+    private _desiredRadius = 0;     // 遮擋變化時要 lerp 到的 radius
+    private _radiusLerp = false;    // 只在遮擋改變後短暫接管 radius，不干擾使用者滾輪縮放
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -96,6 +100,24 @@ export class ConfiguratorView {
 
         await this._loadProduct();
         this._frameCameraToProduct();
+
+        // 依底部 UI 遮擋量把框景中心平滑上移，讓產品置中在「沒被蓋住」的可視區；
+        // 同時把 radius 拉遠，讓產品「塞得進」變小的可視區
+        this.scene.onBeforeRenderObservable.add(() => {
+            const renderH = this.engine.getRenderHeight();
+            if (renderH <= 0) return;
+            const frac = this._bottomObstruction / (2 * renderH);
+            const worldH = 2 * this.camera.radius * Math.tan(this.camera.fov / 2);
+            const desired = frac * worldH;
+            const cur = this.camera.targetScreenOffset.y;
+            this.camera.targetScreenOffset.y = cur + (desired - cur) * 0.12;
+
+            if (this._radiusLerp) {
+                const d = this._desiredRadius - this.camera.radius;
+                if (Math.abs(d) < 0.002) this._radiusLerp = false;
+                else this.camera.radius += d * 0.12;
+            }
+        });
 
         this.postProcessManager = new PostProcessManager(this.scene, [this.camera]);
         this.postProcessManager.apply();
@@ -197,9 +219,20 @@ export class ConfiguratorView {
         const radius = Math.max(size.x, size.y, size.z);
 
         this.camera.setTarget(center);
-        this.camera.radius = radius * 2.2;
+        this._baseRadius = radius * 2.2;
+        this.camera.radius = this._baseRadius;
         this.camera.lowerRadiusLimit = radius * 1.2;
-        this.camera.upperRadiusLimit = radius * 4;
+        this.camera.upperRadiusLimit = radius * 6;
+        this._updateRadiusForObstruction();
+    }
+
+    /** 依可視高度比例決定框景距離：可視區越小、radius 越遠，產品維持相同相對大小 */
+    private _updateRadiusForObstruction() {
+        if (this._baseRadius <= 0) return;
+        const H = this.engine.getRenderHeight();
+        const visible = Math.max(0.4, 1 - this._bottomObstruction / Math.max(1, H));
+        this._desiredRadius = this._baseRadius / visible;
+        this._radiusLerp = true;
     }
 
     /**
@@ -256,6 +289,12 @@ export class ConfiguratorView {
     /** 背景模式 */
     public setBackgroundMode(mode: BackgroundMode) {
         this.environmentManager.setBackgroundMode(mode);
+    }
+
+    /** 底部 UI（bottom sheet / 工具列）目前蓋住的畫面高度，供相機框景避開 */
+    public setBottomObstruction(px: number) {
+        this._bottomObstruction = Math.max(0, px);
+        this._updateRadiusForObstruction();
     }
 
     /**

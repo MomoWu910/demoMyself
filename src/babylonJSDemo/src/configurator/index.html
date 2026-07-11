@@ -35,7 +35,7 @@
         /* 右側控制面板 */
         .side-panel {
             position: absolute; top: 50%; right: 22px; transform: translateY(-50%); z-index: 10;
-            width: 268px; max-height: calc(100vh - 120px); overflow-y: auto;
+            width: 268px; max-height: calc(100vh - 120px); max-height: calc(100dvh - 120px); overflow-y: auto;
             display: flex; flex-direction: column; gap: 18px;
             background: var(--panel-bg); border: 1px solid var(--panel-border);
             border-radius: 16px; padding: 20px 18px; backdrop-filter: blur(18px);
@@ -89,7 +89,7 @@
 
         /* 底部小工具列 */
         .bottom-bar {
-            position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 10;
+            position: absolute; bottom: max(26px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10;
             display: flex; align-items: center; gap: 10px;
             background: var(--panel-bg); border: 1px solid var(--panel-border);
             border-radius: 14px; padding: 10px 14px; backdrop-filter: blur(16px);
@@ -117,8 +117,25 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         #loading p { margin: 0; font-size: 0.85rem; letter-spacing: 0.5px; }
 
+        /* 手機 bottom sheet 的把手列（桌機隱藏） */
+        .sheet-handle { display: none; }
+
         @media (max-width: 720px) {
-            .side-panel { right: 12px; left: 12px; width: auto; top: auto; bottom: 86px; transform: none; max-height: 46vh; }
+            .side-panel {
+                right: 12px; left: 12px; width: auto; top: auto; bottom: 86px; transform: none;
+                max-height: 46vh; max-height: 46dvh;
+                transition: max-height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+            }
+            /* 收合：只露出把手列，鞋子不被蓋住 */
+            .side-panel.collapsed { max-height: 44px; overflow: hidden; }
+            .sheet-handle {
+                display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+                background: none; border: none; padding: 0; margin: -6px 0;
+                color: var(--text); font-family: inherit; font-size: 0.8rem; font-weight: 600;
+                letter-spacing: 0.5px; cursor: pointer;
+            }
+            .sheet-handle em { font-style: normal; color: var(--accent); transition: transform 0.3s; }
+            .side-panel.collapsed .sheet-handle em { transform: rotate(180deg); }
             .title-block { display: none; }
         }
     </style>
@@ -134,6 +151,10 @@
     <canvas id="renderCanvas"></canvas>
 
     <aside class="side-panel" id="panel" style="display:none;">
+        <button class="sheet-handle" id="sheet-toggle" type="button">
+            <span>⚙ <span data-i18n="cfg.sheet.customize">Customize</span></span>
+            <em>▼</em>
+        </button>
         <div class="section hidden" id="sec-parts">
             <span class="label" data-i18n="cfg.section.part">Part</span>
             <div class="pills" id="parts"></div>

@@ -268,15 +268,41 @@ import { t, onLangChange, mountLangToggle } from '../../i18n';
         (gravityBtn.children[1] as Text).text = lowGravity ? t('px3.gravity.low') : t('px3.gravity.normal');
     });
 
-    // 依視窗寬度排版（Pixi 端）
+    // 依視窗寬度排版（Pixi 端）；窄螢幕整組等比縮小，避免 HUD 超出畫面
     const layoutHud = () => {
         const W = window.innerWidth, H = window.innerHeight;
-        statsBox.position.set(W - 176 - 24, 24);
+        const narrow = W < 640;
+
+        titleBox.scale.set(narrow ? 0.8 : 1);
+        titleBox.position.set(narrow ? 16 : 26, 78);
+
+        // 數據面板：窄螢幕縮小、移到 back/lang 列下方；極窄再往下疊避開標題
+        const statScale = narrow ? 0.85 : 1;
+        statsBox.scale.set(statScale);
+        const statsY = narrow ? (W < 400 ? 136 : 78) : 24;
+        statsBox.position.set(W - 176 * statScale - (narrow ? 12 : 24), statsY);
+
+        // 按鈕列：總寬超過視窗就整排等比縮小
         const gap = 14;
         let x = 0;
         buttons.forEach((b) => { b.position.set(x, 0); x += (b as any)._w + gap; });
-        btnRow.position.set((W - (x - gap)) / 2, H - 48 - 28);
-        hint.position.set(W / 2, H - 48 - 28 - 34);
+        const rowW = x - gap;
+        const s = Math.min(1, (W - 24) / rowW);
+        btnRow.scale.set(s);
+        btnRow.position.set((W - rowW * s) / 2, H - 48 * s - 28);
+        hint.position.set(W / 2, H - 48 * s - 28 - 34);
+
+        // 矮視窗時底部按鈕列會壓到托盤：虛擬加高畫面、只取上半部渲染，
+        // 等效把 3D 場景視覺中心上移半個按鈕區高度
+        const bottomUi = 48 * s + 28 + 40;
+        if (H < 800) {
+            camera.aspect = W / (H + bottomUi);
+            camera.setViewOffset(W, H + bottomUi, 0, bottomUi, W, H);
+        } else {
+            camera.aspect = W / H;
+            camera.clearViewOffset();
+        }
+        camera.updateProjectionMatrix();
     };
     layoutHud();
 

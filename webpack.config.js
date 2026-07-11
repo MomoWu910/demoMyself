@@ -15,6 +15,7 @@ module.exports = {
         pixi_stress2: './src/pixiJSDemo/stressTest2/index.ts',   // Pixi.js 壓力測試2
         pixi_optimization: './src/pixiJSDemo/optimization/index.ts', // Pixi.js 最佳實踐
         pixi_x_three: './src/pixiJSDemo/pixiXthree/index.ts', // Pixi.js X Three.js
+        rwd_showcase: './src/rwdShowcase/index.ts',           // RWD 裝置模擬器
     },
     output: {
         filename: '[name].bundle.js',
@@ -96,6 +97,12 @@ module.exports = {
             template: pixiTemplate,
             chunks: ['pixi_x_three'],
             title: 'PixiJS X Three.js',
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'rwd_showcase.html',
+            template: './src/rwdShowcase/index.html',
+            chunks: ['rwd_showcase'],
+            title: 'RWD Showcase',
         }),
         new CopyWebpackPlugin({
             patterns: [
