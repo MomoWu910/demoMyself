@@ -10,28 +10,34 @@
     --text-muted: #a1a1aa;
 }
 
+*, *::before, *::after { box-sizing: border-box; }
+
+html { overflow-x: clip; }
+
 body {
     font-family: 'Segoe UI', Inter, system-ui, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-main);
     margin: 0;
     min-height: 100vh;
+    min-height: 100dvh; /* 手機網址列收合時高度不跳動 */
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 40px 20px;
+    padding: 40px clamp(16px, 4vw, 20px);
     box-sizing: border-box;
+    overflow-x: clip;
     animation: pageLoad 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-body.home-page { justify-content: center; padding: 0; }
+body.home-page { justify-content: center; padding: 24px clamp(16px, 4vw, 20px); }
 a { text-decoration: none; }
 h1 { margin: 0 0 10px 0; font-weight: 600; }
 
 /* --- 格線系統 --- */
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); /* 稍微加寬一點 */
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); /* 窄於 320px 的螢幕不溢出 */
     gap: 24px;
     width: 100%;
     max-width: 1000px;
@@ -147,11 +153,15 @@ h1 { margin: 0 0 10px 0; font-weight: 600; }
     max-width: 1000px;
     margin-bottom: 40px;
     display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--card-border);
     padding-bottom: 20px;
 }
+
+.nav-header h1 { font-size: clamp(1.3rem, 3.5vw + 0.5rem, 2rem); }
 
 .back-btn {
     color: var(--text-muted);

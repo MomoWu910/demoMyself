@@ -14,7 +14,7 @@ export function createDescriptionPanel() {
         position: 'absolute',
         bottom: '20px',
         right: '20px',
-        width: '300px',
+        width: 'min(300px, calc(100vw - 40px))',
         padding: '15px',
         background: 'rgba(0, 0, 0, 0.8)',
         color: '#eee',

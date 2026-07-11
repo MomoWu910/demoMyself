@@ -15,6 +15,7 @@ const DICT: Record<string, Entry> = {
     'title.home': { en: 'Eric Wu | Interactive 3D & Frontend Demos', zh: 'Eric Wu | 互動 3D 與前端 Demo' },
     'title.hub': { en: 'PixiJS Experiments | Eric Wu', zh: 'PixiJS 實驗場 | Eric Wu' },
     'title.configurator': { en: 'Product Configurator', zh: '產品配置器' },
+    'title.rwd': { en: 'RWD Showcase | Eric Wu', zh: 'RWD 響應式展示 | Eric Wu' },
 
     // ---- 導覽 ----
     'nav.back': { en: '← Back', zh: '← 返回' },
@@ -40,6 +41,34 @@ const DICT: Record<string, Entry> = {
         zh: 'PixiJS v8 渲染最佳化與壓力測試 — 在大量 sprite / 粒子負載下量測 FPS 與 draw call。',
     },
     'home.lab.cta': { en: 'Explore →', zh: '探索 →' },
+    'home.rwd.title': { en: 'RWD Showcase', zh: 'RWD 響應式展示' },
+    'home.rwd.desc': {
+        en: 'Built-in device simulator: preview every page of this site in iPhone / iPad / desktop viewports, rotate, or free-drag to any window size — layouts stay intact everywhere.',
+        zh: '站內建裝置模擬器：以 iPhone / iPad / 桌機視口即時預覽本站每一頁，可轉向、可自由拖拉任意視窗尺寸——所有佈局都不爆版。',
+    },
+    'home.rwd.cta': { en: 'Open Simulator →', zh: '開啟模擬器 →' },
+
+    // ---- RWD Showcase ----
+    'rwd.title': { en: 'RWD Showcase', zh: 'RWD 響應式展示' },
+    'rwd.subtitle': {
+        en: 'Live device simulator — every page of this site, at any viewport size',
+        zh: '即時裝置模擬器——本站每一頁，任意 viewport 尺寸',
+    },
+    'rwd.device': { en: 'Device', zh: '裝置' },
+    'rwd.page': { en: 'Page', zh: '頁面' },
+    'rwd.rotate': { en: '↻ Rotate', zh: '↻ 轉向' },
+    'rwd.hint': {
+        en: 'Canvas demos resize live — drag the cyan handle at the bottom-right corner for any custom size.',
+        zh: 'Canvas demo 會即時跟著改變尺寸——拖曳右下角青色手把可拉出任意自訂尺寸。',
+    },
+    'rwd.handleTitle': { en: 'Drag to resize', zh: '拖曳改變尺寸' },
+    'rwd.page.home': { en: 'Home', zh: '首頁' },
+    'rwd.page.px3': { en: 'Cross-Engine', zh: '跨引擎' },
+    'rwd.page.cfg': { en: 'Configurator', zh: '配置器' },
+    'rwd.page.hub': { en: 'Pixi Hub', zh: 'Pixi 實驗場' },
+    'rwd.page.stress': { en: 'Filter Stress', zh: '濾鏡壓測' },
+    'rwd.page.shiba': { en: 'Shiba Bench', zh: '柴犬壓測' },
+    'rwd.page.opt': { en: 'Optimization', zh: '最佳化 Lab' },
 
     // ---- pixiHub ----
     'hub.title': { en: 'PixiJS Experiments', zh: 'PixiJS 實驗場' },

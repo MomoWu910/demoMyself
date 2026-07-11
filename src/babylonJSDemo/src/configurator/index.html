@@ -35,7 +35,7 @@
         /* 右側控制面板 */
         .side-panel {
             position: absolute; top: 50%; right: 22px; transform: translateY(-50%); z-index: 10;
-            width: 268px; max-height: calc(100vh - 120px); overflow-y: auto;
+            width: 268px; max-height: calc(100vh - 120px); max-height: calc(100dvh - 120px); overflow-y: auto;
             display: flex; flex-direction: column; gap: 18px;
             background: var(--panel-bg); border: 1px solid var(--panel-border);
             border-radius: 16px; padding: 20px 18px; backdrop-filter: blur(18px);
@@ -89,7 +89,7 @@
 
         /* 底部小工具列 */
         .bottom-bar {
-            position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 10;
+            position: absolute; bottom: max(26px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10;
             display: flex; align-items: center; gap: 10px;
             background: var(--panel-bg); border: 1px solid var(--panel-border);
             border-radius: 14px; padding: 10px 14px; backdrop-filter: blur(16px);
@@ -118,7 +118,7 @@
         #loading p { margin: 0; font-size: 0.85rem; letter-spacing: 0.5px; }
 
         @media (max-width: 720px) {
-            .side-panel { right: 12px; left: 12px; width: auto; top: auto; bottom: 86px; transform: none; max-height: 46vh; }
+            .side-panel { right: 12px; left: 12px; width: auto; top: auto; bottom: 86px; transform: none; max-height: 46vh; max-height: 46dvh; }
             .title-block { display: none; }
         }
     </style>

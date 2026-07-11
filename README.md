@@ -48,6 +48,17 @@
 - **Super Shiba Mark**（`stressTest2/`）：10 萬+ Sprite 壓測批次渲染器，CPU-bound 變換 vs GPU 光柵化。
 - **Optimization Lab**（`optimization/`）：互動比較常見渲染陷阱（Tint vs Filter、Text vs BitmapText、Sprite vs Graphics）與最佳化解法。
 
+### 4. RWD Showcase：站內建裝置模擬器 — `src/rwdShowcase/`
+
+全站（含每個 canvas demo 的 HUD）都做了 RWD——任何裝置、任意拖拉視窗都不會爆版。這一頁把它變成可互動的展示：
+
+- **真實 viewport 預覽**：以 iframe 用實際 CSS 尺寸載入本站任一頁面，RWD 斷點反應是真的，不是縮圖。
+- **裝置預設集**：iPhone SE / iPhone 15 / iPad / Laptop / Desktop，一鍵直橫向切換。
+- **自由拖拉**：拖曳外框右下角手把即時拉出任意尺寸，canvas demo 會跟著即時 resize。
+- **效能護欄**：全程僅一個 live iframe（一次只跑一個 WebGL demo）；外框超出舞台時以 `transform: scale` 等比縮放，模擬器本身在手機上也不爆版。
+
+> RWD 驗證方式：Playwright 以 6 種視窗尺寸（375×667 → 1920×1080，含橫向）× 全部 8 頁跑截圖矩陣，自動檢查橫向溢出（`scrollWidth > clientWidth`）與 console error。
+
 ---
 
 ## 技術堆疊
