@@ -291,6 +291,18 @@ import { t, onLangChange, mountLangToggle } from '../../i18n';
         btnRow.scale.set(s);
         btnRow.position.set((W - rowW * s) / 2, H - 48 * s - 28);
         hint.position.set(W / 2, H - 48 * s - 28 - 34);
+
+        // 矮視窗時底部按鈕列會壓到托盤：虛擬加高畫面、只取上半部渲染，
+        // 等效把 3D 場景視覺中心上移半個按鈕區高度
+        const bottomUi = 48 * s + 28 + 40;
+        if (H < 800) {
+            camera.aspect = W / (H + bottomUi);
+            camera.setViewOffset(W, H + bottomUi, 0, bottomUi, W, H);
+        } else {
+            camera.aspect = W / H;
+            camera.clearViewOffset();
+        }
+        camera.updateProjectionMatrix();
     };
     layoutHud();
 

@@ -44,6 +44,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     const { variants, activeVariant, parts, finishes, tints } = await view.init();
     view.run();
+    (globalThis as any).__CFG_VIEW__ = view; // debug handle（比照 __PIXI_APP__ 慣例）
 
     try {
         // 各部件 UI 狀態（預設 original / none）
@@ -70,7 +71,47 @@ window.addEventListener('DOMContentLoaded', async () => {
     const bottomBar = byId('bottom-bar');
     if (bottomBar) bottomBar.style.display = 'flex';
     byId('loading')?.classList.add('hidden');
+
+    _wireSheet(view);
 });
+
+/**
+ * 手機 bottom sheet：面板預設收合只露把手，並把「被底部 UI 蓋住的高度」
+ * 回報給相機做框景偏移，讓鞋子始終置中在沒被蓋住的可視區
+ */
+function _wireSheet(view: ConfiguratorView) {
+    const panel = byId('panel');
+    const toggle = byId('sheet-toggle');
+    if (!panel || !toggle) return;
+    const mq = window.matchMedia('(max-width: 720px)');
+
+    const measure = () => {
+        if (!mq.matches) { view.setBottomObstruction(0); return; }
+        // 面板頂緣以下（含面板、bottom bar、邊距）都算遮擋
+        view.setBottomObstruction(window.innerHeight - panel.getBoundingClientRect().top);
+    };
+    // 收合/展開的 max-height 動畫進行中量不準，動畫結束才是準確高度。
+    // 不能用固定 setTimeout 校正：3D render loop 佔滿主執行緒時，動畫會遠晚於
+    // 固定延遲才真正完成（實測 transition 甚至 ~370ms 後才開始動），固定延遲會
+    // 量到動畫途中的舊高度而讓 obstruction 卡死。改用 transitionend 精準校正。
+    panel.addEventListener('transitionend', (e) => {
+        if ((e as TransitionEvent).propertyName === 'max-height') measure();
+    });
+    // 先立即量一次求即時回饋，準確值交給上面的 transitionend
+    const measureSoon = () => { measure(); };
+
+    toggle.addEventListener('click', () => {
+        panel.classList.toggle('collapsed');
+        measureSoon();
+    });
+    const applyMode = () => {
+        panel.classList.toggle('collapsed', mq.matches); // 手機預設收合
+        measureSoon();
+    };
+    mq.addEventListener('change', applyMode);
+    window.addEventListener('resize', measure);
+    applyMode();
+}
 
 /**
  * 部件選擇器：只有多部件模型才顯示；切換部件時把 finish / tint 的 active 狀態同步成該部件的選擇

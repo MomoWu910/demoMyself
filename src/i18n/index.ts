@@ -121,6 +121,7 @@ const DICT: Record<string, Entry> = {
     'cfg.bg.dark': { en: 'Dark', zh: '深色' },
     'cfg.bg.white': { en: 'White', zh: '純白' },
     'cfg.part.whole': { en: 'Whole Shoe', zh: '整雙鞋' },
+    'cfg.sheet.customize': { en: 'Customize', zh: '配置選項' },
 
     // ---- pixiXthree HUD ----
     'px3.subtitle': { en: '2D HUD · 3D physics · one shared WebGL context', zh: '2D HUD · 3D 物理 · 共用一個 WebGL context' },
