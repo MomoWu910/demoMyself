@@ -1,18 +1,30 @@
-<head><script defer="defer" src="/demoMyself/pixi_stress2.bundle.js"></script></head><!doctype html><style>body {
-        margin: 0;
-        overflow: hidden;
-    }
-    /* stats */
-    #stats {
-        position: fixed;
-        left: 3rem;
-        bottom: 10px;
-        pointer-events: none;
-        font-size: 2rem !important;
-        user-select: none;
-        z-index: 10000;
-        color: #fff;
-        line-height: 1.2em;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-    }</style>
+<!doctype html><html lang="zh-TW" style="background-color: #0f0f11;"><head><meta charset="UTF-8"><meta name="theme-color" content="#0f0f11"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>* { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #0f0f11;
+        }
+        canvas { display: block; touch-action: none; }
+        /* stats */
+        #stats {
+            position: fixed;
+            left: 3rem;
+            bottom: 10px;
+            pointer-events: none;
+            font-size: 2rem !important;
+            user-select: none;
+            z-index: 10000;
+            color: #fff;
+            line-height: 1.2em;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        @media (max-width: 720px) {
+            #stats {
+                left: max(12px, env(safe-area-inset-left));
+                bottom: max(10px, env(safe-area-inset-bottom));
+                font-size: 1.1rem !important;
+            }
+        }</style><script defer="defer" src="/demoMyself/pixi_stress2.bundle.js"></script></head><body></body></html>

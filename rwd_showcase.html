@@ -1,0 +1,183 @@
+<!doctype html><html lang="zh-TW" style="background-color:#0f0f11;"><head><meta charset="UTF-8"><meta name="theme-color" content="#0f0f11"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title data-i18n="title.rwd">RWD Showcase | Eric Wu</title><style>:root {
+            --bg-color: #0f0f11;
+            --panel-bg: #18181b;
+            --panel-border: #27272a;
+            --accent: #00d2ff;
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            height: 100dvh;
+            overflow: hidden;
+            background: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+        }
+        body { display: flex; flex-direction: column; }
+        a { text-decoration: none; }
+
+        /* --- 頂列 --- */
+        .topbar {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px 16px;
+            padding: 14px clamp(12px, 3vw, 24px) 10px;
+            border-bottom: 1px solid var(--panel-border);
+        }
+        .back-btn {
+            color: var(--text-muted);
+            background: rgba(255,255,255,0.05);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .back-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.1); border-color: var(--panel-border); }
+        .page-title { flex: 1; min-width: 180px; }
+        .page-title h1 { margin: 0; font-size: clamp(1rem, 2.5vw, 1.25rem); font-weight: 600; }
+        .page-title p { margin: 2px 0 0; font-size: 0.72rem; color: var(--text-muted); }
+
+        /* --- 控制列 --- */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 28px;
+            padding: 10px clamp(12px, 3vw, 24px);
+            border-bottom: 1px solid var(--panel-border);
+        }
+        .ctrl-group { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+        .ctrl-group > .label {
+            font-size: 0.63rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            font-weight: 600;
+            margin-right: 3px;
+        }
+        .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+        .pill {
+            background: rgba(255,255,255,0.06);
+            color: var(--text-main);
+            border: 1px solid var(--panel-border);
+            padding: 6px 11px;
+            border-radius: 999px;
+            font-size: 0.74rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.16s;
+            white-space: nowrap;
+        }
+        .pill:hover { background: rgba(255,255,255,0.12); }
+        .pill.active { color: var(--accent); border-color: rgba(0,210,255,0.45); background: rgba(0,210,255,0.12); }
+
+        /* --- 舞台 --- */
+        .stage {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 14px;
+            overflow: hidden;
+        }
+        .size-readout {
+            font-family: 'SF Mono', Menlo, monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            user-select: none;
+        }
+        .size-readout .num { color: var(--accent); }
+
+        .frame-outer { flex-shrink: 0; }
+
+        /* --- 裝置外框 --- */
+        .device-frame {
+            transform-origin: top left;
+            background: #1b1b20;
+            border: 1px solid #2e2e36;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.03);
+            display: flex;
+            flex-direction: column;
+        }
+        .device-frame.type-phone  { border-radius: 34px; padding: 12px; }
+        .device-frame.type-tablet { border-radius: 24px; padding: 14px; }
+        .device-frame.type-desktop { border-radius: 12px; padding: 0; overflow: hidden; }
+
+        /* 桌機瀏覽器窗框 */
+        .chrome {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            height: 34px;
+            padding: 0 12px;
+            background: #232329;
+            border-bottom: 1px solid #2e2e36;
+        }
+        .device-frame.type-desktop .chrome { display: flex; }
+        .chrome .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .chrome .dot:nth-child(1) { background: #ff5f57; }
+        .chrome .dot:nth-child(2) { background: #febc2e; }
+        .chrome .dot:nth-child(3) { background: #28c840; }
+        .chrome em {
+            font-style: normal;
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            background: rgba(255,255,255,0.05);
+            border-radius: 6px;
+            padding: 3px 10px;
+            margin-left: 10px;
+            font-family: 'SF Mono', Menlo, monospace;
+        }
+
+        .viewport-box {
+            position: relative;
+            background: var(--bg-color);
+            overflow: hidden;
+        }
+        .device-frame.type-phone  .viewport-box { border-radius: 22px; }
+        .device-frame.type-tablet .viewport-box { border-radius: 12px; }
+
+        .viewport-box iframe {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border: 0;
+            background: var(--bg-color);
+        }
+
+        /* --- 自由拖拉手把 --- */
+        .resize-handle {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            width: 26px;
+            height: 26px;
+            cursor: nwse-resize;
+            touch-action: none;
+            z-index: 5;
+            background:
+                linear-gradient(135deg, transparent 50%, rgba(0,210,255,0.85) 50%);
+            border-top-left-radius: 6px;
+            opacity: 0.75;
+            transition: opacity 0.15s;
+        }
+        .resize-handle:hover { opacity: 1; }
+
+        .hint {
+            margin: 0;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-align: center;
+            user-select: none;
+            padding: 0 12px;
+        }</style><script defer="defer" src="/demoMyself/rwd_showcase.bundle.js"></script></head><body><header class="topbar"><a href="./index.html" class="back-btn" data-i18n="nav.backHome">← Back to Home</a><div class="page-title"><h1 data-i18n="rwd.title">RWD Showcase</h1><p data-i18n="rwd.subtitle">Live device simulator — every page of this site, at any viewport size</p></div><span id="lang-slot"></span></header><div class="controls"><div class="ctrl-group"><span class="label" data-i18n="rwd.device">Device</span><div class="pills" id="devices"></div><button class="pill" id="rotate" data-i18n="rwd.rotate">↻ Rotate</button></div><div class="ctrl-group"><span class="label" data-i18n="rwd.page">Page</span><div class="pills" id="pages"></div></div></div><div class="stage" id="stage"><div class="size-readout"><span class="num" id="size-w">–</span> × <span class="num" id="size-h">–</span> px</div><div class="frame-outer" id="frame-outer"><div class="device-frame type-phone" id="frame"><div class="chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span><em id="chrome-url"></em></div><div class="viewport-box" id="viewport-box"><iframe id="preview" title="preview"></iframe><div class="resize-handle" id="handle" data-i18n-title="rwd.handleTitle"></div></div></div></div><p class="hint" data-i18n="rwd.hint">Canvas demos resize live — drag the cyan handle at the bottom-right corner for any custom size.</p></div></body></html>
