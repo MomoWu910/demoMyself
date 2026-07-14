@@ -1,6 +1,6 @@
 # Interactive 3D & Cross-Engine Frontend Demos
 
-> TypeScript 打造的高互動前端技術作品集——聚焦複雜前端最難的部分：**跨引擎渲染整合**、**即時 3D / PBR 渲染**，以及**可重現的渲染效能分析**（量出來的，不是講出來的）。
+> TypeScript 打造的高互動前端技術作品集——聚焦複雜前端最難的部分：**跨引擎渲染整合**、**即時 3D / PBR 渲染**、**手寫 shader（GLSL 與 WGSL 雙寫）**，以及**可重現的渲染效能分析**（量出來的，不是講出來的）。
 
 🔗 **線上 Demo**：https://momowu910.github.io/demoMyself/
 
@@ -65,7 +65,24 @@
 - **Filter 壓力測試**（`pixiJSDemo/stressTest/`）：把結論 1 推到極端，直到 render pass 淹沒 GPU。
 - **Super Shiba Mark**（`pixiJSDemo/stressTest2/`）：光譜另一端，10 萬+ Sprite 塞進單一批次，瓶頸從 GPU 移到 CPU-bound 變換。
 
-### 4. RWD Showcase：站內建裝置模擬器 — `src/rwdShowcase/`
+### 4. Shader Lab：自訂 Filter，GLSL 與 WGSL 雙寫 — `src/shaderLab/`
+
+站內 [`/shader_lab.html`](https://momowu910.github.io/demoMyself/shader_lab.html)。不是套現成的 filter，而是從零手寫 Pixi v8 的自訂 `Filter`——**同一個效果，GLSL 與 WGSL 各寫一份**，WebGL 與 WebGPU 兩條路徑跑出同一個畫面。v8 改版後這塊的公開資料極少，多數細節是讀原始碼與實測逼出來的。
+
+**已完成：Dissolve（程序化 noise 溶解 + 灼燒邊緣）**
+
+- **noise 不取樣貼圖，在 shader 裡即時算**（hash + 4 個八度的 fbm）：省一張素材與一次 texture fetch，代價是每像素多幾十道 ALU 指令——在現代 GPU 上是划算的交易。
+- **兩個 backend 的輸出比對**：以 `renderer.extract.pixels()` 讀 framebuffer 逐像素比對（headless 下 WebGPU 的 canvas 截圖是空白的，用 screenshot 會得到錯誤結論）。**溶解圖案完全一致**；差異只落在 1px 寬的輪廓線上（3.76% 的像素，全部在邊界），來自 `sin()` 在兩條編譯路徑上的浮點捨入——被 `smoothstep` 只有 0.02 的過渡帶放大成 alpha 硬跳。**這正是 hash-based noise 不該用來做需要跨平台一致的畫面（replay、網路同步）的原因。**
+- **兩個踩到的坑**：
+  1. **WGSL 的 `mainVertex` 參數後面一定要有尾逗號**。Pixi v8 用 regex 解析 WGSL 的 vertex attribute，型別後面必須接「逗號 / 空白 / 字串結尾」；把參數擠成單行會讓型別後面變成右括號 → attribute 解析成空物件 → pipeline 的 VertexState 缺 slot 0 → **render pipeline 靜默失效、畫面全白，而且只在 console 丟 warning 不丟 error**。
+  2. **premultiplied alpha**：filter 的輸入輸出都是預乘的，要改顏色就得先除回去、算完再乘回來，否則半透明邊緣會出現一圈髒黑邊。
+- **它的代價（不只是「做得出來」）**：真正的成本不在數學，而在 filter 本身——它會把 sprite 踢出合批、獨立成一個 render pass。一百隻正在溶解的敵人就是一百個 render pass（這正是[結論 1](#3-渲染效能實測報告pixijs-v8--srcfindingssrcbench) 量到的東西）；改成寫進 mesh 材質，它們就能重新合批。
+
+**架構：React 管 canvas 外，引擎管 canvas 內**
+
+控制面板是 **React 19 + Zustand**，Pixi 跑自己的 render loop，兩邊唯一的接點是一個 store——面板寫參數，舞台每幀讀。React 完全不參與 render loop（60fps 的東西不該經過 virtual DOM）。這是這類產品的真實架構，而不是把引擎硬塞進 component 生命週期。加一個新 shader = 新增一個 `EffectDef` 檔案並註冊，頁面、參數控制項、原始碼檢視都會自動長出來。
+
+### 5. RWD Showcase：站內建裝置模擬器 — `src/rwdShowcase/`
 
 全站（含每個 canvas demo 的 HUD）都做了 RWD——任何裝置、任意拖拉視窗都不會爆版。這一頁把它變成可互動的展示：
 
@@ -74,7 +91,7 @@
 - **自由拖拉**：拖曳外框右下角手把即時拉出任意尺寸，canvas demo 會跟著即時 resize。
 - **效能護欄**：全程僅一個 live iframe（一次只跑一個 WebGL demo）；外框超出舞台時以 `transform: scale` 等比縮放，模擬器本身在手機上也不爆版。
 
-> RWD 驗證方式：Playwright 以 6 種視窗尺寸（375×667 → 1920×1080，含橫向）× 全部 9 頁跑截圖矩陣，自動檢查橫向溢出（`scrollWidth > clientWidth`）與 console error。
+> RWD 驗證方式：Playwright 以 6 種視窗尺寸（375×667 → 1920×1080，含橫向）× 全部 10 頁跑截圖矩陣，自動檢查橫向溢出（`scrollWidth > clientWidth`）與 console error。
 
 ---
 
@@ -82,6 +99,8 @@
 
 - **語言**：TypeScript
 - **渲染引擎**：Babylon.js v8、PixiJS v8、Three.js
+- **Shader**：手寫 GLSL（300 es）與 WGSL，Pixi v8 自訂 `Filter`（`GlProgram` / `GpuProgram` 雙寫）
+- **UI / 狀態**：React 19 + Zustand（Shader Lab 控制面板；canvas 外歸 React、canvas 內歸引擎）
 - **效能量測**：自製 benchmark runner（`src/bench/`）— CPU frame time 中位數 / p95、draw call 攔截、環境偵測，可匯出 Markdown / JSON
 - **3D / 材質**：PBR、IBL（`.env` prefiltered environment）、glTF（KHR_materials_variants）
 - **物理**：cannon-es

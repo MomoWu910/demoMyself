@@ -17,7 +17,7 @@ module.exports = {
         pixi_x_three: './src/pixiJSDemo/pixiXthree/index.ts', // Pixi.js X Three.js
         rwd_showcase: './src/rwdShowcase/index.ts',           // RWD 裝置模擬器
         findings: './src/findings/index.ts',                  // 渲染效能實測結論
-        shader_lab: './src/shaderLab/index.ts',               // 自訂 Shader Lab（GLSL + WGSL）
+        shader_lab: './src/shaderLab/index.tsx',              // 自訂 Shader Lab（GLSL + WGSL）＋ React/Zustand 面板
     },
     output: {
         filename: '[name].bundle.js',
@@ -39,7 +39,7 @@ module.exports = {
     module: {
         rules: [
             {
-                test: /\.ts$/,
+                test: /\.tsx?$/, // .tsx：Shader Lab 的控制面板是 React
                 use: 'ts-loader',
                 exclude: /node_modules/,
             },
@@ -114,7 +114,7 @@ module.exports = {
         }),
         new HtmlWebpackPlugin({
             filename: 'shader_lab.html',
-            template: pixiTemplate,
+            template: './src/shaderLab/index.html',
             chunks: ['shader_lab'],
             title: 'Shader Lab',
         }),

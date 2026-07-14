@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-TW" style="background-color: #0f0f11;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="theme-color" content="#0f0f11">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title data-i18n="title.shaderLab">Shader Lab | Eric Wu</title>
+</head>
+<body class="shader-page">
+    <header class="topbar">
+        <a class="back" href="./pixi_hub.html" data-i18n="nav.backHub">← PixiJS Experiments</a>
+        <div class="topbar-title">
+            <h1 data-i18n="shader.lab.title">Shader Lab</h1>
+            <span class="subtitle" data-i18n="shader.lab.subtitle">Custom PixiJS v8 filters — GLSL and WGSL, hand-written side by side</span>
+        </div>
+        <span id="lang-slot"></span>
+    </header>
+
+    <main class="lab">
+        <!-- canvas 由 Pixi 掛進來；棋盤格底是為了讓溶解掉的區域看得出 alpha 真的被吃掉 -->
+        <div id="stage" class="stage"></div>
+        <!-- React + Zustand 控制面板 -->
+        <aside id="panel-root" class="panel"></aside>
+    </main>
+</body>
+</html>

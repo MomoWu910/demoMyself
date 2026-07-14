@@ -16,10 +16,12 @@ const DICT: Record<string, Entry> = {
     'title.hub': { en: 'PixiJS Experiments | Eric Wu', zh: 'PixiJS 實驗場 | Eric Wu' },
     'title.configurator': { en: 'Product Configurator', zh: '產品配置器' },
     'title.rwd': { en: 'RWD Showcase | Eric Wu', zh: 'RWD 響應式展示 | Eric Wu' },
+    'title.shaderLab': { en: 'Shader Lab | Eric Wu', zh: 'Shader Lab | Eric Wu' },
 
     // ---- 導覽 ----
     'nav.back': { en: '← Back', zh: '← 返回' },
     'nav.backHome': { en: '← Back to Home', zh: '← 返回首頁' },
+    'nav.backHub': { en: '← PixiJS Experiments', zh: '← PixiJS 實驗場' },
 
     // ---- 首頁 ----
     'home.role': { en: 'Frontend Engineer · 3D / High-Interaction / Complex Web Apps', zh: '前端工程師 · 3D / 高互動 / 複雜 Web 應用' },
@@ -48,6 +50,13 @@ const DICT: Record<string, Entry> = {
         zh: '站內建裝置模擬器：以 iPhone / iPad / 桌機視口即時預覽本站每一頁，可轉向、可自由拖拉任意視窗尺寸——所有佈局都不爆版。',
     },
     'home.rwd.cta': { en: 'Open Simulator →', zh: '開啟模擬器 →' },
+    'home.shader.title': { en: 'Shader Lab', zh: 'Shader Lab' },
+    'home.shader.desc': {
+        en: 'Custom PixiJS v8 filters with <strong>GLSL and WGSL hand-written side by side</strong> — the same effect, pixel-identical on both backends. Live controls in React + Zustand, the shader source on screen, and what each effect actually costs.',
+        zh: '自訂 PixiJS v8 filter，<strong>GLSL 與 WGSL 兩份原始碼手寫並存</strong>——同一個效果，在兩個 backend 上逐像素一致。控制面板用 React + Zustand，原始碼直接攤在畫面上，並說明每個效果真正的代價。',
+    },
+    'home.shader.foot': { en: 'GLSL + WGSL, both written by hand', zh: 'GLSL + WGSL，兩份都自己寫' },
+    'home.shader.cta': { en: 'Open Lab →', zh: '進入 Lab →' },
 
     // ---- RWD Showcase ----
     'rwd.title': { en: 'RWD Showcase', zh: 'RWD 響應式展示' },
@@ -71,6 +80,7 @@ const DICT: Record<string, Entry> = {
     'rwd.page.shiba': { en: 'Shiba Bench', zh: '柴犬壓測' },
     'rwd.page.opt': { en: 'Optimization', zh: '最佳化 Lab' },
     'rwd.page.find': { en: 'Findings', zh: '實測結論' },
+    'rwd.page.shader': { en: 'Shader Lab', zh: 'Shader Lab' },
 
     // ---- pixiHub ----
     'hub.title': { en: 'PixiJS Experiments', zh: 'PixiJS 實驗場' },
@@ -277,6 +287,54 @@ const DICT: Record<string, Entry> = {
         zh: '光譜的另一端：10 萬個以上的 sprite 塞進同一個批次，此時瓶頸從 GPU 移到了 CPU 端的變換運算。',
     },
     'findings.exp.shiba.cta': { en: 'Launch ▶', zh: '啟動 ▶' },
+
+    // ---- Hub 卡片：Shader Lab ----
+    'hub.shader.title': { en: '🎨 Shader Lab', zh: '🎨 Shader Lab' },
+    'hub.shader.desc': {
+        en: 'Custom filters written from scratch — GLSL and WGSL side by side, pixel-identical on both backends. Live parameter controls in React + Zustand, with the shader source on screen.',
+        zh: '從零手寫的自訂 filter——GLSL 與 WGSL 並存，在兩個 backend 上逐像素一致。控制面板用 React + Zustand，shader 原始碼直接攤在畫面上。',
+    },
+    'hub.shader.foot': { en: 'GLSL + WGSL, both by hand', zh: 'GLSL + WGSL，兩份都自己寫' },
+    'hub.shader.cta': { en: 'Open Lab ▶', zh: '進入 Lab ▶' },
+
+    // ---- Shader Lab ----
+    'shader.lab.title': { en: 'Shader Lab', zh: 'Shader Lab' },
+    'shader.lab.subtitle': {
+        en: 'Custom PixiJS v8 filters — GLSL and WGSL, hand-written side by side',
+        zh: '自訂 PixiJS v8 filter——GLSL 與 WGSL 兩份手寫並存',
+    },
+
+    'shader.panel.effect': { en: 'Effect', zh: '效果' },
+    'shader.panel.params': { en: 'Parameters', zh: '參數' },
+    'shader.panel.source': { en: 'Shader source', zh: 'Shader 原始碼' },
+    'shader.panel.cost': { en: 'What it costs', zh: '它的代價' },
+    'shader.panel.animate': { en: 'Auto-play', zh: '自動播放' },
+    'shader.panel.reset': { en: 'Reset', zh: '重設' },
+    'shader.panel.fps': { en: 'fps', zh: 'fps' },
+
+    'shader.source.glslNote': {
+        en: 'WebGL path. GLSL 300 es — Pixi v8 filters run on WebGL2. Pixi supplies the default filter vertex shader, so only the fragment stage is written here.',
+        zh: 'WebGL 路徑。GLSL 300 es——Pixi v8 的 filter 走 WebGL2。Pixi 有提供預設的 filter vertex shader，所以這裡只寫 fragment 階段。',
+    },
+    'shader.source.wgslNote': {
+        en: 'WebGPU path. WGSL — Pixi ships no default WGSL filter vertex shader, so the vertex stage and the global filter uniforms are declared by hand. The noise functions must compute exactly the same values as the GLSL version, or the two backends drift apart.',
+        zh: 'WebGPU 路徑。WGSL——Pixi 沒有提供 WGSL 版的預設 filter vertex shader，所以 vertex 階段與全域 filter uniform 都得自己宣告。noise 函式必須跟 GLSL 版算出完全相同的值，否則兩個 backend 會長得不一樣。',
+    },
+
+    'shader.param.progress': { en: 'Dissolve progress', zh: '溶解進度' },
+    'shader.param.edgeWidth': { en: 'Burn edge width', zh: '灼燒邊緣寬度' },
+    'shader.param.noiseScale': { en: 'Noise scale', zh: 'Noise 尺度' },
+    'shader.param.edgeColor': { en: 'Burn edge color', zh: '灼燒邊緣顏色' },
+
+    'shader.dissolve.title': { en: 'Dissolve', zh: '溶解' },
+    'shader.dissolve.desc': {
+        en: 'The classic spawn / death effect. The noise is generated procedurally in the shader (hash + 4-octave fbm) rather than sampled from a texture, and the pixels riding the dissolve boundary glow.',
+        zh: '最經典的出場／死亡特效。noise 不是從貼圖取樣，而是在 shader 裡即時算出來（hash + 4 個八度的 fbm），並讓正好落在溶解邊界上的像素發光。',
+    },
+    'shader.dissolve.cost': {
+        en: 'No noise texture: one less asset and one less texture fetch, paid for with a few dozen extra ALU instructions per pixel — a good trade on any modern GPU. The real cost is not the maths but the filter itself: it forces the sprite out of the batch and into its own render pass, so a hundred dissolving enemies means a hundred render passes. Bake it into a mesh material instead, and they batch again.',
+        zh: '不用 noise 貼圖：省下一張素材與一次貼圖取樣，代價是每像素多幾十道 ALU 指令——在任何現代 GPU 上都划算。真正的成本不在數學，而在 filter 本身：它會把 sprite 踢出合批、獨立成一個 render pass，所以一百隻正在溶解的敵人就是一百個 render pass。改成寫進 mesh 材質，它們就能重新合批。',
+    },
 
     'findings.f4.title': {
         en: 'The same cost, booked in two different places',

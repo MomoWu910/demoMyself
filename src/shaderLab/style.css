@@ -1,0 +1,286 @@
+:root {
+    --bg-color: #0f0f11;
+    --card-bg: #18181b;
+    --card-border: #27272a;
+    --primary: #00d2ff;
+    --text-main: #f4f4f5;
+    --text-muted: #a1a1aa;
+    --topbar-h: 66px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg-color);
+    color: var(--text-main);
+    font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+}
+body.shader-page { overflow: hidden; }
+
+/* ---- 頂列 ---- */
+.topbar {
+    height: var(--topbar-h);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 0 clamp(12px, 3vw, 24px);
+    border-bottom: 1px solid var(--card-border);
+    background: #131316;
+}
+.topbar .back {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+.topbar .back:hover { color: var(--primary); }
+.topbar-title { flex: 1; min-width: 0; }
+.topbar-title h1 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+}
+.topbar-title .subtitle {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- 版面：左舞台、右面板 ---- */
+.lab {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    height: calc(100% - var(--topbar-h));
+}
+
+.stage {
+    position: relative;
+    overflow: hidden;
+    /* 棋盤格：溶解掉的地方會透出來，一眼看得出 alpha 被吃掉而不是被塗黑 */
+    background-color: #141417;
+    background-image:
+        linear-gradient(45deg, #1c1c20 25%, transparent 25%),
+        linear-gradient(-45deg, #1c1c20 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #1c1c20 75%),
+        linear-gradient(-45deg, transparent 75%, #1c1c20 75%);
+    background-size: 24px 24px;
+    background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+}
+.stage canvas { display: block; touch-action: none; }
+
+.panel {
+    border-left: 1px solid var(--card-border);
+    background: #121215;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.panel-inner { padding: 20px clamp(14px, 2vw, 20px) 60px; }
+
+.panel h2 {
+    margin: 0 0 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.panel section { margin-bottom: 30px; }
+.section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+/* ---- 狀態列 ---- */
+.status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 26px;
+}
+.badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 4px 9px;
+    border-radius: 6px;
+    border: 1px solid;
+}
+.badge.webgpu { color: #4ade80; border-color: rgba(74, 222, 128, 0.35); background: rgba(74, 222, 128, 0.08); }
+.badge.webgl { color: var(--primary); border-color: rgba(0, 210, 255, 0.35); background: rgba(0, 210, 255, 0.08); }
+.badge.pending { color: var(--text-muted); border-color: var(--card-border); }
+.fps {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.95rem;
+    color: var(--text-main);
+}
+.fps small { color: var(--text-muted); font-size: 0.72rem; }
+
+/* ---- 效果清單 ---- */
+.effect-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.effect {
+    padding: 8px 13px;
+    border-radius: 8px;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.effect:hover { color: var(--text-main); border-color: #3f3f46; }
+.effect.active {
+    color: var(--primary);
+    border-color: rgba(0, 210, 255, 0.5);
+    background: rgba(0, 210, 255, 0.1);
+}
+.desc {
+    margin: 14px 0 0;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
+/* ---- 參數 ---- */
+.ghost {
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0;
+}
+.ghost:hover { color: var(--primary); }
+
+.toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-size: 0.88rem;
+    color: var(--text-main);
+    cursor: pointer;
+}
+.toggle input { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
+
+.params { display: flex; flex-direction: column; gap: 16px; }
+.param {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 4px 10px;
+}
+.param-name { font-size: 0.85rem; color: var(--text-main); }
+.param-value {
+    font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+    font-size: 0.78rem;
+    color: var(--primary);
+    font-variant-numeric: tabular-nums;
+}
+.param input[type='range'] {
+    grid-column: 1 / -1;
+    width: 100%;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+.param input[type='color'] {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+}
+/* 被自動播放接管：淡化並鎖住，避免跟舞台每幀的寫入打架 */
+.param.driven { opacity: 0.62; }
+.param.driven input[type='range'] { cursor: not-allowed; }
+
+/* ---- 成本卡 ---- */
+.cost {
+    padding: 14px 16px;
+    border: 1px solid var(--card-border);
+    border-left: 2px solid var(--primary);
+    border-radius: 8px;
+    background: var(--card-bg);
+}
+.cost h2 { margin-bottom: 8px; }
+.cost p {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.65;
+    color: var(--text-muted);
+}
+
+/* ---- 原始碼 ---- */
+.source-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.tabs { display: flex; gap: 3px; padding: 3px; border-radius: 8px; background: #1c1c20; }
+.tabs button {
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.tabs button.active { background: rgba(0, 210, 255, 0.14); color: var(--primary); }
+.source-note {
+    margin: 0 0 10px;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+.code {
+    margin: 0;
+    padding: 14px;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    background: #0c0c0e;
+    overflow-x: auto;
+    font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    line-height: 1.65;
+    color: #d4d4d8;
+    tab-size: 4;
+}
+.code .cmt { color: #6b7280; font-style: italic; }
+.code .kw { color: #c084fc; }
+.code .ty { color: #38bdf8; }
+.code .fn { color: #fbbf24; }
+.code .num { color: #4ade80; }
+.code .attr { color: #f472b6; }
+
+/* ---- 手機：舞台在上、面板在下 ---- */
+@media (max-width: 900px) {
+    :root { --topbar-h: 58px; }
+    .topbar { gap: 12px; }
+    .topbar-title h1 { font-size: 1rem; }
+    .topbar-title .subtitle { display: none; }
+    .lab {
+        display: flex;
+        flex-direction: column;
+    }
+    .stage {
+        flex: none;
+        height: 42vh;
+    }
+    .panel {
+        flex: 1;
+        min-height: 0;
+        border-left: none;
+        border-top: 1px solid var(--card-border);
+    }
+    .panel-inner { padding-bottom: calc(40px + env(safe-area-inset-bottom)); }
+}
