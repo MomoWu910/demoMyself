@@ -67,16 +67,28 @@
 
 ### 4. Shader Lab：自訂 Filter，GLSL 與 WGSL 雙寫 — `src/shaderLab/`
 
-站內 [`/shader_lab.html`](https://momowu910.github.io/demoMyself/shader_lab.html)。不是套現成的 filter，而是從零手寫 Pixi v8 的自訂 `Filter`——**同一個效果，GLSL 與 WGSL 各寫一份**，WebGL 與 WebGPU 兩條路徑跑出同一個畫面。v8 改版後這塊的公開資料極少，多數細節是讀原始碼與實測逼出來的。
+站內 [`/shader_lab.html`](https://momowu910.github.io/demoMyself/shader_lab.html)。不是套現成的 filter，而是從零手寫 Pixi v8 的自訂 `Filter`——**同一個效果，GLSL 與 WGSL 各寫一份**，WebGL 與 WebGPU 兩條路徑跑出同一個畫面。v8 改版後這塊的公開資料極少，多數細節是讀原始碼與實測逼出來的。面板上可以直接切換檢視兩份原始碼。
 
-**已完成：Dissolve（程序化 noise 溶解 + 灼燒邊緣）**
+**Dissolve（程序化 noise 溶解 + 灼燒邊緣）**
 
 - **noise 不取樣貼圖，在 shader 裡即時算**（hash + 4 個八度的 fbm）：省一張素材與一次 texture fetch，代價是每像素多幾十道 ALU 指令——在現代 GPU 上是划算的交易。
-- **兩個 backend 的輸出比對**：以 `renderer.extract.pixels()` 讀 framebuffer 逐像素比對（headless 下 WebGPU 的 canvas 截圖是空白的，用 screenshot 會得到錯誤結論）。**溶解圖案完全一致**；差異只落在 1px 寬的輪廓線上（3.76% 的像素，全部在邊界），來自 `sin()` 在兩條編譯路徑上的浮點捨入——被 `smoothstep` 只有 0.02 的過渡帶放大成 alpha 硬跳。**這正是 hash-based noise 不該用來做需要跨平台一致的畫面（replay、網路同步）的原因。**
-- **兩個踩到的坑**：
-  1. **WGSL 的 `mainVertex` 參數後面一定要有尾逗號**。Pixi v8 用 regex 解析 WGSL 的 vertex attribute，型別後面必須接「逗號 / 空白 / 字串結尾」；把參數擠成單行會讓型別後面變成右括號 → attribute 解析成空物件 → pipeline 的 VertexState 缺 slot 0 → **render pipeline 靜默失效、畫面全白，而且只在 console 丟 warning 不丟 error**。
-  2. **premultiplied alpha**：filter 的輸入輸出都是預乘的，要改顏色就得先除回去、算完再乘回來，否則半透明邊緣會出現一圈髒黑邊。
 - **它的代價（不只是「做得出來」）**：真正的成本不在數學，而在 filter 本身——它會把 sprite 踢出合批、獨立成一個 render pass。一百隻正在溶解的敵人就是一百個 render pass（這正是[結論 1](#3-渲染效能實測報告pixijs-v8--srcfindingssrcbench) 量到的東西）；改成寫進 mesh 材質，它們就能重新合批。
+
+**Water Ripple（UV 位移水波折射）**
+
+- 和 Dissolve 的差別在本質：Dissolve 只改當前像素的顏色與 alpha，**水波則是去別的地方取樣——它是一個 gather 操作**。要讀鄰近像素就得先有一張「已經畫好」的輸入貼圖，這正是它**必須**是 filter 的原因，也是它必然要付一個 render pass 的原因。
+- **padding 是直接乘在成本上的**：波峰會把畫面往外推，沒有 padding 的話超出 frame 的那一圈會被切平；但 filter 的暫存貼圖是 `(w + 2p) × (h + 2p)`——在一個 200×200 的 sprite 上，padding 從 0 加到 40px 就是 **2.0 倍的 fillrate**。padding 不是「設大一點比較安全」的參數。
+- 位移量以**像素**為單位、再用 `uInputSize.zw` 換算回 UV，參數的意義才不會隨 sprite 大小漂移；取樣座標一律用 `uInputClamp` 夾住，因為 filter 的輸入貼圖是圖集的一塊，越界會吃到隔壁的內容。
+
+**三個踩到的坑（都屬於「只丟 warning 不丟 error」那一類）**
+
+1. **WGSL 的 `mainVertex` 參數後面一定要有尾逗號**。Pixi v8 用 regex 解析 WGSL 的 vertex attribute，型別後面必須接「逗號 / 空白 / 字串結尾」；把參數擠成單行會讓型別後面變成右括號 → attribute 解析成空物件 → pipeline 的 VertexState 缺 slot 0 → **render pipeline 靜默失效、畫面全白**。
+2. **GLSL 端引用 `uInputSize` 必須標 `highp`**。Pixi 的預設 filter vertex shader 也宣告了它，而 vertex 階段的 float 預設精度是 highp、fragment 階段是 mediump——同一個 uniform 在兩階段精度不符，program 就 link 不起來（`Precisions of uniform 'uInputSize' differ between VERTEX and FRAGMENT shaders`），畫面同樣直接不出來。
+3. **premultiplied alpha**：filter 的輸入輸出都是預乘的，要改顏色就得先除回去、算完再乘回來，否則半透明邊緣會出現一圈髒黑邊。
+
+**兩個 backend 的輸出比對**
+
+以 `renderer.extract.pixels()` 讀 framebuffer 逐像素比對（headless 下 WebGPU 的 canvas 截圖是空白的，用 screenshot 會得到錯誤結論；時間驅動的效果還要先凍結 `uTime`，否則比的是兩個不同時刻的畫面）。兩個效果的結論一致：**圖案完全相同，差異只落在 1px 寬的輪廓線上**（Dissolve 3.76%、Water Ripple 2.78% 的像素，把 diff 畫成點圖後內部一個點都沒有），來自 `sin()` 在兩條編譯路徑上的浮點捨入——在 Dissolve 上被 `smoothstep` 只有 0.02 的過渡帶放大成 alpha 硬跳。**這正是 hash-based noise 不該用來做需要跨平台一致的畫面（replay、網路同步）的原因。**
 
 **架構：React 管 canvas 外，引擎管 canvas 內**
 

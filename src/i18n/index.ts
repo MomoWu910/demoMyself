@@ -325,12 +325,25 @@ const DICT: Record<string, Entry> = {
     'shader.param.edgeWidth': { en: 'Burn edge width', zh: '灼燒邊緣寬度' },
     'shader.param.noiseScale': { en: 'Noise scale', zh: 'Noise 尺度' },
     'shader.param.edgeColor': { en: 'Burn edge color', zh: '灼燒邊緣顏色' },
+    'shader.param.amplitude': { en: 'Wave amplitude (px)', zh: '波幅（px）' },
+    'shader.param.frequency': { en: 'Wave frequency', zh: '波的密度' },
+    'shader.param.speed': { en: 'Wave speed', zh: '波速' },
 
     'shader.dissolve.title': { en: 'Dissolve', zh: '溶解' },
     'shader.dissolve.desc': {
         en: 'The classic spawn / death effect. The noise is generated procedurally in the shader (hash + 4-octave fbm) rather than sampled from a texture, and the pixels riding the dissolve boundary glow.',
         zh: '最經典的出場／死亡特效。noise 不是從貼圖取樣，而是在 shader 裡即時算出來（hash + 4 個八度的 fbm），並讓正好落在溶解邊界上的像素發光。',
     },
+    'shader.displacement.title': { en: 'Water Ripple', zh: '水波折射' },
+    'shader.displacement.desc': {
+        en: 'UV displacement — the pixel does not recolor itself, it goes and samples somewhere else. Two sine waves at different frequencies and phases, so it reads as water rather than a sheet sliding sideways.',
+        zh: 'UV 位移——像素不是把自己重新上色，而是「跑去別的地方取樣」。兩道不同頻率與相位的正弦波疊起來，看起來才像水，而不是整片一起平移。',
+    },
+    'shader.displacement.cost': {
+        en: 'A gather operation: to read neighbouring pixels it needs an already-rendered input texture, which is exactly why it has to be a filter — and why it costs a render pass. The maths is cheap (two sin/cos and one fetch per pixel); the expensive knob is padding. The filter\'s scratch texture is (w + 2p) × (h + 2p), so on a 200×200 sprite, raising padding from 0 to 40px is 2.0× the fillrate. Padding is not "set it high to be safe" — it multiplies straight into the cost.',
+        zh: '這是一個 gather 操作：要讀鄰近像素，就得先有一張「已經畫好」的輸入貼圖——這正是它必須是 filter 的原因，也是它要付一個 render pass 的原因。數學本身很便宜（每像素兩次 sin/cos、一次取樣），真正貴的旋鈕是 padding：filter 的暫存貼圖是 (w + 2p) × (h + 2p)，在一個 200×200 的 sprite 上，padding 從 0 加到 40px 就是 2.0 倍的 fillrate。padding 不是「設大一點比較安全」的東西，它是直接乘在成本上的。',
+    },
+
     'shader.dissolve.cost': {
         en: 'No noise texture: one less asset and one less texture fetch, paid for with a few dozen extra ALU instructions per pixel — a good trade on any modern GPU. The real cost is not the maths but the filter itself: it forces the sprite out of the batch and into its own render pass, so a hundred dissolving enemies means a hundred render passes. Bake it into a mesh material instead, and they batch again.',
         zh: '不用 noise 貼圖：省下一張素材與一次貼圖取樣，代價是每像素多幾十道 ALU 指令——在任何現代 GPU 上都划算。真正的成本不在數學，而在 filter 本身：它會把 sprite 踢出合批、獨立成一個 render pass，所以一百隻正在溶解的敵人就是一百個 render pass。改成寫進 mesh 材質，它們就能重新合批。',
