@@ -17,6 +17,7 @@ module.exports = {
         pixi_x_three: './src/pixiJSDemo/pixiXthree/index.ts', // Pixi.js X Three.js
         rwd_showcase: './src/rwdShowcase/index.ts',           // RWD 裝置模擬器
         findings: './src/findings/index.ts',                  // 渲染效能實測結論
+        shader_lab: './src/shaderLab/index.ts',               // 自訂 Shader Lab（GLSL + WGSL）
     },
     output: {
         filename: '[name].bundle.js',
@@ -110,6 +111,12 @@ module.exports = {
             template: './src/findings/index.html',
             chunks: ['findings'],
             title: 'Rendering Findings',
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'shader_lab.html',
+            template: pixiTemplate,
+            chunks: ['shader_lab'],
+            title: 'Shader Lab',
         }),
         new CopyWebpackPlugin({
             patterns: [
