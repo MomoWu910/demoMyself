@@ -35,12 +35,13 @@ const DICT: Record<string, Entry> = {
         zh: 'Babylon.js 即時配置器：切換質感（matte / leather / glossy / metallic）與顏色、即時調整棚拍打光與背景，搭配 PBR + IBL、柔和陰影、後製，與 colorway 變體（glTF KHR_materials_variants）。',
     },
     'home.configurator.cta': { en: 'Configure →', zh: '進入配置 →' },
-    'home.lab.title': { en: 'Rendering Performance Lab', zh: '渲染效能實驗室' },
+    'home.lab.title': { en: 'Rendering Findings', zh: '渲染效能實測結論' },
     'home.lab.desc': {
-        en: 'PixiJS v8 rendering optimization & stress testing — measuring FPS and draw calls under heavy sprite / particle loads.',
-        zh: 'PixiJS v8 渲染最佳化與壓力測試 — 在大量 sprite / 粒子負載下量測 FPS 與 draw call。',
+        en: 'Two test cases, <strong>identical draw call counts, 6.5× the CPU cost</strong>. A measured report on PixiJS v8: how I profiled it, what it proved, and why a single metric can invert your conclusion.',
+        zh: '兩個測試案例，<strong>一模一樣的 draw call 數，CPU 成本卻差 6.5 倍</strong>。一份 PixiJS v8 的實測報告：我怎麼量、量到了什麼，以及為什麼只看單一指標會讓結論完全反過來。',
     },
-    'home.lab.cta': { en: 'Explore →', zh: '探索 →' },
+    'home.lab.foot': { en: 'Measured, not claimed', zh: '量出來的，不是講出來的' },
+    'home.lab.cta': { en: 'Read Report →', zh: '閱讀報告 →' },
     'home.rwd.title': { en: 'RWD Showcase', zh: 'RWD 響應式展示' },
     'home.rwd.desc': {
         en: 'Built-in device simulator: preview every page of this site in iPhone / iPad / desktop viewports, rotate, or free-drag to any window size — layouts stay intact everywhere.',
@@ -69,6 +70,7 @@ const DICT: Record<string, Entry> = {
     'rwd.page.stress': { en: 'Filter Stress', zh: '濾鏡壓測' },
     'rwd.page.shiba': { en: 'Shiba Bench', zh: '柴犬壓測' },
     'rwd.page.opt': { en: 'Optimization', zh: '最佳化 Lab' },
+    'rwd.page.find': { en: 'Findings', zh: '實測結論' },
 
     // ---- pixiHub ----
     'hub.title': { en: 'PixiJS Experiments', zh: 'PixiJS 實驗場' },
@@ -145,6 +147,150 @@ const DICT: Record<string, Entry> = {
     'gui.changeRenderer': { en: 'Change Renderer', zh: '切換渲染器' },
     'gui.testScenario': { en: 'Test Scenario', zh: '測試情境' },
     'gui.mode': { en: 'Mode', zh: '模式' },
+    'gui.runBench': { en: '📊 Run Benchmark', zh: '📊 執行 Benchmark' },
+    // ---- Pixi Hub：Findings 入口卡 ----
+    'hub.findings.title': { en: '📊 Rendering Findings', zh: '📊 渲染效能實測結論' },
+    'hub.findings.desc': {
+        en: "What the experiments below actually proved. Measured CPU frame time and draw calls, the method behind the numbers, and the conclusions I'd act on in production.",
+        zh: '下面那些實驗到底證明了什麼。實測的 CPU frame time 與 draw call、數字背後的量測方法，以及我在正式專案裡會據此做的決策。',
+    },
+    'hub.findings.foot': { en: 'Measured, not claimed', zh: '量出來的，不是講出來的' },
+    'hub.findings.cta': { en: 'Read Findings →', zh: '閱讀結論 →' },
+
+    // ---- Findings（渲染效能實測結論）----
+    'title.findings': { en: 'Rendering Findings | Eric Wu', zh: '渲染效能實測結論 | Eric Wu' },
+    'findings.title': { en: 'Rendering Findings', zh: '渲染效能實測結論' },
+    'findings.lede': {
+        en: "Measured conclusions from the PixiJS v8 Optimization Lab — not a feature tour. Every number below was produced by the in-page benchmark runner, on the hardware listed.",
+        zh: '來自 PixiJS v8 Optimization Lab 的實測結論——不是功能導覽。以下每個數字都由站內的 benchmark runner 在下列硬體上實際跑出來。',
+    },
+
+    'findings.method.title': { en: 'How this was measured', zh: '量測方法' },
+    'findings.method.metric.title': {
+        en: 'The metric is CPU frame time, not FPS',
+        zh: '主指標是 CPU frame time，不是 FPS',
+    },
+    'findings.method.metric.body': {
+        en: "vsync pins FPS to the display's refresh rate, so under light load every case reports a flat 60 — while one of them has already eaten 12 ms of the 16.7 ms frame budget. Median and p95 CPU frame time expose both the typical cost and the stutter; FPS only shows up once you are already losing.",
+        zh: 'vsync 會把 FPS 鎖在螢幕更新率上，所以輕負載時每個案例都回報 60 fps——即使其中一個已經吃掉 16.7ms 幀預算裡的 12ms。CPU frame time 的中位數與 p95 能同時暴露「平均成本」與「卡頓」；等 FPS 掉下來時，你早就輸了。',
+    },
+    'findings.method.window.title': {
+        en: 'Where the measurement window sits',
+        zh: '量測窗口擺在哪裡',
+    },
+    'findings.method.window.body': {
+        en: "Pixi renders at ticker priority LOW (-25). The timer opens at HIGH (25) — where the case's per-frame logic also runs — and closes at UTILITY (-50), after render has submitted. So one sample = all CPU work for that frame: scene updates plus command submission.",
+        zh: 'Pixi 的 render 掛在 ticker 的 LOW (-25)。計時器在 HIGH (25) 開啟（案例的每幀邏輯也在此執行），在 UTILITY (-50) 關閉，此時 render 已提交完畢。所以一個樣本 = 這一幀的全部 CPU 工作：場景更新加上指令提交。',
+    },
+    'findings.method.warmup.title': { en: 'Warm-up before sampling', zh: '取樣前先暖機' },
+    'findings.method.warmup.body': {
+        en: 'The first frames of any case are polluted by JIT compilation, texture uploads and shader compilation. Each case runs 45 discarded warm-up frames, then 180 sampled frames.',
+        zh: '任何案例的前幾幀都被 JIT 編譯、貼圖上傳與 shader 編譯污染。每個案例先跑 45 幀暖機（丟棄），再取樣 180 幀。',
+    },
+    'findings.method.crosscheck.title': { en: 'Why FPS is still reported', zh: '為什麼還是要報告 FPS' },
+    'findings.method.crosscheck.body': {
+        en: 'CPU frame time only captures synchronous work on the main thread. A backend that hands a texture upload to the driver asynchronously will look cheap in that window while the frame still takes 300 ms to land. Reporting the real frame rate alongside it is what makes that gap visible — and Finding 04 exists entirely because the two disagreed.',
+        zh: 'CPU frame time 只抓得到主執行緒上的同步工作。如果某個 backend 把貼圖上傳非同步丟給驅動，它在這個窗口裡看起來很便宜，但那一幀實際上還是花了 300ms 才畫完。同時報告真實幀率，才能讓這個落差現形——Finding 04 完全是因為這兩個指標互相矛盾才存在的。',
+    },
+    'findings.method.limits.title': { en: 'What this cannot measure', zh: '這套方法量不到什麼' },
+    'findings.method.limits.body': {
+        en: 'GPU rasterisation time is not observable from the browser (EXT_disjoint_timer_query is disabled in every major engine), so it is not reported rather than guessed. Draw calls are counted by wrapping the WebGL context — under WebGPU, commands are recorded on a GPURenderPassEncoder with no equivalent hook, so that column is honestly marked n/a.',
+        zh: 'GPU 光柵化時間在瀏覽器裡觀測不到（EXT_disjoint_timer_query 在各大引擎都已停用），所以選擇不報告，而不是用猜的。Draw call 是靠包住 WebGL context 計數——WebGPU 的指令錄在 GPURenderPassEncoder 上，沒有等價的攔截點，該欄位就誠實標成 n/a。',
+    },
+
+    'findings.data.title': { en: 'Results', zh: '實測數據' },
+    'findings.data.empty': {
+        en: 'No measurements recorded yet. Open the Optimization Lab and hit Run Benchmark to generate them.',
+        zh: '尚未記錄任何量測結果。開啟 Optimization Lab 並執行 Run Benchmark 即可產生。',
+    },
+    'findings.data.rerun': {
+        en: 'Numbers are hardware-specific. Re-run them yourself: open the <a href="./pixi_optimization.html">Optimization Lab</a> and hit <b>Run Benchmark</b>.',
+        zh: '數字會因硬體而異。你可以自己重跑：開啟 <a href="./pixi_optimization.html">Optimization Lab</a> 並點擊 <b>Run Benchmark</b>。',
+    },
+    'findings.col.scenario': { en: 'Scenario', zh: '情境' },
+    'findings.col.mode': { en: 'Mode', zh: '模式' },
+    'findings.col.objects': { en: 'Objects', zh: '物件數' },
+    'findings.col.cpu': { en: 'CPU ms', zh: 'CPU ms' },
+    'findings.col.fps': { en: 'FPS', zh: 'FPS' },
+    'findings.col.draws': { en: 'Draws', zh: 'Draw calls' },
+    'findings.col.vs': { en: 'vs Naive', zh: '相對 Naive' },
+
+    'findings.f1.title': {
+        en: 'A per-object filter is a per-object render pass',
+        zh: '每個物件掛一個 filter，就是每個物件一個 render pass',
+    },
+    'findings.f1.body': {
+        en: 'Pixi batches sprites aggressively — hundreds of tinted sprites cost a single draw call, because tint is just a vertex attribute riding along inside the batch. Attach a ColorMatrixFilter to each sprite and the batch collapses: every filtered object needs its own framebuffer round-trip, and the draw call count explodes in proportion to the object count.',
+        zh: 'Pixi 的合批很積極——上百個帶 tint 的 sprite 只需要一次 draw call，因為 tint 只是跟著批次一起走的頂點屬性。但只要每個 sprite 各掛一個 ColorMatrixFilter，合批就崩潰了：每個被 filter 的物件都需要自己的 framebuffer 來回，draw call 數量隨物件數等比爆炸。',
+    },
+    'findings.f1.takeaway': {
+        en: 'If all you need is a colour shift, <b>tint is free and a filter is not</b>. Reach for a filter only when you need something tint genuinely cannot express.',
+        zh: '如果你只是要改顏色，<b>tint 是免費的，filter 不是</b>。只有在 tint 真的表達不了時，才動用 filter。',
+    },
+
+    'findings.f2.title': {
+        en: 'Draw calls are not the whole story',
+        zh: 'Draw call 不是全部的真相',
+    },
+    'findings.f2.body': {
+        en: 'Redrawing a Graphics every frame — clear(), circle(), fill() — leaves the draw call count identical to the Sprite version, because Pixi still batches the resulting geometry. The cost sits upstream, on the CPU: each redraw re-tessellates the circle into triangles before a single byte reaches the GPU. A Sprite with a pre-generated texture merely changes a transform.',
+        zh: '每幀重畫 Graphics——clear()、circle()、fill()——draw call 數量跟 Sprite 版本完全一樣，因為 Pixi 照樣把產生的幾何合批。成本在更上游的 CPU：每次重畫都要把圓形重新三角化（tessellation），資料根本還沒送到 GPU。而預先生成貼圖的 Sprite 只是改一個 transform。',
+    },
+    'findings.f2.takeaway': {
+        en: 'Two cases can have <b>identical draw calls and wildly different frame times</b>. Profile the CPU, not just the batch count — optimising the number you can see is not the same as optimising the bottleneck.',
+        zh: '兩個案例可以有<b>完全相同的 draw call，卻有天差地遠的 frame time</b>。要 profile CPU，不能只看合批數——優化「你看得到的數字」不等於優化真正的瓶頸。',
+    },
+
+    'findings.f3.title': {
+        en: 'A mutating Text re-uploads a texture every frame',
+        zh: '會變動的 Text，每幀都在重新上傳貼圖',
+    },
+    'findings.f3.body': {
+        en: 'A Pixi Text whose string changes each frame must re-render itself to a canvas, then upload that canvas to the GPU as a texture — every frame, for every object. BitmapText draws pre-baked glyphs as sprites, so a changing score is just a different set of quads inside the same batch.',
+        zh: '字串每幀變動的 Pixi Text，必須先把自己重繪到一張 canvas，再把那張 canvas 當貼圖上傳到 GPU——每一幀、每一個物件都來一次。BitmapText 則是把預先烘焙好的字形當 sprite 畫，所以分數跳動只是同一個批次裡換一組 quad 而已。',
+    },
+    'findings.f3.takeaway': {
+        en: 'Any text that changes per frame — scores, timers, counters, damage numbers — should be <b>BitmapText</b>. Reserve Text for static labels.',
+        zh: '任何會逐幀變動的文字——分數、計時器、計數器、傷害數字——都該用 <b>BitmapText</b>。Text 留給靜態標籤就好。',
+    },
+
+    'findings.exp.title': { en: 'Reproduce it yourself', zh: '自己重現一次' },
+    'findings.exp.lede': {
+        en: "Every conclusion above came out of these three labs. The benchmark runner is built into the first one — open it, hit Run Benchmark, and you'll get your own numbers on your own hardware.",
+        zh: '上面每一條結論都是從這三個 Lab 跑出來的。Benchmark runner 就內建在第一個裡面——打開它、按下 Run Benchmark，你會在自己的硬體上得到自己的數字。',
+    },
+    'findings.exp.opt.title': { en: '🛠️ Optimization Lab', zh: '🛠️ Optimization Lab' },
+    'findings.exp.opt.desc': {
+        en: 'The source of all four findings. Three A/B scenarios, plus the benchmark runner that produced the table above.',
+        zh: '四條結論的來源。三組 A/B 對照情境，以及產生上面那張表的 benchmark runner。',
+    },
+    'findings.exp.opt.cta': { en: 'Run the benchmark ▶', zh: '執行 benchmark ▶' },
+    'findings.exp.stress.title': { en: '⚠️ Filter Stress Test', zh: '⚠️ Filter 壓力測試' },
+    'findings.exp.stress.desc': {
+        en: 'Finding 01 taken to its extreme — deliberately breaking batching with a filter per object, until the render passes bury the GPU.',
+        zh: '把 Finding 01 推到極端——刻意用「每個物件一個 filter」打斷合批，直到 render pass 把 GPU 淹沒。',
+    },
+    'findings.exp.stress.cta': { en: 'Break it ▶', zh: '把它弄壞 ▶' },
+    'findings.exp.shiba.title': { en: '🐕 Super Shiba Mark', zh: '🐕 Super Shiba Mark' },
+    'findings.exp.shiba.desc': {
+        en: 'The other end of the scale: 100k+ sprites in a single batch, where the bottleneck moves off the GPU and onto CPU-bound transforms.',
+        zh: '光譜的另一端：10 萬個以上的 sprite 塞進同一個批次，此時瓶頸從 GPU 移到了 CPU 端的變換運算。',
+    },
+    'findings.exp.shiba.cta': { en: 'Launch ▶', zh: '啟動 ▶' },
+
+    'findings.f4.title': {
+        en: 'The same cost, booked in two different places',
+        zh: '同一筆成本，被記在兩個不同的地方',
+    },
+    'findings.f4.body': {
+        en: 'Take the worst case above — 500 Text objects mutating every frame. Under WebGL it costs 12.7 ms of CPU frame time; under WebGPU, 182.2 ms. A 14× gap that seems to say WebGPU is catastrophically slower. The real frame rate says the exact opposite: 3.2 fps on WebGL versus 5.5 fps on WebGPU. WebGL\'s texSubImage2D hands the upload to the driver and returns immediately, so most of that frame never enters the CPU measurement window at all; WebGPU blocks synchronously in JavaScript and books the entire bill somewhere you can actually see it. Note also that this display runs at 120 Hz — the budget is 8.3 ms, so WebGL\'s "modest" 12.7 ms had already blown it. Neither backend is fine here. They just file the invoice in different places.',
+        zh: '拿上面最慘的案例——500 個每幀變動的 Text。在 WebGL 下花掉 12.7ms 的 CPU frame time，在 WebGPU 下是 182.2ms。14 倍的落差，看起來像是在說 WebGPU 慢得離譜。但真實幀率講的是完全相反的故事：WebGL 3.2 fps，WebGPU 5.5 fps。WebGL 的 texSubImage2D 把上傳丟給驅動就立刻返回，所以那一幀的大部分成本根本沒進到 CPU 量測窗口；WebGPU 則是同步阻塞在 JavaScript 裡，把整筆帳記在你看得見的地方。另外別忘了這台螢幕是 120Hz——frame budget 只有 8.3ms，所以 WebGL 那個看似溫和的 12.7ms 其實早就爆掉了。兩個 backend 在這裡都不及格，它們只是把帳單開在不同的地方而已。',
+    },
+    'findings.f4.takeaway': {
+        en: '<b>A single metric can invert your conclusion.</b> WebGPU did not make this workload slower — it made an existing cost visible. Which is also why the answer is not "switch backend", it is "stop uploading 500 textures per frame".',
+        zh: '<b>只看單一指標，會讓你的結論完全反過來。</b>WebGPU 沒有讓這個工作負載變慢——它只是讓本來就存在的成本現形。這也正是為什麼解法不是「換 backend」，而是「別再每幀上傳 500 張貼圖」。',
+    },
+
     'gui.folder.info': { en: 'Info', zh: '資訊' },
     'gui.folder.actions': { en: 'Actions', zh: '操作' },
     'gui.folder.system': { en: 'System', zh: '系統' },

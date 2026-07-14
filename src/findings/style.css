@@ -1,0 +1,203 @@
+:root {
+    --bg-color: #0f0f11;
+    --card-bg: #18181b;
+    --card-border: #27272a;
+    --primary: #00d2ff;
+    --text-main: #f4f4f5;
+    --text-muted: #a1a1aa;
+    --good: #4ade80;
+    --warn: #fbbf24;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { overflow-x: clip; }
+
+body.findings-page {
+    font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+    background: var(--bg-color);
+    color: var(--text-main);
+    margin: 0;
+    padding: 40px clamp(16px, 4vw, 24px) 80px;
+    max-width: 1000px;
+    margin-inline: auto;
+    line-height: 1.6;
+}
+
+a { color: var(--primary); text-decoration: none; }
+
+.back-link {
+    display: inline-block;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 28px;
+}
+.back-link:hover { color: var(--primary); }
+
+.findings-header h1 { margin: 0 0 10px; font-size: clamp(1.8rem, 5vw, 2.4rem); font-weight: 600; }
+.lede { color: var(--text-muted); max-width: 62ch; margin: 0 0 48px; }
+
+h2 { font-size: 1.15rem; font-weight: 600; margin: 0 0 20px; }
+
+/* --- 方法論 --- */
+.method { margin-bottom: 56px; }
+.method-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+    gap: 16px;
+}
+.method-item {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 18px 20px;
+}
+.method-item h3 {
+    margin: 0 0 8px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--primary);
+}
+.method-item p { margin: 0; font-size: 0.86rem; color: var(--text-muted); }
+/* 「量不到什麼」獨佔一整行——承認量測極限是重點，不是藏在角落的免責聲明 */
+.method-item.limits {
+    grid-column: 1 / -1;
+    border-color: #3f3f46;
+}
+.method-item.limits h3 { color: var(--warn); }
+
+/* --- 數據 --- */
+.data { margin-bottom: 56px; }
+.data-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.data-head h2 { margin-bottom: 0; }
+
+.renderer-tabs { display: flex; gap: 6px; }
+.renderer-tabs button {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.renderer-tabs button:hover { color: var(--text-main); }
+.renderer-tabs button.active {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: rgba(0, 210, 255, 0.08);
+}
+
+.env-line {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    margin: 16px 0 12px;
+    line-height: 1.8;
+}
+
+.table-scroll { overflow-x: auto; }
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 620px;
+    font-size: 0.84rem;
+}
+th, td { padding: 10px 12px; text-align: left; }
+th {
+    font-weight: 500;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--card-border);
+}
+td { border-bottom: 1px solid #1c1c1f; }
+.num { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.na { color: #52525b; }
+.bad { color: #f87171; font-weight: 600; }
+.speedup { color: var(--good); font-weight: 600; }
+.baseline { color: #52525b; }
+tr.optimized td { background: rgba(74, 222, 128, 0.03); }
+
+.empty {
+    background: var(--card-bg);
+    border: 1px dashed var(--card-border);
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+}
+
+.rerun-hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 16px; }
+
+/* --- 結論卡 --- */
+.findings { display: grid; gap: 20px; }
+.finding {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--primary);
+    border-radius: 12px;
+    padding: 24px;
+}
+.finding-num {
+    font-family: ui-monospace, monospace;
+    font-size: 0.72rem;
+    color: var(--primary);
+    letter-spacing: 0.1em;
+}
+.finding h3 { margin: 6px 0 12px; font-size: 1.05rem; font-weight: 600; }
+.finding p { margin: 0 0 14px; font-size: 0.9rem; color: var(--text-muted); }
+.finding p:last-child { margin-bottom: 0; }
+.finding .takeaway {
+    background: rgba(0, 210, 255, 0.06);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 0.86rem;
+    color: var(--text-main);
+}
+.finding .takeaway b { color: var(--primary); }
+.finding code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85em;
+    background: #27272a;
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--text-main);
+}
+
+/* --- 實驗附件：結論在前，實驗在後 --- */
+.experiments { margin-top: 64px; }
+.exp-lede { color: var(--text-muted); font-size: 0.88rem; max-width: 62ch; margin: 0 0 24px; }
+.exp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    gap: 16px;
+}
+.exp-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    color: inherit;
+    transition: all 0.2s ease;
+}
+.exp-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-3px);
+}
+.exp-card h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+.exp-card p { margin: 0; font-size: 0.82rem; color: var(--text-muted); flex-grow: 1; }
+.exp-cta { font-size: 0.82rem; font-weight: 600; color: var(--primary); }

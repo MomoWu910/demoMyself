@@ -58,6 +58,12 @@ h1 { margin: 0 0 10px 0; font-weight: 600; }
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
 }
 
+/* 結論卡：實驗的重點是結論，不是實驗本身——所以它比下面的 demo 卡更醒目 */
+.card-featured {
+    border-color: rgba(0, 210, 255, 0.4);
+    background: linear-gradient(160deg, rgba(0, 210, 255, 0.07), var(--card-bg) 60%);
+}
+
 /* 卡片內容區 */
 .card-content { flex-grow: 1; }
 

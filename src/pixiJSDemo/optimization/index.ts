@@ -4,15 +4,21 @@ import GUI from 'lil-gui';
 import { showGameInfosPannel } from '../../tools';
 import { createDescriptionPanel } from './src/DescriptionPanel'; // ★ 引入元件
 import { t, onLangChange, mountLangToggle } from '../../i18n';
+import { BenchRunner, BenchPanel, type BenchCase } from '../../bench';
 
 (async () => {
     // 1. 初始化
+    // renderer 由 URL 決定（?renderer=webgl），預設 WebGPU。
+    // 兩種 backend 各跑一次 benchmark，才能得到 WebGL vs WebGPU 的對照數據。
+    const urlParams = new URLSearchParams(window.location.search);
+    const preference = urlParams.get('renderer') === 'webgl' ? 'webgl' : 'webgpu';
+
     const app = new Application();
-    await app.init({ 
-        background: '#1a1a1a', 
-        resizeTo: window, 
-        preference: 'webgpu', 
-        antialias: false 
+    await app.init({
+        background: '#1a1a1a',
+        resizeTo: window,
+        preference,
+        antialias: false
     });
     document.body.appendChild(app.canvas);
 
@@ -265,6 +271,70 @@ import { t, onLangChange, mountLangToggle } from '../../i18n';
             runTest();
         });
 
+    // ==========================================
+    // Benchmark：把互動 demo 變成可重現的量測
+    // ==========================================
+
+    // 三個場景、兩種模式共用同一個物件數，對照才公平。
+    // 上限 500 不是隨便挑的——Tint 場景的 naive 模式每個物件掛一個獨立 Filter，
+    // 再多會撐爆 WebGPU 的 UBO batch（見 setupTintTest）。對照組必須一起遷就這個上限。
+    const BENCH_COUNT = 500;
+
+    const buildBenchCases = (): BenchCase[] => {
+        const scenarios: Array<{ name: string; setup: () => void; update: (time: number) => void }> = [
+            { name: 'Tint vs Filter', setup: setupTintTest, update: updateTintTest },
+            { name: 'Text vs Bitmap', setup: setupTextTest, update: () => updateTextTest() },
+            { name: 'Sprite vs Graphics', setup: setupGraphicsTest, update: updateGraphicsTest },
+        ];
+
+        const cases: BenchCase[] = [];
+        for (const s of scenarios) {
+            for (const mode of ['Naive', 'Optimized'] as const) {
+                cases.push({
+                    id: `${s.name}/${mode}`,
+                    label: `${s.name} — ${mode}`,
+                    meta: { scenario: s.name, mode, renderer: preference },
+                    setup: () => {
+                        isOptimized = mode === 'Optimized';
+                        objectCount = BENCH_COUNT;
+                        s.setup();
+                        return objects.length; // 回報實際建立數，不是要求數
+                    },
+                    update: () => s.update(performance.now()),
+                });
+            }
+        }
+        return cases;
+    };
+
+    const benchPanel = new BenchPanel();
+
+    // 取樣幀數可用 ?warmup= / ?sample= 覆寫，方便快速試跑；預設值見 bench/runner.ts
+    const benchOverrides: Partial<{ warmupFrames: number; sampleFrames: number }> = {};
+    const warmupParam = Number(urlParams.get('warmup'));
+    const sampleParam = Number(urlParams.get('sample'));
+    if (warmupParam > 0) benchOverrides.warmupFrames = warmupParam;
+    if (sampleParam > 0) benchOverrides.sampleFrames = sampleParam;
+
+    const benchRunner = new BenchRunner(app, benchOverrides);
+
+    const runBenchmark = async () => {
+        // 交出 ticker：互動模式的 update 若跟 bench 的 update 同時跑，量到的是兩倍工作量
+        currentTest = null;
+
+        const report = await benchRunner.run(buildBenchCases(), (done, total, c) => {
+            benchPanel.progress(done, total, c.label);
+        });
+        benchPanel.results(report);
+
+        // 還原成 GUI 上的互動設定
+        isOptimized = params.mode === 'Optimized (Fast)';
+        objectCount = params.count;
+        runTest();
+    };
+
+    const cBench = gui.add({ run: runBenchmark }, 'run').name(t('gui.runBench'));
+
     // 啟動預設測試
     isOptimized = false; // 預設先看慢的
     runTest();
@@ -303,6 +373,7 @@ import { t, onLangChange, mountLangToggle } from '../../i18n';
         cScenario.name(t('gui.testScenario'));
         cMode.name(t('gui.mode'));
         cCount.name(t('gui.objectCount'));
+        cBench.name(t('gui.runBench'));
     });
 
 })();

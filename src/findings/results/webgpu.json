@@ -1,0 +1,137 @@
+{
+  "env": {
+    "renderer": "webgpu",
+    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Pro, Unspecified Version)",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "dpr": 2,
+    "viewport": "1512×771",
+    "refreshHz": 120,
+    "timestamp": "2026-07-13T18:06:47.570Z"
+  },
+  "config": {
+    "warmupFrames": 45,
+    "sampleFrames": 180
+  },
+  "results": [
+    {
+      "id": "Tint vs Filter/Naive",
+      "label": "Tint vs Filter — Naive",
+      "objectCount": 500,
+      "cpuMs": {
+        "median": 5.7,
+        "p95": 7,
+        "mean": 5.75,
+        "min": 4.3,
+        "max": 8.2
+      },
+      "fps": 21.1,
+      "drawCalls": null,
+      "samples": 180,
+      "meta": {
+        "scenario": "Tint vs Filter",
+        "mode": "Naive",
+        "renderer": "webgpu"
+      }
+    },
+    {
+      "id": "Tint vs Filter/Optimized",
+      "label": "Tint vs Filter — Optimized",
+      "objectCount": 500,
+      "cpuMs": {
+        "median": 0.4,
+        "p95": 1,
+        "mean": 0.46,
+        "min": 0.2,
+        "max": 1.4
+      },
+      "fps": 120.5,
+      "drawCalls": null,
+      "samples": 180,
+      "meta": {
+        "scenario": "Tint vs Filter",
+        "mode": "Optimized",
+        "renderer": "webgpu"
+      }
+    },
+    {
+      "id": "Text vs Bitmap/Naive",
+      "label": "Text vs Bitmap — Naive",
+      "objectCount": 500,
+      "cpuMs": {
+        "median": 182.2,
+        "p95": 205.8,
+        "mean": 184.23,
+        "min": 13.7,
+        "max": 279.6
+      },
+      "fps": 5.5,
+      "drawCalls": null,
+      "samples": 180,
+      "meta": {
+        "scenario": "Text vs Bitmap",
+        "mode": "Naive",
+        "renderer": "webgpu"
+      }
+    },
+    {
+      "id": "Text vs Bitmap/Optimized",
+      "label": "Text vs Bitmap — Optimized",
+      "objectCount": 500,
+      "cpuMs": {
+        "median": 4.6,
+        "p95": 5.3,
+        "mean": 4.62,
+        "min": 3.8,
+        "max": 5.6
+      },
+      "fps": 122,
+      "drawCalls": null,
+      "samples": 180,
+      "meta": {
+        "scenario": "Text vs Bitmap",
+        "mode": "Optimized",
+        "renderer": "webgpu"
+      }
+    },
+    {
+      "id": "Sprite vs Graphics/Naive",
+      "label": "Sprite vs Graphics — Naive",
+      "objectCount": 500,
+      "cpuMs": {
+        "median": 2.5,
+        "p95": 2.9,
+        "mean": 2.45,
+        "min": 1.5,
+        "max": 3.1
+      },
+      "fps": 120.5,
+      "drawCalls": null,
+      "samples": 180,
+      "meta": {
+        "scenario": "Sprite vs Graphics",
+        "mode": "Naive",
+        "renderer": "webgpu"
+      }
+    },
+    {
+      "id": "Sprite vs Graphics/Optimized",
+      "label": "Sprite vs Graphics — Optimized",
+      "objectCount": 500,
+      "cpuMs": {
+        "median": 0.6,
+        "p95": 1.5,
+        "mean": 0.75,
+        "min": 0.2,
+        "max": 1.8
+      },
+      "fps": 120.5,
+      "drawCalls": null,
+      "samples": 180,
+      "meta": {
+        "scenario": "Sprite vs Graphics",
+        "mode": "Optimized",
+        "renderer": "webgpu"
+      }
+    }
+  ]
+}

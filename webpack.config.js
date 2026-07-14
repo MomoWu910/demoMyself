@@ -16,6 +16,7 @@ module.exports = {
         pixi_optimization: './src/pixiJSDemo/optimization/index.ts', // Pixi.js 最佳實踐
         pixi_x_three: './src/pixiJSDemo/pixiXthree/index.ts', // Pixi.js X Three.js
         rwd_showcase: './src/rwdShowcase/index.ts',           // RWD 裝置模擬器
+        findings: './src/findings/index.ts',                  // 渲染效能實測結論
     },
     output: {
         filename: '[name].bundle.js',
@@ -103,6 +104,12 @@ module.exports = {
             template: './src/rwdShowcase/index.html',
             chunks: ['rwd_showcase'],
             title: 'RWD Showcase',
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'findings.html',
+            template: './src/findings/index.html',
+            chunks: ['findings'],
+            title: 'Rendering Findings',
         }),
         new CopyWebpackPlugin({
             patterns: [
