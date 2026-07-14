@@ -328,6 +328,8 @@ const DICT: Record<string, Entry> = {
     'shader.param.amplitude': { en: 'Wave amplitude (px)', zh: '波幅（px）' },
     'shader.param.frequency': { en: 'Wave frequency', zh: '波的密度' },
     'shader.param.speed': { en: 'Wave speed', zh: '波速' },
+    'shader.param.chromaStrength': { en: 'Aberration strength (px)', zh: '色散強度（px）' },
+    'shader.param.chromaFalloff': { en: 'Falloff from centre', zh: '離中心的衰減指數' },
     'shader.param.flagAmp': { en: 'Flap amplitude (px)', zh: '飄動幅度（px）' },
     'shader.param.flagFreq': { en: 'Ripples across the flag', zh: '旗面上的波數' },
     'shader.param.shading': { en: 'Slope shading', zh: '斜率明暗' },
@@ -342,6 +344,16 @@ const DICT: Record<string, Entry> = {
     'shader.technique.mesh.note': {
         en: 'The shader IS the object\'s material. No extra render pass, no scratch texture — but it cannot see any pixel other than its own.',
         zh: 'shader 就是物件的材質本身。沒有額外的 render pass、沒有暫存貼圖——但它看不到自己以外的任何像素。',
+    },
+
+    'shader.chromatic.title': { en: 'Chromatic Aberration', zh: '鏡頭色差' },
+    'shader.chromatic.desc': {
+        en: 'Real lenses refract red and blue light to slightly different points, so fringes appear — and they grow the further you are from the optical axis. The same coordinate is sampled three times, each offset along the direction away from centre, and only one channel is kept from each. A uniform shift would not be aberration; it would just be a misregistered print.',
+        zh: '真實鏡頭對紅光與藍光的折射率不同，兩者沒有落在同一點上，於是出現紅／藍分離——而且離光軸越遠越明顯。同一個座標取樣三次、各自沿著離開中心的方向錯開，每次只取其中一個 channel。均勻的整片位移不是色差，那只是印刷沒對準。',
+    },
+    'shader.chromatic.cost': {
+        en: 'Three texture fetches per pixel instead of one. Texture bandwidth, not ALU, is what you are spending here — and bandwidth is the resource that runs out first on mobile GPUs. The subtle trap is premultiplied alpha: the three samples land in different places and therefore carry different alphas, so each channel must be divided back out by its own alpha before being combined, then repremultiplied by a single shared alpha. Skip that and translucent edges pick up colour fringing that is a bug, not an effect.',
+        zh: '每個像素從一次取樣變成三次。你花掉的是**貼圖頻寬**而不是 ALU——而頻寬正是行動裝置 GPU 最先耗盡的資源。隱晦的陷阱在預乘 alpha：三個取樣點落在不同位置、各自的 alpha 也不同，所以每個 channel 都得先除回自己的 alpha 再組合，最後用一個共用的 alpha 重新預乘。省掉這步，半透明邊緣會出現一圈「不是特效、是 bug」的色邊。',
     },
 
     'shader.flag.title': { en: 'Waving Flag', zh: '飄動旗幟' },
