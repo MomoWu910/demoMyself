@@ -1,5 +1,5 @@
-import { Application, Assets, Filter, Sprite } from 'pixi.js';
-import { getEffect } from './effects';
+import { Application, Assets, Container } from 'pixi.js';
+import { getEffect, type EffectInstance } from './effects';
 import { labState, useLabStore, type Backend } from './store';
 import shibaPng from '../pixiJSDemo/stressTest/res/shiba.png';
 
@@ -28,20 +28,21 @@ export async function mountStage(container: HTMLElement): Promise<void> {
     useLabStore.getState().setBackend(backend);
 
     const texture = await Assets.load(shibaPng);
-    const sprite = new Sprite(texture);
-    sprite.anchor.set(0.5);
-    app.stage.addChild(sprite);
 
-    // 每個效果的 filter 只建一次：切回來時不必重編 shader
-    const filters = new Map<string, Filter>();
-    const filterFor = (id: string): Filter => {
-        let f = filters.get(id);
-        if (!f) {
-            f = getEffect(id).create();
-            filters.set(id, f);
+    // 每個效果的實例只建一次：切回來時不必重編 shader
+    const instances = new Map<string, EffectInstance>();
+    const instanceFor = (id: string): EffectInstance => {
+        let inst = instances.get(id);
+        if (!inst) {
+            inst = getEffect(id).create(texture);
+            instances.set(id, inst);
         }
-        return f;
+        return inst;
     };
+
+    // 舞台上永遠只掛當前效果的 view（filter 效果是一個 Sprite、mesh 效果是一個 Mesh）
+    const holder = new Container();
+    app.stage.addChild(holder);
 
     let currentId = '';
     let elapsed = 0;
@@ -51,20 +52,23 @@ export async function mountStage(container: HTMLElement): Promise<void> {
     app.ticker.add(({ deltaMS }) => {
         elapsed += deltaMS / 1000;
 
-        // 讓主體隨容器縮放：面板收合、手機轉向、RWD 模擬器拖拉都靠這裡
-        const { width, height } = app.screen;
-        sprite.position.set(width / 2, height / 2);
-        const fit = Math.min(width, height) * 0.62;
-        sprite.scale.set(fit / Math.max(texture.width, texture.height));
-
         const state = labState();
         const def = getEffect(state.effectId);
 
         if (state.effectId !== currentId) {
             currentId = state.effectId;
-            sprite.filters = [filterFor(currentId)];
+            holder.removeChildren();
+            holder.addChild(instanceFor(currentId).view);
         }
-        const filter = filterFor(currentId);
+        const inst = instanceFor(currentId);
+
+        // 讓主體隨容器縮放：面板收合、手機轉向、RWD 模擬器拖拉都靠這裡
+        const { width, height } = app.screen;
+        const bounds = inst.view.getLocalBounds();
+        const fit = Math.min(width, height) * 0.62;
+        const scale = fit / Math.max(bounds.width || 1, bounds.height || 1);
+        inst.view.scale.set(scale);
+        inst.view.position.set(width / 2, height / 2);
 
         // 自動播放：在 [min, max] 之間來回擺盪，並把值寫回 store，讓面板的 slider 也跟著跑
         if (state.animating && def.animate) {
@@ -74,8 +78,8 @@ export async function mountStage(container: HTMLElement): Promise<void> {
             state.setParam(key, Number((min + wave * (max - min)).toFixed(3)));
         }
 
-        def.apply(filter, labState().values[currentId]);
-        def.tick?.(filter, elapsed);
+        inst.apply(labState().values[currentId]);
+        inst.tick?.(elapsed);
 
         // FPS 每 0.5 秒回報一次就好——每幀寫 store 會讓面板每幀重繪
         fpsAccum += deltaMS;

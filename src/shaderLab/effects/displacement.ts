@@ -1,5 +1,5 @@
 import { Filter, GlProgram, GpuProgram, UniformGroup, defaultFilterVert } from 'pixi.js';
-import type { EffectDef, ParamValues } from './types';
+import { spriteWithFilter, type EffectDef, type ParamValues } from './types';
 
 /**
  * Displacement —— 水面折射般的 UV 扭曲。
@@ -136,22 +136,29 @@ export function createDisplacementFilter(): Filter {
 export const displacementEffect: EffectDef = {
     id: 'displacement',
     i18nKey: 'shader.displacement',
+    technique: 'filter',
     params: [
         { kind: 'range', key: 'uAmplitude', labelKey: 'shader.param.amplitude', min: 0, max: 32, step: 0.5, default: 12 },
         { kind: 'range', key: 'uFrequency', labelKey: 'shader.param.frequency', min: 1, max: 40, step: 0.5, default: 14 },
         { kind: 'range', key: 'uSpeed', labelKey: 'shader.param.speed', min: 0, max: 6, step: 0.1, default: 2 },
     ],
     sources: { glsl: fragment, wgsl: source },
-    create: createDisplacementFilter,
-    apply: (filter: Filter, values: ParamValues) => {
+    create: (texture) => {
+        const filter = createDisplacementFilter();
         const u = (filter.resources.wave as UniformGroup).uniforms as Record<string, number>;
-        for (const [k, v] of Object.entries(values)) {
-            if (k in u && typeof v === 'number') u[k] = v;
-        }
-    },
-    // 水波不需要面板上的自動播放開關：它的動力來自時間本身
-    tick: (filter: Filter, elapsed: number) => {
-        const u = (filter.resources.wave as UniformGroup).uniforms as Record<string, number>;
-        u.uTime = elapsed;
+
+        return spriteWithFilter(
+            texture,
+            filter,
+            (values: ParamValues) => {
+                for (const [k, v] of Object.entries(values)) {
+                    if (k in u && typeof v === 'number') u[k] = v;
+                }
+            },
+            // 水波不需要面板上的自動播放開關：它的動力來自時間本身
+            (elapsed: number) => {
+                u.uTime = elapsed;
+            },
+        );
     },
 };

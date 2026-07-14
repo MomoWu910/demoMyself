@@ -1,5 +1,5 @@
 import { Filter, GlProgram, GpuProgram, UniformGroup, defaultFilterVert } from 'pixi.js';
-import { hexToRgb, type EffectDef, type ParamValues } from './types';
+import { hexToRgb, spriteWithFilter, type EffectDef, type ParamValues } from './types';
 
 /**
  * Dissolve —— 程序化 noise 溶解，帶灼燒邊緣。
@@ -193,6 +193,7 @@ export function createDissolveFilter(): Filter {
 export const dissolveEffect: EffectDef = {
     id: 'dissolve',
     i18nKey: 'shader.dissolve',
+    technique: 'filter',
     params: [
         { kind: 'range', key: 'uProgress', labelKey: 'shader.param.progress', min: 0, max: 1, step: 0.01, default: 0.35 },
         { kind: 'range', key: 'uEdgeWidth', labelKey: 'shader.param.edgeWidth', min: 0.01, max: 0.3, step: 0.01, default: 0.08 },
@@ -203,17 +204,20 @@ export const dissolveEffect: EffectDef = {
     // fbm 的值域約 0～0.94、且集中在中段：progress 超過 0.75 幾乎整隻都被吃光，
     // 低於 0.05 又完全看不出在溶解。擺盪只在真正有戲的那一段來回。
     animate: { key: 'uProgress', cycleSeconds: 5.2, min: 0.05, max: 0.75 },
-    create: createDissolveFilter,
-    apply: (filter: Filter, values: ParamValues) => {
+    create: (texture) => {
+        const filter = createDissolveFilter();
         const u = (filter.resources.dissolve as UniformGroup).uniforms as Record<string, unknown>;
-        for (const [k, v] of Object.entries(values)) {
-            if (!(k in u)) continue;
-            if (typeof v === 'string') {
-                // vec3 uniform：就地改寫既有的 Float32Array，不要換掉整個 buffer
-                (u[k] as Float32Array).set(hexToRgb(v));
-            } else {
-                u[k] = v;
+
+        return spriteWithFilter(texture, filter, (values: ParamValues) => {
+            for (const [k, v] of Object.entries(values)) {
+                if (!(k in u)) continue;
+                if (typeof v === 'string') {
+                    // vec3 uniform：就地改寫既有的 Float32Array，不要換掉整個 buffer
+                    (u[k] as Float32Array).set(hexToRgb(v));
+                } else {
+                    u[k] = v;
+                }
             }
-        }
+        });
     },
 };

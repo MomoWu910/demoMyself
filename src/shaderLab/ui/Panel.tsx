@@ -95,6 +95,11 @@ export function Panel() {
                         </button>
                     ))}
                 </div>
+                {/* filter 還是 mesh 材質——這是這個效果成本的分水嶺，值得標在最顯眼的地方 */}
+                <div className={`technique ${def.technique}`}>
+                    <b>{t(`shader.technique.${def.technique}`)}</b>
+                    <span>{t(`shader.technique.${def.technique}.note`)}</span>
+                </div>
                 <p className="desc">{t(`${def.i18nKey}.desc`)}</p>
             </section>
 

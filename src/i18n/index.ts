@@ -52,8 +52,8 @@ const DICT: Record<string, Entry> = {
     'home.rwd.cta': { en: 'Open Simulator →', zh: '開啟模擬器 →' },
     'home.shader.title': { en: 'Shader Lab', zh: 'Shader Lab' },
     'home.shader.desc': {
-        en: 'Custom PixiJS v8 filters with <strong>GLSL and WGSL hand-written side by side</strong> — the same effect, pixel-identical on both backends. Live controls in React + Zustand, the shader source on screen, and what each effect actually costs.',
-        zh: '自訂 PixiJS v8 filter，<strong>GLSL 與 WGSL 兩份原始碼手寫並存</strong>——同一個效果，在兩個 backend 上逐像素一致。控制面板用 React + Zustand，原始碼直接攤在畫面上，並說明每個效果真正的代價。',
+        en: 'Custom PixiJS v8 shaders with <strong>GLSL and WGSL hand-written side by side</strong> — dissolve, water ripple, and a flag deformed in the vertex stage. Outputs verified by reading the framebuffer on both backends, not by eyeballing them. Live controls in React + Zustand, the shader source on screen, and what each effect actually costs.',
+        zh: '自訂 PixiJS v8 shader，<strong>GLSL 與 WGSL 兩份原始碼手寫並存</strong>——溶解、水波折射，以及一面在 vertex 階段被扭曲的旗幟。輸出是讀 framebuffer 在兩個 backend 上逐像素比對出來的，不是用眼睛看的。控制面板用 React + Zustand，原始碼直接攤在畫面上，並說明每個效果真正的代價。',
     },
     'home.shader.foot': { en: 'GLSL + WGSL, both written by hand', zh: 'GLSL + WGSL，兩份都自己寫' },
     'home.shader.cta': { en: 'Open Lab →', zh: '進入 Lab →' },
@@ -291,8 +291,8 @@ const DICT: Record<string, Entry> = {
     // ---- Hub 卡片：Shader Lab ----
     'hub.shader.title': { en: '🎨 Shader Lab', zh: '🎨 Shader Lab' },
     'hub.shader.desc': {
-        en: 'Custom filters written from scratch — GLSL and WGSL side by side, pixel-identical on both backends. Live parameter controls in React + Zustand, with the shader source on screen.',
-        zh: '從零手寫的自訂 filter——GLSL 與 WGSL 並存，在兩個 backend 上逐像素一致。控制面板用 React + Zustand，shader 原始碼直接攤在畫面上。',
+        en: 'Shaders written from scratch — GLSL and WGSL side by side. Two filters and one mesh material whose geometry is deformed in the vertex stage, so the cost of each technique is on the table. Live controls in React + Zustand, with the shader source on screen.',
+        zh: '從零手寫的 shader——GLSL 與 WGSL 並存。兩個 filter，加上一個在 vertex 階段扭曲幾何的 mesh 材質，把每種技法的代價攤開來講。控制面板用 React + Zustand，shader 原始碼直接攤在畫面上。',
     },
     'hub.shader.foot': { en: 'GLSL + WGSL, both by hand', zh: 'GLSL + WGSL，兩份都自己寫' },
     'hub.shader.cta': { en: 'Open Lab ▶', zh: '進入 Lab ▶' },
@@ -328,6 +328,31 @@ const DICT: Record<string, Entry> = {
     'shader.param.amplitude': { en: 'Wave amplitude (px)', zh: '波幅（px）' },
     'shader.param.frequency': { en: 'Wave frequency', zh: '波的密度' },
     'shader.param.speed': { en: 'Wave speed', zh: '波速' },
+    'shader.param.flagAmp': { en: 'Flap amplitude (px)', zh: '飄動幅度（px）' },
+    'shader.param.flagFreq': { en: 'Ripples across the flag', zh: '旗面上的波數' },
+    'shader.param.shading': { en: 'Slope shading', zh: '斜率明暗' },
+
+    // 技法標籤：filter 與 mesh 材質的差別，就是這個 Lab 想講的核心
+    'shader.technique.filter': { en: 'Technique · Filter', zh: '技法 · Filter' },
+    'shader.technique.filter.note': {
+        en: 'Post-processes an already-rendered image. Can read neighbouring pixels — pays for it with its own render pass, out of the batch.',
+        zh: '對「已經畫好的畫面」做後處理。能讀鄰近像素，代價是自己獨立成一個 render pass、被踢出合批。',
+    },
+    'shader.technique.mesh': { en: 'Technique · Mesh material', zh: '技法 · Mesh 材質' },
+    'shader.technique.mesh.note': {
+        en: 'The shader IS the object\'s material. No extra render pass, no scratch texture — but it cannot see any pixel other than its own.',
+        zh: 'shader 就是物件的材質本身。沒有額外的 render pass、沒有暫存貼圖——但它看不到自己以外的任何像素。',
+    },
+
+    'shader.flag.title': { en: 'Waving Flag', zh: '飄動旗幟' },
+    'shader.flag.desc': {
+        en: 'The only effect here whose geometry is deformed in the vertex shader. A 48×16 subdivided plane; each vertex offsets itself by a sine wave scaled by its distance from the pole. The shading is not lighting — it is the slope of that wave (one cos), so the flag reads as three-dimensional for free.',
+        zh: '這裡唯一在 vertex shader 裡扭曲幾何的效果。一張 48×16 細分的 plane，每個頂點依自己離旗杆的距離算出正弦波位移。明暗不是打光，而是那道波的斜率（一行 cos）——立體感是白送的。',
+    },
+    'shader.flag.cost': {
+        en: 'This is the cheap end of animation. 48×16 = 768 vertices, versus the hundreds of thousands of pixels a fragment shader would touch — and because the shader is the material rather than a filter, there is no extra render pass and no scratch texture at all. Flags, grass, water surfaces, a character\'s breathing: if the motion can be expressed as geometry, do it in the vertex stage. The trade-off is absolute — a vertex shader cannot see any pixel other than its own, which is exactly why the ripple effect could not be built this way.',
+        zh: '這是動畫最便宜的那一端。48×16 = 768 個頂點，對比 fragment shader 要碰的幾十萬個像素——而且因為 shader 是材質本身而不是 filter，完全沒有額外的 render pass、沒有暫存貼圖。旗幟、草叢、水面起伏、角色的呼吸：只要動作能用幾何表達，就該在 vertex 階段做。取捨是絕對的——vertex shader 讀不到自己以外的任何像素，這正是水波那種效果沒辦法用這條路做的原因。',
+    },
 
     'shader.dissolve.title': { en: 'Dissolve', zh: '溶解' },
     'shader.dissolve.desc': {

@@ -80,6 +80,14 @@
 - **padding 是直接乘在成本上的**：波峰會把畫面往外推，沒有 padding 的話超出 frame 的那一圈會被切平；但 filter 的暫存貼圖是 `(w + 2p) × (h + 2p)`——在一個 200×200 的 sprite 上，padding 從 0 加到 40px 就是 **2.0 倍的 fillrate**。padding 不是「設大一點比較安全」的參數。
 - 位移量以**像素**為單位、再用 `uInputSize.zw` 換算回 UV，參數的意義才不會隨 sprite 大小漂移；取樣座標一律用 `uInputClamp` 夾住，因為 filter 的輸入貼圖是圖集的一塊，越界會吃到隔壁的內容。
 
+**Waving Flag（Mesh + 頂點著色器）**
+
+- 前兩個都在 fragment 階段做文章；**這一個的幾何是在 vertex shader 裡被扭曲的**。一張 48×16 細分的 plane，每個頂點依自己離旗杆的距離算出正弦波位移。旗面是程式生成的格線——**直線彎成波浪，才看得出幾何真的被改了**。
+- **明暗不是打光，是波的斜率**：對位移函數取導數，一行 `cos` 就換到立體感。這裡有個坑：斜率的真實量級是 `振幅 × 頻率`，直接拿來當明暗會在大振幅下整片飽和、只剩一半亮一半暗的硬邊——明暗要的是波的**相位**，不是它的絕對陡度。
+- **它是「寫進 mesh 材質」的實例**，也就是前兩張成本卡一直在講的那個替代方案：shader 就是物件的材質本身，**沒有額外的 render pass、沒有暫存貼圖、不會被踢出合批**。48×16 = 768 個頂點，對比 fragment shader 要碰的幾十萬個像素——只要動作能用幾何表達（旗幟、草叢、水面、角色呼吸），就該在 vertex 階段做。
+- **代價是絕對的**：vertex shader 讀不到自己以外的任何像素——這正是水波那種 gather 效果**沒辦法**用這條路做的原因。這個取捨是整個 Lab 想講的核心，所以面板上直接標出每個效果是 `Filter` 還是 `Mesh material`。
+- Pixi v8 自訂 mesh shader 的接線在網路上幾乎查不到，是讀 Pixi 原始碼挖出來的：**WebGL** 端 `GlMeshAdaptor` 會把 `groups[100]` / `groups[101]` 設成 global / local uniforms（普通 uniform，不是 UBO）；**WebGPU** 端 Pixi 靠 `layout[0].globalUniforms` 與 `layout[1].localUniforms` **這兩個名字**存不存在，來決定要不要自動綁定那兩個 bind group——名字改掉就沒人餵值，自訂資源只能從 group 2 開始擺。
+
 **三個踩到的坑（都屬於「只丟 warning 不丟 error」那一類）**
 
 1. **WGSL 的 `mainVertex` 參數後面一定要有尾逗號**。Pixi v8 用 regex 解析 WGSL 的 vertex attribute，型別後面必須接「逗號 / 空白 / 字串結尾」；把參數擠成單行會讓型別後面變成右括號 → attribute 解析成空物件 → pipeline 的 VertexState 缺 slot 0 → **render pipeline 靜默失效、畫面全白**。
@@ -88,7 +96,19 @@
 
 **兩個 backend 的輸出比對**
 
-以 `renderer.extract.pixels()` 讀 framebuffer 逐像素比對（headless 下 WebGPU 的 canvas 截圖是空白的，用 screenshot 會得到錯誤結論；時間驅動的效果還要先凍結 `uTime`，否則比的是兩個不同時刻的畫面）。兩個效果的結論一致：**圖案完全相同，差異只落在 1px 寬的輪廓線上**（Dissolve 3.76%、Water Ripple 2.78% 的像素，把 diff 畫成點圖後內部一個點都沒有），來自 `sin()` 在兩條編譯路徑上的浮點捨入——在 Dissolve 上被 `smoothstep` 只有 0.02 的過渡帶放大成 alpha 硬跳。**這正是 hash-based noise 不該用來做需要跨平台一致的畫面（replay、網路同步）的原因。**
+以 `renderer.extract.pixels()` 讀 framebuffer 逐像素比對（headless 下 WebGPU 的 canvas 截圖是空白的，用 screenshot 會得到錯誤結論；時間驅動的效果還要先凍結 `uTime`，否則比的是兩個不同時刻的畫面）。
+
+| 效果 | 不同的像素 | 差異落在哪 |
+|---|---|---|
+| Dissolve | 3.76% | 全部在 1px 寬的輪廓線上 |
+| Water Ripple | 2.78% | 全部在 1px 寬的輪廓線上 |
+| **Waving Flag** | **0.00%** | **逐位元組完全相同** |
+
+把 diff 畫成點圖後，前兩者的紅點全部落在輪廓上、內部一個都沒有——**圖案本身完全一致**，差異來自 `sin()` 在兩條編譯路徑上的浮點捨入，被陡峭的函式放大成 alpha 硬跳（Dissolve 的 `smoothstep` 過渡帶只有 0.02，貼圖的抗鋸齒邊緣同理）。旗幟則因為旗面是不透明矩形、沒有那種放大器，兩條路徑吐出**一模一樣**的畫面——這反過來證實了差異的來源就是邊界，而不是 shader 邏輯。
+
+順帶一提，這也正是 hash-based noise **不該**用來做需要跨平台一致的畫面（replay、網路同步）的原因。
+
+**面板上直接標出每個效果是 `Filter` 還是 `Mesh material`**——因為那是成本的分水嶺，不是實作細節。
 
 **架構：React 管 canvas 外，引擎管 canvas 內**
 

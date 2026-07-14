@@ -1,4 +1,5 @@
-import type { Filter } from 'pixi.js';
+import { Sprite } from 'pixi.js';
+import type { Container, Filter, Texture } from 'pixi.js';
 
 /** 面板上的一個可調參數。kind 決定 React 面板長出 slider 還是 color picker。 */
 export type ParamDef =
@@ -25,6 +26,26 @@ export type ParamValue = number | string;
 export type ParamValues = Record<string, ParamValue>;
 
 /**
+ * 這個效果是怎麼做出來的——而這正是它成本的分水嶺，所以面板要標出來：
+ *
+ * - `filter`：對「已經畫好的畫面」再做一次後處理。能讀鄰近像素，代價是把物件踢出合批、
+ *   自己獨立成一個 render pass。
+ * - `mesh`：shader 就是物件的材質本身，跟著它一起被畫出來。省下那個 render pass，
+ *   但看不到自己以外的像素。
+ */
+export type Technique = 'filter' | 'mesh';
+
+/** 一個已經建好、可以放進舞台的效果實例。 */
+export interface EffectInstance {
+    /** 放進舞台的節點，原點已經在自己的中心 */
+    view: Container;
+    /** 把面板上的參數值寫進 uniform */
+    apply: (values: ParamValues) => void;
+    /** 每幀更新（例如把時間餵進 uTime）；不需要就省略 */
+    tick?: (elapsedSeconds: number) => void;
+}
+
+/**
  * 一個效果的定義。
  *
  * shader 本體、兩份原始碼、可調參數、以及「這個效果貴在哪裡」的說明綁在一起——
@@ -34,21 +55,18 @@ export interface EffectDef {
     id: string;
     /** i18n key 前綴：{i18nKey}.title / .desc / .cost */
     i18nKey: string;
+    technique: Technique;
     params: ParamDef[];
     /** 面板要原封不動展示這兩份原始碼——雙寫本身就是這個 Lab 的主張 */
     sources: { glsl: string; wgsl: string };
-    /** 建立 filter 實例 */
-    create: () => Filter;
-    /** 把面板上的參數值寫進 filter 的 uniform */
-    apply: (filter: Filter, values: ParamValues) => void;
     /**
      * 宣告哪個參數可以被「自動播放」開關驅動（例如 dissolve 的 uProgress 來回擺盪）。
      * 舞台會在 [min, max] 之間來回產生值並寫回 store，面板的 slider 也會跟著動。
      * 範圍要收斂：跑滿 0→1 的話，兩個端點都是「什麼都看不到」的畫面。
      */
     animate?: { key: string; cycleSeconds: number; min: number; max: number };
-    /** 每幀更新（例如把時間餵進 uTime）；不需要就省略 */
-    tick?: (filter: Filter, elapsedSeconds: number) => void;
+    /** 建立效果實例。texture 是舞台的主體貼圖。 */
+    create: (texture: Texture) => EffectInstance;
 }
 
 /** #rrggbb → 給 vec3 uniform 用的 0..1 三元組 */
@@ -62,4 +80,20 @@ export function defaultValues(def: EffectDef): ParamValues {
     const out: ParamValues = {};
     for (const p of def.params) out[p.key] = p.default;
     return out;
+}
+
+/**
+ * filter 類效果的共同組裝：一個置中的 Sprite，掛上這個 filter。
+ * 三個 filter 效果的差別只在 shader 本身，這層是一樣的。
+ */
+export function spriteWithFilter(
+    texture: Texture,
+    filter: Filter,
+    writeUniforms: (values: ParamValues) => void,
+    tick?: (elapsed: number) => void,
+): EffectInstance {
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5);
+    sprite.filters = [filter];
+    return { view: sprite, apply: writeUniforms, tick };
 }
