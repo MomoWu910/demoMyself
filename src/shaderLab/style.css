@@ -243,6 +243,62 @@ body.shader-page { overflow: hidden; }
     color: var(--text-muted);
 }
 
+/* ---- 實測成本 ---- */
+.cost-metrics {
+    margin: 0 0 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.cost-metrics > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+}
+.cost-metrics dt {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+.cost-metrics dd {
+    margin: 0;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.cost-metrics dd b { color: var(--primary); font-weight: 700; }
+.cost-note {
+    margin: 0;
+    font-size: 0.74rem !important;
+    line-height: 1.6 !important;
+    opacity: 0.85;
+}
+.cost-hint {
+    margin-top: 8px !important;
+    font-size: 0.76rem !important;
+    opacity: 0.7;
+}
+.cost-prov {
+    margin-top: 8px !important;
+    font-size: 0.7rem !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    opacity: 0.6;
+}
+.cost-layering {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--card-border);
+}
+.cost-layering h3 {
+    margin: 0 0 8px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
 /* ---- 原始碼 ---- */
 .source-head {
     display: flex;

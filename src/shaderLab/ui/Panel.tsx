@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { useLabStore } from '../store';
-import { EFFECTS, getEffect, type ParamDef } from '../effects';
+import { EFFECTS, getEffect, type EffectDef, type ParamDef } from '../effects';
+import { runShaderBenchmark } from '../bench/runShaderBench';
+import { SHADER_COSTS, LAYERING_FINDING, COST_PROVENANCE } from '../bench/costData';
 import { SourceView } from './SourceView';
 import { useT } from './useT';
 
@@ -68,6 +71,78 @@ function StatusBar() {
     );
 }
 
+/** draw call：WebGPU 攔不到，據實顯示 n/a，不填 0 混過去 */
+function drawText(v: number | null): string {
+    return v === null ? 'n/a' : String(v);
+}
+
+/**
+ * 成本區。有實測數字（來自面板的「量測成本」→ 抄進 costData.ts）就顯示結構化的三欄；
+ * 還沒量過的效果退回手寫敘述。架構 finding 與選中哪個效果無關，量過就一直顯示。
+ */
+function CostSection({ def }: { def: EffectDef }) {
+    const t = useT();
+    const [running, setRunning] = useState(false);
+    const cost = SHADER_COSTS[def.id];
+
+    return (
+        <section className="cost">
+            <div className="section-head">
+                <h2>{t('shader.panel.cost')}</h2>
+                <button className="ghost" disabled={running} onClick={() => void runShaderBenchmark(setRunning)}>
+                    {running ? t('shader.cost.running') : t('shader.cost.run')}
+                </button>
+            </div>
+
+            {cost ? (
+                <div className="cost-measured">
+                    <dl className="cost-metrics">
+                        <div>
+                            <dt>{t('shader.cost.drawcall')}</dt>
+                            <dd>
+                                {drawText(cost.drawBase)} → <b>{drawText(cost.drawFx)}</b>
+                            </dd>
+                        </div>
+                    </dl>
+                    <p className="cost-note">{t('shader.cost.note')}</p>
+                    {COST_PROVENANCE && (
+                        <p className="cost-prov">
+                            {COST_PROVENANCE.renderer.toUpperCase()} · {COST_PROVENANCE.gpu} · {COST_PROVENANCE.viewport} ·{' '}
+                            {COST_PROVENANCE.refreshHz}Hz · {COST_PROVENANCE.date}
+                        </p>
+                    )}
+                </div>
+            ) : (
+                <>
+                    <p>{t(`${def.i18nKey}.cost`)}</p>
+                    <p className="cost-hint">{t('shader.cost.hint')}</p>
+                </>
+            )}
+
+            {LAYERING_FINDING && (
+                <div className="cost-layering">
+                    <h3>{t('shader.cost.layering')}</h3>
+                    <dl className="cost-metrics">
+                        <div>
+                            <dt>{t('shader.cost.layering.perObject')}</dt>
+                            <dd>
+                                {drawText(LAYERING_FINDING.perObjectDraw)} draws · {LAYERING_FINDING.perObjectMs} ms
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>{t('shader.cost.layering.container')}</dt>
+                            <dd>
+                                {drawText(LAYERING_FINDING.containerDraw)} draws · {LAYERING_FINDING.containerMs} ms
+                            </dd>
+                        </div>
+                    </dl>
+                    <p className="cost-note">{t('shader.cost.layering.note')}</p>
+                </div>
+            )}
+        </section>
+    );
+}
+
 export function Panel() {
     const t = useT();
     const effectId = useLabStore((s) => s.effectId);
@@ -133,10 +208,7 @@ export function Panel() {
                 </div>
             </section>
 
-            <section className="cost">
-                <h2>{t('shader.panel.cost')}</h2>
-                <p>{t(`${def.i18nKey}.cost`)}</p>
-            </section>
+            <CostSection def={def} />
 
             <SourceView />
         </div>

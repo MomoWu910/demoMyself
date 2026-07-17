@@ -386,6 +386,29 @@ const DICT: Record<string, Entry> = {
         zh: '不用 noise 貼圖：省下一張素材與一次貼圖取樣，代價是每像素多幾十道 ALU 指令——在任何現代 GPU 上都划算。真正的成本不在數學，而在 filter 本身：它會把 sprite 踢出合批、獨立成一個 render pass，所以一百隻正在溶解的敵人就是一百個 render pass。改成寫進 mesh 材質，它們就能重新合批。',
     },
 
+    // ---- Shader 成本卡：實測數字（見 shaderLab/bench） ----
+    'shader.cost.run': { en: 'Measure ▸', zh: '量測成本 ▸' },
+    'shader.cost.running': { en: 'Measuring…', zh: '量測中…' },
+    'shader.cost.hint': {
+        en: 'No numbers baked in yet for this effect. Click “Measure” to run the benchmark on your machine, then export the JSON.',
+        zh: '這個效果還沒有實測數字。按「量測成本」在你的機器上跑一次 benchmark，再匯出 JSON。',
+    },
+    'shader.cost.drawcall': { en: 'Draw calls · 1 sprite (WebGL)', zh: 'Draw call · 單一 sprite（WebGL）' },
+    'shader.cost.note': {
+        en: 'Draw calls are exact (WebGL): a filter forces its own render pass, a mesh material does not. The fragment-shader maths is not shown because it sits below the measurement floor on this GPU — 48× overdraw never dropped a frame. These effects cost you render-pass structure, not ALU.',
+        zh: 'Draw call 是精確值（WebGL）：filter 會逼出自己的一道 render pass，mesh 材質不會。fragment shader 的數學成本不列——它在這顆 GPU 上低於量測地板（疊 48 層都沒掉一幀）。這些效果的成本在 render pass 結構，不在數學。',
+    },
+    'shader.cost.layering': {
+        en: 'Architecture · N filters vs one',
+        zh: '架構 · N 個 filter vs 單一 filter',
+    },
+    'shader.cost.layering.perObject': { en: 'A filter on every object', zh: '每個物件各掛一個 filter' },
+    'shader.cost.layering.container': { en: 'One filter on the parent', zh: '父容器掛單一 filter' },
+    'shader.cost.layering.note': {
+        en: 'Same visual, same object count. Per-object filters force one render pass each; moving the filter up to the parent container collapses them into a single pass — the draw-call gap is the whole point.',
+        zh: '同樣的畫面、同樣的物件數。每物件各掛一個 filter 就是各開一道 render pass；把 filter 上移到父容器，全部併成一道——draw call 的落差就是重點。',
+    },
+
     'findings.f4.title': {
         en: 'The same cost, booked in two different places',
         zh: '同一筆成本，被記在兩個不同的地方',
