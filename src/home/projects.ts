@@ -13,6 +13,15 @@
 /** 邊上流動的資源；tone 決定它畫成什麼顏色（琥珀=GLSL/WebGL，紫=WGSL/WebGPU）。 */
 export type Tone = 'glsl' | 'wgsl' | 'dual' | 'pixi' | 'neutral';
 
+/** tone → CSS hex。首頁 zoom 轉場與落地頁 reveal 共用同一組色，動線才連得起來。 */
+export const TONE_HEX: Record<Tone, string> = {
+    glsl: '#ff8a3d',
+    wgsl: '#b57bff',
+    dual: '#d98ad6',
+    pixi: '#5aa9ff',
+    neutral: '#9aa0b2',
+};
+
 export interface ProjectNode {
     id: string;
     /** 導向的頁面 */

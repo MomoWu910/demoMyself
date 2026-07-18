@@ -1,4 +1,7 @@
 import { initI18n, t, onLangChange } from '../i18n';
+import { mountReveal } from '../shell/reveal';
+
+mountReveal(); // 從首頁 render graph zoom 進來時，從同色淡出揭開
 
 // ------------------------------------------------
 // RWD Showcase —— 站內建裝置模擬器

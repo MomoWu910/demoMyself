@@ -1,6 +1,9 @@
 import { ConfiguratorView } from './configuratorView';
 import { PartInfo, FinishInfo, TintInfo } from './materialConfigurator';
 import { initI18n, t } from '../../../i18n';
+import { mountReveal } from '../../../shell/reveal';
+
+mountReveal(); // 從首頁 render graph zoom 進來時，從同色淡出揭開
 
 // colorway 變體對應的色塊顏色（球鞋模型內建 midnight / beach / street）
 const VARIANT_SWATCH: Record<string, string> = {

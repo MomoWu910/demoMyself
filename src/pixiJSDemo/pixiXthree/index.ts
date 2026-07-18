@@ -3,6 +3,9 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import gsap from 'gsap';
 import { t, onLangChange, mountLangToggle } from '../../i18n';
+import { mountReveal } from '../../shell/reveal';
+
+mountReveal(); // 從首頁 render graph zoom 進來時，從同色淡出揭開
 
 /**
  * Cross-Engine Sandbox — PixiJS (2D HUD) + Three.js (3D scene) + cannon-es (physics)

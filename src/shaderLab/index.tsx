@@ -1,8 +1,11 @@
 import './style.css';
 import { createRoot } from 'react-dom/client';
 import { initI18n } from '../i18n';
+import { mountReveal } from '../shell/reveal';
 import { mountStage } from './stage';
 import { Panel } from './ui/Panel';
+
+mountReveal(); // 從首頁 render graph zoom 進來時，從同色淡出揭開
 
 /**
  * Shader Lab 的組裝點。
