@@ -34,11 +34,13 @@ export interface ProjectNode {
     tags: string[];
     /** 這個 pass 自身的色調傾向（Shader Lab 是 dual：琥珀↔紫） */
     tone: Tone;
-    /** 正規化座標 */
+    /** 正規化座標（桌面/寬螢幕） */
     x: number;
     y: number;
     /** 節點視覺半徑（正規化到畫布短邊） */
     r: number;
+    /** 窄手機（<520px）用的直式 zig-zag 座標——左右交錯，標籤才不會互相疊 */
+    narrow: { x: number; y: number; r: number };
 }
 
 export interface ResourceEdge {
@@ -62,6 +64,7 @@ export const NODES: ProjectNode[] = [
         x: 0.31,
         y: 0.36,
         r: 0.085,
+        narrow: { x: 0.32, y: 0.24, r: 0.14 },
     },
     {
         id: 'shaderLab',
@@ -73,6 +76,7 @@ export const NODES: ProjectNode[] = [
         x: 0.72,
         y: 0.31,
         r: 0.085,
+        narrow: { x: 0.68, y: 0.37, r: 0.15 },
     },
     {
         id: 'findings',
@@ -84,6 +88,7 @@ export const NODES: ProjectNode[] = [
         x: 0.42,
         y: 0.66,
         r: 0.075,
+        narrow: { x: 0.34, y: 0.54, r: 0.135 },
     },
     {
         id: 'configurator',
@@ -95,6 +100,7 @@ export const NODES: ProjectNode[] = [
         x: 0.74,
         y: 0.68,
         r: 0.08,
+        narrow: { x: 0.68, y: 0.71, r: 0.14 },
     },
     {
         id: 'rwd',
@@ -106,6 +112,7 @@ export const NODES: ProjectNode[] = [
         x: 0.16,
         y: 0.64,
         r: 0.06,
+        narrow: { x: 0.32, y: 0.88, r: 0.11 },
     },
 ];
 

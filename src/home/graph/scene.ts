@@ -22,6 +22,7 @@ interface NodeView {
     container: Container;
     glow: Graphics;
     ring: Graphics;
+    glyph: Text;
     label: Text;
     px: number;
     py: number;
@@ -135,7 +136,7 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         });
         c.on('pointertap', () => enterProject(def.id));
 
-        nodeViews.set(def.id, { def, container: c, glow, ring, label, px: 0, py: 0, pr: 0 });
+        nodeViews.set(def.id, { def, container: c, glow, ring, glyph, label, px: 0, py: 0, pr: 0 });
     }
 
     // ---- 轉場層：點擊節點時，一團該節點顏色的圓從它身上長滿全螢幕 ----
@@ -146,19 +147,23 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
     let W = 0;
     let H = 0;
     let short = 0;
+    let narrow = false;
     const layout = (): void => {
         W = app.screen.width;
         H = app.screen.height;
         short = Math.min(W, H);
+        narrow = W < 520; // 窄手機換成直式 zig-zag 排版
         bg.width = W;
         bg.height = H;
         field.setAspect(W / H);
 
         for (const v of nodeViews.values()) {
-            v.px = v.def.x * W;
-            v.py = v.def.y * H;
-            v.pr = v.def.r * short;
+            const pos = narrow ? v.def.narrow : v.def;
+            v.px = pos.x * W;
+            v.py = pos.y * H;
+            v.pr = pos.r * short;
             v.container.position.set(v.px, v.py);
+            v.glyph.style.fontSize = Math.round(Math.max(18, v.pr * 0.42)); // glyph 隨節點大小縮放
             v.label.position.set(0, v.pr + 12);
             drawNode(v, false);
         }
@@ -172,10 +177,11 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         const dual = v.def.tone === 'dual';
         const base = TONE[v.def.tone];
 
-        // 外圈柔光（疊幾層漸淡的圓）
+        // 外圈柔光（疊幾層漸淡的圓）；窄螢幕收斂擴散，免得上下相鄰節點的光暈互疊糊成一團
         const glowAlpha = active ? 0.22 : 0.12;
+        const spread = narrow ? 0.3 : 0.5;
         for (let i = 3; i >= 1; i--) {
-            v.glow.circle(0, 0, r * (1 + i * 0.5)).fill({ color: base, alpha: (glowAlpha / i) * 0.9 });
+            v.glow.circle(0, 0, r * (1 + i * spread)).fill({ color: base, alpha: (glowAlpha / i) * 0.9 });
         }
 
         // 節點核心：深色玻璃底
