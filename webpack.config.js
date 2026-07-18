@@ -10,7 +10,6 @@ module.exports = {
     entry: {
         main: './src/home/index.tsx',                            // 入口首頁：React 殼 + Pixi render graph
         configurator: './src/babylonJSDemo/src/configurator/index.ts', // Babylon.js 產品配置器
-        pixi_hub: './src/pixiJSDemo/pixiHub/index.ts',           // Pixi.js 選單頁
         pixi_stress: './src/pixiJSDemo/stressTest/index.ts',     // Pixi.js 壓力測試
         pixi_stress2: './src/pixiJSDemo/stressTest2/index.ts',   // Pixi.js 壓力測試2
         pixi_optimization: './src/pixiJSDemo/optimization/index.ts', // Pixi.js 最佳實踐
@@ -74,12 +73,6 @@ module.exports = {
             template: './src/babylonJSDemo/src/configurator/index.html',
             chunks: ['configurator'],
             title: 'Product Configurator',
-        }),
-        new HtmlWebpackPlugin({
-            filename: 'pixi_hub.html',
-            template: './src/pixiJSDemo/pixiHub/index.html',
-            chunks: ['pixi_hub'],
-            title: 'PixiJS Demos',
         }),
         new HtmlWebpackPlugin({
             filename: 'pixi_stress.html',

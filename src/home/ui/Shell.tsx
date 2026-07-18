@@ -24,11 +24,13 @@ function Inspector() {
     const activeId = useHomeStore((s) => s.activeId);
     if (!activeId) return null;
     const node = nodeById(activeId);
-    // 停在畫面同一側會蓋住節點——所以擺在節點的對側
+    // 停在畫面同一側會蓋住節點——所以擺在節點的對側。
+    // 桌面看水平位置（左/右），直屏看垂直位置（上/下），下方節點的卡片改擺上方，才不會蓋住它、造成 hover 閃爍。
     const dock = node.x > 0.5 ? 'dock-left' : 'dock-right';
+    const vdock = node.narrow.y > 0.6 ? 'vdock-top' : 'vdock-bottom';
 
     return (
-        <aside className={`inspector ${dock}`} role="status">
+        <aside className={`inspector ${dock} ${vdock}`} role="status">
             <span className="insp-glyph" style={{ color: TONE_CSS[node.tone] }}>
                 {node.glyph}
             </span>

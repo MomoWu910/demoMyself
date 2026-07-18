@@ -98,7 +98,9 @@ html, body {
     max-height: calc(100dvh - 2 * clamp(20px, 3.5vw, 40px) - env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     overscroll-behavior: contain;
-    pointer-events: auto;
+    /* 卡片本身不吃指標事件——hover 穿透回 canvas，節點才不會因為被卡片蓋住而 pointerout 閃爍。
+       只有「進入」鈕重新開啟點擊。 */
+    pointer-events: none;
     padding: 20px 22px;
     border-radius: 14px;
     background: var(--panel);
@@ -148,6 +150,7 @@ html, body {
     text-decoration: none;
     transition: transform 0.15s, box-shadow 0.15s;
 }
+.insp-enter { pointer-events: auto; } /* 卡片本體 none，唯獨這顆鈕可點 */
 .insp-enter:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45); }
 .insp-enter:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
 
@@ -216,12 +219,18 @@ html, body {
 /* 窄螢幕：圖例讓位、inspector 收窄（完整 RWD 在 Phase 4） */
 @media (max-width: 640px) {
     .legend { display: none; }
-    /* 手機：inspector 貼底全寬，蓋過 dock-left/right 的左右定位 */
+    /* 手機：inspector 全寬，蓋過 dock-left/right 的左右定位 */
     .inspector,
     .inspector.dock-left,
     .inspector.dock-right {
         left: clamp(16px, 4vw, 20px);
         right: clamp(16px, 4vw, 20px);
         width: auto;
+    }
+    /* 下方節點：卡片改擺畫面上方（tagline 之下），不蓋住被 hover 的節點 */
+    .inspector.vdock-top {
+        top: clamp(140px, 24vh, 190px);
+        bottom: auto;
+        max-height: calc(100dvh - clamp(162px, 27vh, 212px));
     }
 }

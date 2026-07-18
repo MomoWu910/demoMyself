@@ -27,7 +27,6 @@ const PAGES: Page[] = [
     { id: 'home', key: 'rwd.page.home', url: './index.html' },
     { id: 'px3', key: 'rwd.page.px3', url: './pixi_x_three.html' },
     { id: 'cfg', key: 'rwd.page.cfg', url: './configurator.html' },
-    { id: 'hub', key: 'rwd.page.hub', url: './pixi_hub.html' },
     { id: 'stress', key: 'rwd.page.stress', url: './pixi_stress.html' },
     { id: 'shiba', key: 'rwd.page.shiba', url: './pixi_stress2.html' },
     { id: 'opt', key: 'rwd.page.opt', url: './pixi_optimization.html' },
