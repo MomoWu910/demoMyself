@@ -55,9 +55,12 @@ void main() {
     vec2 q = vec2(fbm(uv * 2.0 + t), fbm(uv * 2.0 - t + vec2(5.2, 1.3)));
     float f = fbm(uv * 3.0 + q * 1.5 + t);
 
-    // 低頻相位：整面在琥珀↔紫之間呼吸
-    float toneMix = 0.5 + 0.5 * sin(uv.x * 1.1 - uv.y * 0.8 + uTime * 0.12);
+    // 低頻相位：整面在琥珀↔紫之間呼吸。中點往琥珀偏，兩色才平衡（原本偏紫）
+    float toneMix = 0.38 + 0.46 * sin(uv.x * 1.1 - uv.y * 0.8 + uTime * 0.12);
+    toneMix = clamp(toneMix, 0.0, 1.0);
     vec3 tone = mix(uAmber, uViolet, toneMix);
+    // 琥珀在暗底上的視覺份量比紫弱，補一點亮度讓它站得住
+    tone *= mix(1.3, 1.0, toneMix);
 
     vec3 col = uInk;
     col += tone * smoothstep(0.35, 0.92, f) * 0.15;          // 主體薄霧
@@ -157,8 +160,10 @@ fn mainFragment(@location(0) uv0: vec2<f32>) -> @location(0) vec4<f32> {
     let q = vec2<f32>(fbm(uv * 2.0 + t), fbm(uv * 2.0 - t + vec2<f32>(5.2, 1.3)));
     let f = fbm(uv * 3.0 + q * 1.5 + t);
 
-    let toneMix = 0.5 + 0.5 * sin(uv.x * 1.1 - uv.y * 0.8 + field.uTime * 0.12);
-    let tone = mix(field.uAmber, field.uViolet, toneMix);
+    var toneMix = 0.38 + 0.46 * sin(uv.x * 1.1 - uv.y * 0.8 + field.uTime * 0.12);
+    toneMix = clamp(toneMix, 0.0, 1.0);
+    var tone = mix(field.uAmber, field.uViolet, toneMix);
+    tone = tone * mix(1.3, 1.0, toneMix); // 琥珀在暗底上補一點亮度，兩色才平衡
 
     var col = field.uInk;
     col += tone * smoothstep(0.35, 0.92, f) * 0.15;

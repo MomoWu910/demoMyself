@@ -1,6 +1,8 @@
 /* 首頁 · The Render Graph
  * 深墨底 + 琥珀↔紫雙色（WebGL↔WebGPU / GLSL↔WGSL）。刻意離開舊版 cyan-on-black。 */
 
+@import './fonts.css';
+
 :root {
     --ink: #0b0c10;
     --ink-2: #11141c;

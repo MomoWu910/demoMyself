@@ -531,8 +531,9 @@ export function mountLangToggle(opts: { parent?: HTMLElement; style?: Partial<CS
     const paint = () => {
         [enBtn, zhBtn].forEach((b) => {
             const active = b.dataset.lang === current;
-            b.style.background = active ? 'rgba(0,210,255,0.18)' : 'transparent';
-            b.style.color = active ? '#00d2ff' : '#a1a1aa';
+            // 中性配色：新首頁與各舊頁的深色背景都合用（原本寫死 cyan 只配舊主題）
+            b.style.background = active ? 'rgba(255,255,255,0.16)' : 'transparent';
+            b.style.color = active ? '#f4f4f5' : '#a1a1aa';
             b.style.fontWeight = active ? '700' : '500';
         });
     };

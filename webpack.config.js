@@ -52,6 +52,11 @@ module.exports = {
                 },
             },
             {
+                test: /\.woff2?$/i, // 自 host 字型
+                type: 'asset/resource',
+                generator: { filename: 'fonts/[name][ext]' },
+            },
+            {
                 test: /\.css$/i,
                 use: ['style-loader', 'css-loader'],
             },
