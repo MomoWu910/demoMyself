@@ -348,8 +348,8 @@ import { BenchRunner, BenchPanel, type BenchCase } from '../../bench';
 
     // Back Button
     const backBtn = document.createElement('a');
-    backBtn.innerText = t('nav.back');
-    backBtn.href = './pixi_hub.html';
+    backBtn.innerText = t('nav.backFindings');
+    backBtn.href = './findings.html'; // 壓測是「實驗結論」底下的實驗，返回回 Findings
     Object.assign(backBtn.style, { position: 'absolute',
         top: '55px',
         left: '20px',
@@ -369,7 +369,7 @@ import { BenchRunner, BenchPanel, type BenchCase } from '../../bench';
 
     // 語言切換時更新 back 與 GUI 控制項名稱（說明面板自行訂閱）
     onLangChange(() => {
-        backBtn.innerText = t('nav.back');
+        backBtn.innerText = t('nav.backFindings');
         cScenario.name(t('gui.testScenario'));
         cMode.name(t('gui.mode'));
         cCount.name(t('gui.objectCount'));

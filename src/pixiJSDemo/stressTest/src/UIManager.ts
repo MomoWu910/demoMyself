@@ -34,7 +34,7 @@ export class UIManager {
     }
 
     private applyLang() {
-        this.backBtn.innerText = t('nav.back');
+        this.backBtn.innerText = t('nav.backFindings');
         this.ctrls.forEach(({ c, key }) => c.name(t(key)));
     }
 
@@ -42,8 +42,8 @@ export class UIManager {
         // Back Button
         const backBtn = document.createElement('a');
         this.backBtn = backBtn;
-        backBtn.innerText = t('nav.back');
-        backBtn.href = './pixi_hub.html';
+        backBtn.innerText = t('nav.backFindings');
+        backBtn.href = './findings.html'; // 壓測是「實驗結論」底下的實驗，返回回 Findings
         Object.assign(backBtn.style, {
              position: 'absolute',
              top: '55px',

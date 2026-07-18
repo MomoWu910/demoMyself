@@ -22,6 +22,7 @@ const DICT: Record<string, Entry> = {
     'nav.back': { en: '← Back', zh: '← 返回' },
     'nav.backHome': { en: '← Back to Home', zh: '← 返回首頁' },
     'nav.backHub': { en: '← PixiJS Experiments', zh: '← PixiJS 實驗場' },
+    'nav.backFindings': { en: '← Findings', zh: '← 實驗結論' },
 
     // ---- 首頁 ----
     'home.role': { en: 'Frontend Engineer · 3D / High-Interaction / Complex Web Apps', zh: '前端工程師 · 3D / 高互動 / 複雜 Web 應用' },
