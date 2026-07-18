@@ -2,10 +2,12 @@ import './style.css';
 import { createRoot } from 'react-dom/client';
 import { initI18n } from '../i18n';
 import { mountReveal } from '../shell/reveal';
+import { wireGoBack } from '../shell/goBack';
 import { mountStage } from './stage';
 import { Panel } from './ui/Panel';
 
 mountReveal(); // 從首頁 render graph zoom 進來時，從同色淡出揭開
+wireGoBack(document.querySelector('.back')); // 返回＝回上一頁，不新增歷史紀錄
 
 /**
  * Shader Lab 的組裝點。

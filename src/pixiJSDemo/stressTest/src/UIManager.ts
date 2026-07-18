@@ -1,6 +1,7 @@
 import GUI from 'lil-gui';
 import { ColorMatrixFilter, Container } from 'pixi.js';
 import { t, onLangChange, mountLangToggle } from '../../../i18n';
+import { wireGoBack } from '../../../shell/goBack';
 
 export class UIManager {
     private onAddShibas: (count: number) => void;
@@ -61,6 +62,7 @@ export class UIManager {
         backBtn.onmouseleave = () => backBtn.style.background = 'rgba(0,0,0,0.3)';
 
         document.body.appendChild(backBtn);
+        wireGoBack(backBtn); // 返回＝回上一頁，不新增歷史紀錄
 
         // 語言切換鈕：擺在 back 正下方。窄螢幕頂列已被 back + 右上 lil-gui 佔滿，
         // 放右側會撞到其一，改成放下方誰都不撞。

@@ -4,6 +4,7 @@ import * as CANNON from 'cannon-es';
 import gsap from 'gsap';
 import { t, onLangChange, mountLangToggle } from '../../i18n';
 import { mountReveal } from '../../shell/reveal';
+import { wireGoBack } from '../../shell/goBack';
 
 mountReveal(); // 從首頁 render graph zoom 進來時，從同色淡出揭開
 
@@ -435,6 +436,7 @@ mountReveal(); // 從首頁 render graph zoom 進來時，從同色淡出揭開
         border: '1px solid rgba(91,127,176,0.5)', backdropFilter: 'blur(6px)', zIndex: '100',
     });
     root.appendChild(backBtn);
+    wireGoBack(backBtn); // 返回＝回上一頁，不新增歷史紀錄
 
     // 語言切換鈕：放在 back 右側（右上角已被數據面板佔用）
     mountLangToggle({ style: { top: '24px', left: '120px' } });

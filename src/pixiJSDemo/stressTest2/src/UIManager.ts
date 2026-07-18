@@ -1,5 +1,6 @@
 import GUI from 'lil-gui';
 import { t, onLangChange, mountLangToggle } from '../../../i18n';
+import { wireGoBack } from '../../../shell/goBack';
 
 export class UIManager {
     private gui: GUI;
@@ -98,6 +99,7 @@ export class UIManager {
             zIndex: '100'
         });
         document.body.appendChild(backBtn);
+        wireGoBack(backBtn); // 返回＝回上一頁，不新增歷史紀錄
 
         // 語言切換鈕：擺在 back 正下方，避開右上的 lil-gui 與變寬的 back
         const langWrap = mountLangToggle({ style: { top: '55px', left: '20px' } });
