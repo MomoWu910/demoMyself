@@ -232,6 +232,10 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
             fxLayer.clear();
             fxLayer.circle(v.px, v.py, r).fill({ color: TONE[v.def.tone], alpha: Math.min(1, 0.35 + ease) });
             return; // 轉場中就不必再更新底下的圖了
+        } else if (enterStart >= 0) {
+            // 轉場結束（多半是按返回、bfcache 把首頁還原到轉場最後一幀）：清掉那片純色覆蓋、回正常
+            enterStart = -1;
+            fxLayer.clear();
         }
 
         const activeId = homeState().activeId;
@@ -322,5 +326,14 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
     // 語言切換：更新節點標籤
     onLangChange(() => {
         for (const v of nodeViews.values()) v.label.text = t(`${v.def.i18nKey}.title`);
+    });
+
+    // 按返回回到首頁時，瀏覽器用 bfcache 還原成「離開時的畫面」＝zoom 轉場的最後一幀（純色屏）。
+    // pageshow 時把轉場狀態清乾淨、確保 ticker 在跑，畫面才會回到 render graph。
+    window.addEventListener('pageshow', () => {
+        useHomeStore.getState().setEntering(null);
+        enterStart = -1;
+        fxLayer.clear();
+        if (!app.ticker.started && !document.hidden) app.ticker.start();
     });
 }
