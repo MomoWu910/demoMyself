@@ -27,6 +27,7 @@ interface NodeView {
     px: number;
     py: number;
     pr: number;
+    active: boolean; // 只在這個值變動時才重畫節點幾何，不必每幀
 }
 
 /** 二次貝茲取點——邊畫成微彎的弧，比直線有機。 */
@@ -53,6 +54,15 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
     });
     container.appendChild(app.canvas);
     (globalThis as any).__PIXI_APP__ = app;
+
+    // 省電：全螢幕 shader 光場若在 120fps × retina 下永不停跑，會讓裝置發燙耗電。
+    // 環境背景不需要那麼多幀——上限 30fps；尊重 reduce-motion 就幾乎凍結；分頁切走就停。
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    app.ticker.maxFPS = reduceMotion ? 8 : 30;
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) app.ticker.stop();
+        else app.ticker.start();
+    });
 
     const backend: Backend = (app.renderer as any).gl ? 'webgl' : 'webgpu';
     (globalThis as any).__BACKEND__ = backend;
@@ -136,7 +146,7 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         });
         c.on('pointertap', () => enterProject(def.id));
 
-        nodeViews.set(def.id, { def, container: c, glow, ring, glyph, label, px: 0, py: 0, pr: 0 });
+        nodeViews.set(def.id, { def, container: c, glow, ring, glyph, label, px: 0, py: 0, pr: 0, active: false });
     }
 
     // ---- 轉場層：點擊節點時，一團該節點顏色的圓從它身上長滿全螢幕 ----
@@ -165,6 +175,7 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
             v.container.position.set(v.px, v.py);
             v.glyph.style.fontSize = Math.round(Math.max(18, v.pr * 0.42)); // glyph 隨節點大小縮放
             v.label.position.set(0, v.pr + 12);
+            v.active = false;
             drawNode(v, false);
         }
     };
@@ -205,7 +216,9 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
     let enterStart = -1;
     app.ticker.add(({ deltaMS }) => {
         elapsed += deltaMS / 1000;
-        field.setTime(elapsed);
+        // reduce-motion：凍結環境動畫（光場/呼吸/資源流動），ticker 仍以低幀跑著只為 hover 反應
+        const anim = reduceMotion ? 0 : elapsed;
+        field.setTime(anim);
 
         const enteringId = homeState().enteringId;
         if (enteringId) {
@@ -227,13 +240,17 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
             const dim = activeId && !isActive && !isConnected(activeId, v.def.id);
             const targetAlpha = dim ? 0.35 : 1;
             v.container.alpha += (targetAlpha - v.container.alpha) * 0.15;
-            const pulse = 1 + Math.sin(elapsed * 1.4 + v.px) * 0.015;
+            const pulse = 1 + Math.sin(anim * 1.4 + v.px) * 0.015;
             const scale = (isActive ? 1.08 : 1) * pulse;
             v.container.scale.set(v.container.scale.x + (scale - v.container.scale.x) * 0.15);
-            drawNode(v, isActive);
+            // 幾何只在 active 變動時重畫；呼吸/淡出是 transform/alpha，不必重算幾何
+            if (isActive !== v.active) {
+                v.active = isActive;
+                drawNode(v, isActive);
+            }
         }
 
-        drawEdges(elapsed, activeId);
+        drawEdges(anim, activeId);
     });
 
     const isConnected = (a: string, b: string): boolean =>

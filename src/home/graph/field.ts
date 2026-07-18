@@ -200,6 +200,9 @@ export function createFieldFilter(): FieldFilter {
             fragment: { source, entryPoint: 'mainFragment' },
         }),
         resources: { field: uniforms },
+        // 半解析度渲染：這面光場很柔、看不出差，但每像素十幾次 noise 的 fragment 成本直接砍 4 倍，
+        // 是這個全螢幕 shader 最省電的一刀。
+        resolution: 0.5,
     });
 
     const u = uniforms.uniforms as { uTime: number; uAspect: number };
