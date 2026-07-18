@@ -1,0 +1,281 @@
+import { Application, Container, Graphics, Sprite, Text, Texture, TextStyle } from 'pixi.js';
+import { EDGES, NODES, nodeById, type ProjectNode, type Tone } from '../projects';
+import { useHomeStore, homeState, type Backend } from '../store';
+import { createFieldFilter } from './field';
+import { t, onLangChange } from '../../i18n';
+
+/** tone → 代表色（琥珀=GLSL/WebGL，紫=WGSL/WebGPU，藍=Pixi，灰=中性）。 */
+const TONE: Record<Tone, number> = {
+    glsl: 0xff8a3d,
+    wgsl: 0xb57bff,
+    dual: 0xd98ad6,
+    pixi: 0x5aa9ff,
+    neutral: 0x9aa0b2,
+};
+
+const AMBER = 0xff8a3d;
+const VIOLET = 0xb57bff;
+
+interface NodeView {
+    def: ProjectNode;
+    container: Container;
+    glow: Graphics;
+    ring: Graphics;
+    label: Text;
+    px: number;
+    py: number;
+    pr: number;
+}
+
+/** 二次貝茲取點——邊畫成微彎的弧，比直線有機。 */
+function bezier(ax: number, ay: number, cx: number, cy: number, bx: number, by: number, t: number) {
+    const mt = 1 - t;
+    return {
+        x: mt * mt * ax + 2 * mt * t * cx + t * t * bx,
+        y: mt * mt * ay + 2 * mt * t * cy + t * t * by,
+    };
+}
+
+export async function mountGraph(container: HTMLElement): Promise<void> {
+    const params = new URLSearchParams(window.location.search);
+    const preference = params.get('renderer') === 'webgl' ? 'webgl' : 'webgpu';
+
+    const app = new Application();
+    await app.init({
+        background: 0x0b0c10,
+        resizeTo: container,
+        preference,
+        antialias: true,
+        resolution: Math.min(window.devicePixelRatio || 1, 2),
+        autoDensity: true,
+    });
+    container.appendChild(app.canvas);
+    (globalThis as any).__PIXI_APP__ = app;
+
+    const backend: Backend = (app.renderer as any).gl ? 'webgl' : 'webgpu';
+    (globalThis as any).__BACKEND__ = backend;
+    useHomeStore.getState().setBackend(backend);
+
+    // 讓 Pixi 的 Text 拿得到 Google Fonts 載入的 Archivo / JetBrains Mono
+    try {
+        await (document as any).fonts?.ready;
+    } catch {
+        /* 沒有 Font Loading API 就算了，會退回系統字 */
+    }
+
+    // ---- 背景光場 ----
+    const bg = new Sprite(Texture.WHITE);
+    const field = createFieldFilter();
+    bg.filters = [field.filter];
+    app.stage.addChild(bg);
+
+    // ---- 邊層（每幀重畫，讓資源封包會流動）＋ 標籤層 ----
+    const edgeGfx = new Graphics();
+    const edgeLabelLayer = new Container();
+    app.stage.addChild(edgeGfx, edgeLabelLayer);
+
+    const edgeLabels = EDGES.filter((e) => !e.meta).map((e) => {
+        const label = new Text({
+            text: e.resource,
+            style: new TextStyle({
+                fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+                fontSize: 11,
+                fill: TONE[e.tone],
+                letterSpacing: 0.5,
+            }),
+        });
+        label.anchor.set(0.5);
+        label.alpha = 0.7;
+        edgeLabelLayer.addChild(label);
+        return { edge: e, label };
+    });
+
+    // ---- 節點層 ----
+    const nodeLayer = new Container();
+    app.stage.addChild(nodeLayer);
+
+    const nodeViews = new Map<string, NodeView>();
+    for (const def of NODES) {
+        const c = new Container();
+        c.eventMode = 'static';
+        c.cursor = 'pointer';
+
+        const glow = new Graphics();
+        const ring = new Graphics();
+
+        const glyph = new Text({
+            text: def.glyph,
+            style: new TextStyle({
+                fontFamily: 'Archivo, ui-sans-serif, sans-serif',
+                fontSize: 26,
+                fontWeight: '700',
+                fill: 0xf2f4fa,
+            }),
+        });
+        glyph.anchor.set(0.5);
+
+        const label = new Text({
+            text: t(`${def.i18nKey}.title`),
+            style: new TextStyle({
+                fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+                fontSize: 12,
+                fill: 0xc9cede,
+                letterSpacing: 0.6,
+            }),
+        });
+        label.anchor.set(0.5, 0);
+
+        c.addChild(glow, ring, glyph, label);
+        nodeLayer.addChild(c);
+
+        c.on('pointerover', () => useHomeStore.getState().setActive(def.id));
+        c.on('pointerout', () => {
+            if (homeState().activeId === def.id) useHomeStore.getState().setActive(null);
+        });
+        c.on('pointertap', () => {
+            window.location.href = def.href;
+        });
+
+        nodeViews.set(def.id, { def, container: c, glow, ring, label, px: 0, py: 0, pr: 0 });
+    }
+
+    // ---- 版面：正規化座標 → 螢幕像素 ----
+    let W = 0;
+    let H = 0;
+    let short = 0;
+    const layout = (): void => {
+        W = app.screen.width;
+        H = app.screen.height;
+        short = Math.min(W, H);
+        bg.width = W;
+        bg.height = H;
+        field.setAspect(W / H);
+
+        for (const v of nodeViews.values()) {
+            v.px = v.def.x * W;
+            v.py = v.def.y * H;
+            v.pr = v.def.r * short;
+            v.container.position.set(v.px, v.py);
+            v.label.position.set(0, v.pr + 12);
+            drawNode(v, false);
+        }
+    };
+
+    const drawNode = (v: NodeView, active: boolean): void => {
+        const r = v.pr;
+        v.glow.clear();
+        v.ring.clear();
+
+        const dual = v.def.tone === 'dual';
+        const base = TONE[v.def.tone];
+
+        // 外圈柔光（疊幾層漸淡的圓）
+        const glowAlpha = active ? 0.22 : 0.12;
+        for (let i = 3; i >= 1; i--) {
+            v.glow.circle(0, 0, r * (1 + i * 0.5)).fill({ color: base, alpha: (glowAlpha / i) * 0.9 });
+        }
+
+        // 節點核心：深色玻璃底
+        v.ring.circle(0, 0, r).fill({ color: 0x11141c, alpha: 0.92 });
+
+        // 邊環：dual 節點畫成琥珀/紫兩半弧，其餘單色
+        const ringW = active ? 3 : 2;
+        if (dual) {
+            v.ring.arc(0, 0, r, -Math.PI / 2, Math.PI / 2).stroke({ color: AMBER, width: ringW, alpha: active ? 1 : 0.85 });
+            v.ring.arc(0, 0, r, Math.PI / 2, (Math.PI * 3) / 2).stroke({ color: VIOLET, width: ringW, alpha: active ? 1 : 0.85 });
+        } else {
+            v.ring.circle(0, 0, r).stroke({ color: base, width: ringW, alpha: active ? 1 : 0.7 });
+        }
+    };
+
+    layout();
+    app.renderer.on('resize', layout);
+
+    // ---- 動畫迴圈 ----
+    let elapsed = 0;
+    app.ticker.add(({ deltaMS }) => {
+        elapsed += deltaMS / 1000;
+        field.setTime(elapsed);
+
+        const activeId = homeState().activeId;
+
+        // 節點：呼吸 + 高亮/淡出
+        for (const v of nodeViews.values()) {
+            const isActive = activeId === v.def.id;
+            const dim = activeId && !isActive && !isConnected(activeId, v.def.id);
+            const targetAlpha = dim ? 0.35 : 1;
+            v.container.alpha += (targetAlpha - v.container.alpha) * 0.15;
+            const pulse = 1 + Math.sin(elapsed * 1.4 + v.px) * 0.015;
+            const scale = (isActive ? 1.08 : 1) * pulse;
+            v.container.scale.set(v.container.scale.x + (scale - v.container.scale.x) * 0.15);
+            drawNode(v, isActive);
+        }
+
+        drawEdges(elapsed, activeId);
+    });
+
+    const isConnected = (a: string, b: string): boolean =>
+        EDGES.some((e) => (e.from === a && e.to === b) || (e.from === b && e.to === a));
+
+    const curveOf = (a: NodeView, b: NodeView) => {
+        const mx = (a.px + b.px) / 2;
+        const my = (a.py + b.py) / 2;
+        const dx = b.px - a.px;
+        const dy = b.py - a.py;
+        const len = Math.hypot(dx, dy) || 1;
+        const bow = Math.min(len * 0.12, short * 0.08);
+        return { cx: mx + (-dy / len) * bow, cy: my + (dx / len) * bow };
+    };
+
+    const drawEdges = (time: number, activeId: string | null): void => {
+        edgeGfx.clear();
+
+        // meta 邊（RWD「包住每一頁」）：很淡的虛線點，不搶戲，只示意關聯
+        for (const edge of EDGES.filter((e) => e.meta)) {
+            const a = nodeViews.get(edge.from)!;
+            const b = nodeViews.get(edge.to)!;
+            const { cx, cy } = curveOf(a, b);
+            const involved = !activeId || activeId === edge.from || activeId === edge.to;
+            const dots = 22;
+            for (let i = 1; i < dots; i++) {
+                const p = bezier(a.px, a.py, cx, cy, b.px, b.py, i / dots);
+                edgeGfx.circle(p.x, p.y, 1).fill({ color: TONE[edge.tone], alpha: involved ? 0.28 : 0.1 });
+            }
+        }
+
+        for (const { edge, label } of edgeLabels) {
+            const a = nodeViews.get(edge.from)!;
+            const b = nodeViews.get(edge.to)!;
+            const { cx, cy } = curveOf(a, b);
+
+            const involved = !activeId || activeId === edge.from || activeId === edge.to;
+            const color = TONE[edge.tone];
+
+            // 基底弧線
+            const seg = 26;
+            edgeGfx.moveTo(a.px, a.py);
+            for (let i = 1; i <= seg; i++) {
+                const p = bezier(a.px, a.py, cx, cy, b.px, b.py, i / seg);
+                edgeGfx.lineTo(p.x, p.y);
+            }
+            edgeGfx.stroke({ color, width: involved ? 1.4 : 1, alpha: involved ? 0.5 : 0.18 });
+
+            // 資源封包：沿弧線流動的小點
+            const packets = 2;
+            for (let k = 0; k < packets; k++) {
+                const tt = (time * 0.18 + k / packets) % 1;
+                const p = bezier(a.px, a.py, cx, cy, b.px, b.py, tt);
+                edgeGfx.circle(p.x, p.y, involved ? 2.6 : 1.8).fill({ color, alpha: involved ? 0.95 : 0.4 });
+            }
+
+            // 標籤擺中點、微彎的外側
+            label.position.set(cx, cy);
+            label.alpha = involved ? 0.8 : 0.25;
+        }
+    };
+
+    // 語言切換：更新節點標籤
+    onLangChange(() => {
+        for (const v of nodeViews.values()) v.label.text = t(`${v.def.i18nKey}.title`);
+    });
+}

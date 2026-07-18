@@ -8,7 +8,7 @@ const isDev = process.env.NODE_ENV === 'development';
 module.exports = {
     mode: isDev ? 'development' : 'production',
     entry: {
-        main: './src/home/index.ts',                             // 入口首頁的 JS
+        main: './src/home/index.tsx',                            // 入口首頁：React 殼 + Pixi render graph
         configurator: './src/babylonJSDemo/src/configurator/index.ts', // Babylon.js 產品配置器
         pixi_hub: './src/pixiJSDemo/pixiHub/index.ts',           // Pixi.js 選單頁
         pixi_stress: './src/pixiJSDemo/stressTest/index.ts',     // Pixi.js 壓力測試

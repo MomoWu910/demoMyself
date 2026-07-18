@@ -1,95 +1,20 @@
 <!DOCTYPE html>
-<html lang="zh-TW" style="background-color: #0f0f11;">
+<html lang="zh-TW" style="background-color: #0b0c10;">
 <head>
     <meta charset="UTF-8">
-    <meta name="theme-color" content="#0f0f11">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b0c10">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title data-i18n="title.home">Eric Wu | Interactive 3D & Frontend Demos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
-<body class="home-page">
-    <h1>Eric Wu</h1>
-    <p class="role" data-i18n="home.role">Frontend Engineer · 3D / 高互動 / 複雜 Web 應用</p>
-
-    <div class="grid">
-        <a href="./pixi_x_three.html" class="card">
-            <div class="card-content">
-                <h3><span class="icon">🧬</span> <span data-i18n="home.crossEngine.title">Cross-Engine Rendering</span></h3>
-                <p data-i18n-html="home.crossEngine.desc">PixiJS (2D UI) and Three.js (3D scene) drawing into a <strong>single shared WebGL context</strong> — manual GL state management to avoid depth / stencil / culling pollution, with cannon-es physics.</p>
-            </div>
-            <div class="tags">
-                <span class="tag">PixiJS v8</span>
-                <span class="tag">Three.js</span>
-                <span class="tag">WebGL Context</span>
-            </div>
-            <div class="card-footer">
-                <span style="font-size: 0.8rem; color: #666;"> </span>
-                <span class="btn-launch" data-i18n="home.crossEngine.cta">Open Demo →</span>
-            </div>
-        </a>
-
-        <a href="./configurator.html" class="card">
-            <div class="card-content">
-                <h3><span class="icon">🧩</span> <span data-i18n="home.configurator.title">3D Product Configurator</span></h3>
-                <p data-i18n="home.configurator.desc">Babylon.js 3D product viewer: real-time material variants (glTF KHR_materials_variants), PBR + IBL studio lighting, soft shadows, post-processing, and turntable orbit controls.</p>
-            </div>
-            <div class="tags">
-                <span class="tag">Babylon.js</span>
-                <span class="tag">PBR / IBL</span>
-                <span class="tag">glTF</span>
-            </div>
-            <div class="card-footer">
-                <span style="font-size: 0.8rem; color: #666;"> </span>
-                <span class="btn-launch" data-i18n="home.configurator.cta">Configure →</span>
-            </div>
-        </a>
-
-        <a href="./shader_lab.html" class="card">
-            <div class="card-content">
-                <h3><span class="icon">🎨</span> <span data-i18n="home.shader.title">Shader Lab</span></h3>
-                <p data-i18n-html="home.shader.desc">Custom PixiJS v8 filters with <strong>GLSL and WGSL hand-written side by side</strong> — the same effect, pixel-identical on both backends.</p>
-            </div>
-            <div class="tags">
-                <span class="tag highlight">GLSL</span>
-                <span class="tag highlight">WGSL</span>
-                <span class="tag">React + Zustand</span>
-            </div>
-            <div class="card-footer">
-                <span style="font-size: 0.8rem; color: #666;" data-i18n="home.shader.foot">GLSL + WGSL, both written by hand</span>
-                <span class="btn-launch" data-i18n="home.shader.cta">Open Lab →</span>
-            </div>
-        </a>
-
-        <a href="./findings.html" class="card">
-            <div class="card-content">
-                <h3><span class="icon">📊</span> <span data-i18n="home.lab.title">Rendering Findings</span></h3>
-                <p data-i18n-html="home.lab.desc">Two test cases, <strong>identical draw call counts, 6.5× the CPU cost</strong>. A measured report on PixiJS v8: how I profiled it, what it proved, and why a single metric can invert your conclusion.</p>
-            </div>
-            <div class="tags">
-                <span class="tag">PixiJS v8</span>
-                <span class="tag">CPU Frame Time</span>
-                <span class="tag">Draw Calls</span>
-            </div>
-            <div class="card-footer">
-                <span style="font-size: 0.8rem; color: #666;" data-i18n="home.lab.foot">Measured, not claimed</span>
-                <span class="btn-launch" data-i18n="home.lab.cta">Read Report →</span>
-            </div>
-        </a>
-
-        <a href="./rwd_showcase.html" class="card">
-            <div class="card-content">
-                <h3><span class="icon">📐</span> <span data-i18n="home.rwd.title">RWD Showcase</span></h3>
-                <p data-i18n="home.rwd.desc">Built-in device simulator: preview every page of this site in iPhone / iPad / desktop viewports, rotate, or free-drag to any window size — layouts stay intact everywhere.</p>
-            </div>
-            <div class="tags">
-                <span class="tag highlight">Responsive</span>
-                <span class="tag">Device Simulator</span>
-                <span class="tag">iframe Viewport</span>
-            </div>
-            <div class="card-footer">
-                <span style="font-size: 0.8rem; color: #666;"> </span>
-                <span class="btn-launch" data-i18n="home.rwd.cta">Open Simulator →</span>
-            </div>
-        </a>
-    </div>
+<body class="home-graph">
+    <!-- canvas 內的世界：Pixi 光場 + 節點 + 資源流動 -->
+    <div id="field-stage"></div>
+    <!-- canvas 外的殼：React -->
+    <div id="overlay-root"></div>
+    <!-- 語言切換：i18n 掛進來 -->
+    <div id="lang-slot"></div>
 </body>
 </html>

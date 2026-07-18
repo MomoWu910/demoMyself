@@ -25,6 +25,12 @@ const DICT: Record<string, Entry> = {
 
     // ---- 首頁 ----
     'home.role': { en: 'Frontend Engineer · 3D / High-Interaction / Complex Web Apps', zh: '前端工程師 · 3D / 高互動 / 複雜 Web 應用' },
+    'home.tagline': {
+        en: 'Rendering engineer. Every piece here is built twice — GLSL and WGSL, Pixi and Three — and measured, not claimed.',
+        zh: '渲染工程師。這裡每一件都做兩遍——GLSL 與 WGSL、Pixi 與 Three——而且是量出來的，不是講出來的。',
+    },
+    'home.legend': { en: 'Resources', zh: '流動的資源' },
+    'home.hint': { en: 'Hover a pass to inspect · click to enter', zh: '滑過節點看細節 · 點擊進入' },
     'home.crossEngine.title': { en: 'Cross-Engine Rendering', zh: '跨引擎渲染' },
     'home.crossEngine.desc': {
         en: 'PixiJS (2D UI) and Three.js (3D scene) drawing into a <strong>single shared WebGL context</strong> — manual GL state management to avoid depth / stencil / culling pollution, with cannon-es physics.',
