@@ -2,10 +2,8 @@ import { ConfiguratorView } from './configuratorView';
 import { PartInfo, FinishInfo, TintInfo } from './materialConfigurator';
 import { initI18n, t } from '../../../i18n';
 import { mountReveal } from '../../../shell/reveal';
-import { wireBack } from '../../../shell/backNav';
 
 mountReveal(); // 從首頁 render graph zoom 進來時，從同色淡出揭開
-wireBack(document.querySelector('.back-btn')); // 返回回到實際來源頁，不寫死
 
 // colorway 變體對應的色塊顏色（球鞋模型內建 midnight / beach / street）
 const VARIANT_SWATCH: Record<string, string> = {

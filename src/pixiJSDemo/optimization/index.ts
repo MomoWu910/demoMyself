@@ -364,8 +364,13 @@ import { BenchRunner, BenchPanel, type BenchCase } from '../../bench';
         zIndex: '100' });
     document.body.appendChild(backBtn);
 
-    // 語言切換鈕：放在 back 右側（右上角為 lil-gui）
-    mountLangToggle({ style: { top: '55px', left: '110px' } });
+    // 語言切換鈕：擺在 back 正下方，避開右上的 lil-gui 與變寬的 back
+    const langWrap = mountLangToggle({ style: { top: '55px', left: '20px' } });
+    const placeLang = () => {
+        langWrap.style.left = `${backBtn.offsetLeft}px`;
+        langWrap.style.top = `${backBtn.offsetTop + backBtn.offsetHeight + 10}px`;
+    };
+    placeLang();
 
     // 語言切換時更新 back 與 GUI 控制項名稱（說明面板自行訂閱）
     onLangChange(() => {
@@ -374,6 +379,7 @@ import { BenchRunner, BenchPanel, type BenchCase } from '../../bench';
         cMode.name(t('gui.mode'));
         cCount.name(t('gui.objectCount'));
         cBench.name(t('gui.runBench'));
+        placeLang(); // back 文字變寬/變窄後重新定位語言鈕
     });
 
 })();

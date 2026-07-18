@@ -99,8 +99,14 @@ export class UIManager {
         });
         document.body.appendChild(backBtn);
 
-        // 語言切換鈕：放在 back 右側（右上角為 lil-gui）
-        mountLangToggle({ style: { top: '55px', left: '110px' } });
+        // 語言切換鈕：擺在 back 正下方，避開右上的 lil-gui 與變寬的 back
+        const langWrap = mountLangToggle({ style: { top: '55px', left: '20px' } });
+        const placeLang = () => {
+            langWrap.style.left = `${backBtn.offsetLeft}px`;
+            langWrap.style.top = `${backBtn.offsetTop + backBtn.offsetHeight + 10}px`;
+        };
+        placeLang();
+        onLangChange(placeLang);
     }
 
     public updateCount(count: number) {

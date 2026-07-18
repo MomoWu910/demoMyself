@@ -64,7 +64,7 @@ export const NODES: ProjectNode[] = [
         x: 0.31,
         y: 0.36,
         r: 0.085,
-        narrow: { x: 0.32, y: 0.24, r: 0.14 },
+        narrow: { x: 0.32, y: 0.28, r: 0.13 },
     },
     {
         id: 'shaderLab',
