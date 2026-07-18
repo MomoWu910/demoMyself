@@ -201,8 +201,10 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         // 邊環：dual 節點畫成琥珀/紫兩半弧，其餘單色
         const ringW = active ? 3 : 2;
         if (dual) {
-            v.ring.arc(0, 0, r, -Math.PI / 2, Math.PI / 2).stroke({ color: AMBER, width: ringW, alpha: active ? 1 : 0.85 });
-            v.ring.arc(0, 0, r, Math.PI / 2, (Math.PI * 3) / 2).stroke({ color: VIOLET, width: ringW, alpha: active ? 1 : 0.85 });
+            // 先 moveTo 到弧的起點，否則 arc() 會從路徑預設起點 (0,0) 拉一條線到弧起點——
+            // 那就是節點中央到頂端那條多餘的垂直線。
+            v.ring.moveTo(0, -r).arc(0, 0, r, -Math.PI / 2, Math.PI / 2).stroke({ color: AMBER, width: ringW, alpha: active ? 1 : 0.85 });
+            v.ring.moveTo(0, r).arc(0, 0, r, Math.PI / 2, (Math.PI * 3) / 2).stroke({ color: VIOLET, width: ringW, alpha: active ? 1 : 0.85 });
         } else {
             v.ring.circle(0, 0, r).stroke({ color: base, width: ringW, alpha: active ? 1 : 0.7 });
         }
