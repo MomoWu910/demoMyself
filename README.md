@@ -14,6 +14,36 @@
 
 ---
 
+## 首頁：一張「活的 render graph」與動線 — `src/home/`
+
+首頁不是靜態選單，而是一張用 PixiJS 畫的**互動式 render graph**：把整個作品集當成一條 GPU 渲染管線來呈現——每個專案是一個 pass（節點），節點之間流動的是它們**共用的技術**（WebGL Context、Pixi v8、`src/bench`、GLSL·WGSL）。這個入口本身就 dogfood 了作品集的技術棧。
+
+- **視覺識別「同一件事做兩遍」**：GLSL + WGSL、Pixi + Three、WebGL + WebGPU、量測而非宣稱。雙色琥珀（GLSL / WebGL）↔ 紫（WGSL / WebGPU）貫穿全站。
+- **架構分工**：**React 管 canvas 外的殼（標題 / inspector / 圖例），Pixi 管 canvas 內的世界（shader 光場 / 節點 / 資源流動）**，兩邊只透過一個 Zustand store 溝通，React 不參與 render loop。
+- **互動**：hover 節點高亮它與相連節點、旁邊長出細節卡；點擊時「往節點顏色 zoom」轉場，落地頁再從同色淡出揭開，整站像一個連續空間。鍵盤可 Tab 聚焦、尊重 `prefers-reduced-motion`。
+- **省電**：全螢幕 shader 光場以半解析度渲染、幀率上限 30fps、分頁切走即暫停，避免持續高 GPU 負載讓裝置發燙。
+
+### 動線
+
+所有頁面串成一條清楚的主線：
+
+```text
+首頁 render graph
+├─ Cross-Engine Rendering（PixiJS × Three.js）
+├─ 3D Product Configurator（Babylon.js）
+├─ Shader Lab（GLSL + WGSL）
+├─ RWD Showcase（裝置模擬器）
+└─ Rendering Findings（實驗結論）
+      └─ 底下的三個壓測實驗：
+         ├─ Filter Stress Test        （pixi_stress）
+         ├─ Super Shiba Mark          （pixi_stress2）
+         └─ Optimization Lab          （pixi_optimization）
+```
+
+返回採**階層式**（回到固定的父頁，不看 referrer——用 referrer 會在互相連結的頁面之間造成死循環）：首頁的各節點頁 → 返回首頁；三個壓測 → 返回「實驗結論」→ 再返回首頁。
+
+---
+
 ## Demo 一覽
 
 ### 1. 跨引擎渲染整合：PixiJS × Three.js 共用 WebGL Context — `src/pixiJSDemo/pixiXthree/`
