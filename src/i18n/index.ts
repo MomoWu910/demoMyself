@@ -30,7 +30,7 @@ const DICT: Record<string, Entry> = {
         en: 'Rendering engineer. Every piece here is built twice — GLSL and WGSL, Pixi and Three — and measured, not claimed.',
         zh: '渲染工程師。這裡每一件都做兩遍——GLSL 與 WGSL、Pixi 與 Three——而且是量出來的，不是講出來的。',
     },
-    'home.legend': { en: 'Resources', zh: '流動的資源' },
+    'home.legend': { en: 'Shared tech', zh: '共用技術' },
     'home.hint': { en: 'Hover a pass to inspect · click to enter', zh: '滑過節點看細節 · 點擊進入' },
     'home.crossEngine.title': { en: 'Cross-Engine Rendering', zh: '跨引擎渲染' },
     'home.crossEngine.desc': {

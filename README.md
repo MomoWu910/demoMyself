@@ -16,7 +16,7 @@
 
 ## 首頁：一張「活的 render graph」與動線 — `src/home/`
 
-首頁不是靜態選單，而是一張用 PixiJS 畫的**互動式 render graph**：把整個作品集當成一條 GPU 渲染管線來呈現——每個專案是一個 pass（節點），節點之間流動的是它們**共用的技術**（WebGL Context、Pixi v8、`src/bench`、GLSL·WGSL）。這個入口本身就 dogfood 了作品集的技術棧。
+首頁不是靜態選單，而是一張用 PixiJS 畫的**互動式 render graph**：把整個作品集當成一條 GPU 渲染管線來呈現——每個專案是一個 pass（節點），節點之間的連線代表它們**共用的技術**（WebGL Context、Pixi v8、`src/bench`、GLSL·WGSL；兩端都用到才連線）。這個入口本身就 dogfood 了作品集的技術棧。
 
 - **視覺識別「同一件事做兩遍」**：GLSL + WGSL、Pixi + Three、WebGL + WebGPU、量測而非宣稱。雙色琥珀（GLSL / WebGL）↔ 紫（WGSL / WebGPU）貫穿全站。
 - **架構分工**：**React 管 canvas 外的殼（標題 / inspector / 圖例），Pixi 管 canvas 內的世界（shader 光場 / 節點 / 資源流動）**，兩邊只透過一個 Zustand store 溝通，React 不參與 render loop。

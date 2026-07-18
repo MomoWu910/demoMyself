@@ -2,7 +2,7 @@
  * 首頁 render graph 的單一真實來源。
  *
  * 這個作品集的動線被畫成一張「活的 GPU render graph」：每個專案是一個 pass（節點），
- * 它們**共用的技術是流動的資源**（邊）。這裡描述節點與邊，Pixi 舞台照著畫、
+ * 邊代表**兩端節點共用的技術**（不是有向的資料流——A 跟 B 之間畫線，是因為兩者都用到這項技術）。這裡描述節點與邊，Pixi 舞台照著畫、
  * React overlay 照著長 inspector——之後跨頁導覽也吃同一份資料。
  *
  * 座標是正規化的（0..1，y 向下），刻意排出「架構」而非隨機散佈：
@@ -10,7 +10,7 @@
  * Configurator 是自成一島的 Babylon 3D 旗艦（技術上跟其他人不共用底層——這件事本身就是資訊）。
  */
 
-/** 邊上流動的資源；tone 決定它畫成什麼顏色（琥珀=GLSL/WebGL，紫=WGSL/WebGPU）。 */
+/** 邊代表的共用技術；tone 決定它畫成什麼顏色（琥珀=GLSL/WebGL，紫=WGSL/WebGPU）。 */
 export type Tone = 'glsl' | 'wgsl' | 'dual' | 'pixi' | 'neutral';
 
 /** tone → CSS hex。首頁 zoom 轉場與落地頁 reveal 共用同一組色，動線才連得起來。 */
@@ -46,7 +46,7 @@ export interface ProjectNode {
 export interface ResourceEdge {
     from: string;
     to: string;
-    /** 這條邊流動的是什麼資源——mono 標籤直接畫在邊上 */
+    /** 這條邊代表哪一項共用技術——mono 標籤直接畫在邊上 */
     resource: string;
     tone: Tone;
     /** RWD 這種「包住一切」的 meta 關聯畫成虛線、比較淡 */
@@ -129,7 +129,7 @@ export function nodeById(id: string): ProjectNode {
     return NODES.find((n) => n.id === id) ?? NODES[0];
 }
 
-/** 圖例上要列的「資源」種類——這是 render graph 的 key。 */
+/** 圖例上要列的共用技術種類——這是 render graph 的圖例 key。 */
 export const RESOURCE_LEGEND: Array<{ resource: string; tone: Tone }> = [
     { resource: 'WebGL Context', tone: 'glsl' },
     { resource: 'Pixi v8', tone: 'pixi' },

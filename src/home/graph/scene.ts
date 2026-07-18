@@ -301,12 +301,16 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
             }
             edgeGfx.stroke({ color, width: involved ? 1.4 : 1, alpha: involved ? 0.5 : 0.18 });
 
-            // 資源封包：沿弧線流動的小點
-            const packets = 2;
-            for (let k = 0; k < packets; k++) {
-                const tt = (time * 0.18 + k / packets) % 1;
-                const p = bezier(a.px, a.py, cx, cy, b.px, b.py, tt);
-                edgeGfx.circle(p.x, p.y, involved ? 2.6 : 1.8).fill({ color, alpha: involved ? 0.95 : 0.4 });
+            // 共用技術：小點從弧線中點朝「兩端」對稱散出、到端點淡出——
+            // 表達「這項技術被兩個節點共用」，而不是 A 單向送給 B。
+            for (let k = 0; k < 2; k++) {
+                const beat = (time * 0.35 + k * 0.5) % 1;
+                const fade = Math.sin(beat * Math.PI); // 中點亮、越靠端點越淡
+                for (const dir of [-1, 1]) {
+                    const tt = 0.5 + dir * 0.5 * beat;
+                    const p = bezier(a.px, a.py, cx, cy, b.px, b.py, tt);
+                    edgeGfx.circle(p.x, p.y, involved ? 2.4 : 1.7).fill({ color, alpha: (involved ? 0.9 : 0.38) * fade });
+                }
             }
 
             // 標籤擺中點、微彎的外側
