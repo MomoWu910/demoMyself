@@ -2,6 +2,7 @@ import { Application, Container, Graphics, Sprite, Text, Texture, TextStyle } fr
 import { EDGES, NODES, nodeById, type ProjectNode, type Tone } from '../projects';
 import { useHomeStore, homeState, type Backend } from '../store';
 import { createFieldFilter } from './field';
+import { enterProject, ENTER_MS } from '../enter';
 import { t, onLangChange } from '../../i18n';
 
 /** tone → 代表色（琥珀=GLSL/WebGL，紫=WGSL/WebGPU，藍=Pixi，灰=中性）。 */
@@ -132,12 +133,14 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         c.on('pointerout', () => {
             if (homeState().activeId === def.id) useHomeStore.getState().setActive(null);
         });
-        c.on('pointertap', () => {
-            window.location.href = def.href;
-        });
+        c.on('pointertap', () => enterProject(def.id));
 
         nodeViews.set(def.id, { def, container: c, glow, ring, label, px: 0, py: 0, pr: 0 });
     }
+
+    // ---- 轉場層：點擊節點時，一團該節點顏色的圓從它身上長滿全螢幕 ----
+    const fxLayer = new Graphics();
+    app.stage.addChild(fxLayer);
 
     // ---- 版面：正規化座標 → 螢幕像素 ----
     let W = 0;
@@ -193,9 +196,22 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
 
     // ---- 動畫迴圈 ----
     let elapsed = 0;
+    let enterStart = -1;
     app.ticker.add(({ deltaMS }) => {
         elapsed += deltaMS / 1000;
         field.setTime(elapsed);
+
+        const enteringId = homeState().enteringId;
+        if (enteringId) {
+            if (enterStart < 0) enterStart = elapsed;
+            const v = nodeViews.get(enteringId)!;
+            const p = Math.min((elapsed - enterStart) / (ENTER_MS / 1000), 1);
+            const ease = p * p * (3 - 2 * p);
+            const r = v.pr + ease * Math.hypot(W, H) * 1.2;
+            fxLayer.clear();
+            fxLayer.circle(v.px, v.py, r).fill({ color: TONE[v.def.tone], alpha: Math.min(1, 0.35 + ease) });
+            return; // 轉場中就不必再更新底下的圖了
+        }
 
         const activeId = homeState().activeId;
 
