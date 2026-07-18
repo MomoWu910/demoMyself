@@ -1,7 +1,9 @@
 import { initI18n, t, onLangChange } from '../i18n';
 import { mountReveal } from '../shell/reveal';
+import { wireBack } from '../shell/backNav';
 
 mountReveal(); // 從首頁 render graph zoom 進來時，從同色淡出揭開
+wireBack(document.querySelector('.back-btn')); // 返回回到實際來源頁，不寫死
 
 // ------------------------------------------------
 // RWD Showcase —— 站內建裝置模擬器

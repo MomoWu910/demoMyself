@@ -1,11 +1,13 @@
 import './style.css';
 import { initI18n, t, onLangChange } from '../i18n';
 import { mountReveal } from '../shell/reveal';
+import { wireBack } from '../shell/backNav';
 import { withSpeedup } from '../bench';
 import type { BenchReport } from '../bench';
 import { REPORTS, FINDINGS } from './data';
 
 mountReveal(); // 從首頁 render graph zoom 進來時，從同色淡出揭開
+wireBack(document.querySelector('.back-link')); // 返回回到實際來源頁（首頁或 hub），不寫死
 
 const tabsEl = document.getElementById('renderer-tabs') as HTMLDivElement;
 const envEl = document.getElementById('env-line') as HTMLDivElement;

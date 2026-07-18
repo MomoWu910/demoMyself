@@ -89,8 +89,13 @@ html, body {
 .inspector {
     position: absolute;
     right: clamp(20px, 3.5vw, 40px);
-    bottom: clamp(20px, 3.5vw, 40px);
+    /* 底部留出手機瀏覽器工具列 / home indicator 的安全區，「進入」鈕才不會被蓋住 */
+    bottom: calc(clamp(20px, 3.5vw, 40px) + env(safe-area-inset-bottom, 0px));
     width: min(360px, 78vw);
+    /* 內容再長也不溢出視窗——超過就在卡片內捲動，確保 desc/tags/進入 全看得到 */
+    max-height: calc(100dvh - 2 * clamp(20px, 3.5vw, 40px) - env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     pointer-events: auto;
     padding: 20px 22px;
     border-radius: 14px;
