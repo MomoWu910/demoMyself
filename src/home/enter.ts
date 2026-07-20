@@ -27,6 +27,51 @@ export function enterProject(id: string): void {
     }
     useHomeStore.getState().setEntering(id);
     window.setTimeout(() => {
-        window.location.href = node.href;
-    }, ENTER_MS);
+        handOffToDom(TONE_HEX[node.tone], () => {
+            window.location.href = node.href;
+        });
+    }, ENTER_MS - HANDOFF_MS);
+}
+
+/** DOM 交棒遮罩畫出來所需的餘裕，從 ENTER_MS 裡扣掉，總時長維持不變。 */
+const HANDOFF_MS = 80;
+
+const EXIT_COVER_CLASS = 'shell-exit-cover';
+
+// 交棒遮罩是 DOM，會跟著首頁一起被存進 bfcache；按返回回來時它原封不動還在，
+// 整個畫面就卡在那片純色上（scene.ts 的 pageshow 只清 Pixi 的轉場狀態，管不到這個 div）。
+// 模組載入時註冊一次，回到首頁一律清掉；正常首次載入時沒有遮罩，這裡是 no-op。
+window.addEventListener('pageshow', () => {
+    document.querySelectorAll(`.${EXIT_COVER_CLASS}`).forEach((el) => el.remove());
+});
+
+/**
+ * zoom 是畫在 Pixi 的 WebGL canvas 上，那個顏色只存在於 canvas 裡。導頁時瀏覽器會拆掉
+ * WebGL context，canvas 立刻變空、露出底下的頁面底色，而新頁還沒畫出來——就是那一下黑屏。
+ *
+ * 所以在導頁前疊一層同色的 DOM div：此刻畫面本來就已經是純節點色，視覺上看不出差別，
+ * 但 DOM 圖層不隨 WebGL context 消失，canvas 被拆掉時仍撐著畫面。
+ * 要等它真的上畫面（連等兩幀）再導頁，否則遮罩還沒繪製出來就換頁，等於沒蓋。
+ */
+function handOffToDom(color: string, go: () => void): void {
+    const cover = document.createElement('div');
+    cover.className = EXIT_COVER_CLASS;
+    cover.setAttribute('aria-hidden', 'true');
+    Object.assign(cover.style, {
+        position: 'fixed',
+        inset: '0',
+        zIndex: '99999',
+        pointerEvents: 'none',
+        background: color,
+    } satisfies Partial<CSSStyleDeclaration>);
+    document.body.appendChild(cover);
+
+    let done = false;
+    const once = () => {
+        if (done) return;
+        done = true;
+        go();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(once));
+    window.setTimeout(once, HANDOFF_MS * 2); // 分頁在背景時 rAF 不跑，保險
 }

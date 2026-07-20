@@ -23,6 +23,10 @@ export function mountReveal(): void {
     if (!color) return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
 
+    // 有 bootHead 的頁面（home / shaderLab / findings）已經在 <head> 就把落地色鋪成 html 底色，
+    // 且 body 淡入本身就是揭開動作。這裡再蓋一層會在內容已經現身後又蓋回去，反而多閃一次。
+    if ((window as unknown as { __shellBootTone?: number }).__shellBootTone) return;
+
     const cover = () => {
         const el = document.createElement('div');
         el.className = 'shell-reveal';
