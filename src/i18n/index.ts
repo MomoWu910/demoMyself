@@ -467,11 +467,18 @@ const STORAGE_KEY = 'site-lang';
 const listeners = new Set<(l: Lang) => void>();
 let current: Lang = readLang();
 
+/**
+ * 語言判定：使用者選過就照他的選擇，沒選過則跟隨系統語言（zh-TW / zh-CN… 一律視為中文）。
+ * webpack 的 i18nHead / i18nBoot 內聯腳本必須用同一套判定，否則會先畫錯語言再換一次。
+ */
 function readLang(): Lang {
     try {
         const v = localStorage.getItem(STORAGE_KEY);
         if (v === 'en' || v === 'zh') return v;
-    } catch { /* localStorage 不可用時退回預設 */ }
+    } catch { /* localStorage 不可用時往下走系統語言 */ }
+    try {
+        if (/^zh/i.test(navigator.language || '')) return 'zh';
+    } catch { /* navigator 不可用就退回英文 */ }
     return 'en';
 }
 
@@ -552,4 +559,13 @@ export function initI18n(toggle?: { parent?: HTMLElement; style?: Partial<CSSSty
     document.documentElement.lang = current === 'zh' ? 'zh-TW' : 'en';
     applyDom();
     if (toggle !== undefined) mountLangToggle(toggle);
+
+    // 在專案頁切換語言後按返回，首頁是從 bfcache 還原的：DOM 與這個模組的 current
+    // 都停在離開前的狀態，不會反映剛剛的選擇。還原時重讀一次 storage，有變才套用
+    // （setLang 會一併更新 <html lang>、靜態 DOM 與所有 onLangChange 監聽者，
+    // 例如首頁 Pixi 的節點標籤與語言切換鈕的選中狀態）。
+    window.addEventListener('pageshow', () => {
+        const stored = readLang();
+        if (stored !== current) setLang(stored);
+    });
 }

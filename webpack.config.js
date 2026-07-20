@@ -66,33 +66,62 @@ function loadDict() {
 }
 const DICT = loadDict();
 
-/**
- * 語言切換原本要等 bundle 執行（實測約 1.9s）才把 data-i18n 的英文換成中文，
- * 偏好中文的使用者每次都會先看到英文再跳一次。
- *
- * 這裡在 build 時掃出該頁靜態 HTML 用到的 key，只把這幾條中文字串內聯進頁尾腳本，
- * 在解析器讀到 </body> 時就同步換好——早於 deferred bundle，也還在 boot 遮罩蓋著的期間，
- * 所以使用者從第一眼就是中文。bundle 之後照常再 applyDom 一次，值相同不會有變化。
+/*
+ * data-i18n 的翻譯原本要等 bundle 執行（實測約 1.9s）才套用，偏好中文的使用者
+ * 每次進頁都會先看到英文再跳一次。以下在 build 時把該頁用到的中文字串內聯進頁面：
+ * i18nHead 先遮住 body、i18nBoot 在頁尾同步翻好再解除，全程早於 deferred bundle。
  */
-function i18nBootFor(templatePath) {
+
+/** 與 src/i18n 的 readLang() 同一套判定：選過就照選的，沒選過跟隨系統語言。 */
+const RESOLVE_LANG_JS =
+    'var L;try{L=localStorage.getItem("site-lang")}catch(_){}'
+    + 'if(L!=="en"&&L!=="zh"){L=/^zh/i.test(navigator.language||"")?"zh":"en"}';
+
+/** 掃出該頁靜態 HTML 用到的 key → 中文字串；沒有可翻譯內容就回 null。 */
+function zhStringsFor(templatePath) {
     const html = fs.readFileSync(path.resolve(__dirname, templatePath), 'utf8');
     const keys = new Set();
     for (const m of html.matchAll(/data-i18n(?:-html|-title)?="([^"]+)"/g)) keys.add(m[1]);
-
     const zh = {};
     for (const k of keys) if (DICT[k]) zh[k] = DICT[k].zh;
-    if (!Object.keys(zh).length) return '';
+    return Object.keys(zh).length ? zh : null;
+}
+
+/**
+ * 放 <head>：中文使用者先把 body 遮起來。
+ *
+ * 翻譯腳本必須放在 </body> 前（元素要先存在才改得到），但瀏覽器會**漸進繪製**——
+ * 解析器還沒讀到頁尾時，前面已解析的英文就先畫出來了，於是閃一下才變中文。
+ * 有 bootHead 的三頁因為 body 本來就是透明的看不出來，configurator / rwd_showcase 沒有遮罩就露餡。
+ * 600ms 保險上限，腳本萬一沒跑到也不會讓頁面一直空著。
+ */
+function i18nHeadFor(templatePath) {
+    if (!zhStringsFor(templatePath)) return '';
+    return '<style>html.i18n-pending body{opacity:0}</style>'
+        + '<script>(function(){' + RESOLVE_LANG_JS
+        + 'if(L!=="zh")return;var h=document.documentElement;'
+        + 'h.className+=" i18n-pending";'
+        + 'setTimeout(function(){h.classList.remove("i18n-pending")},600)})();</script>';
+}
+
+/** 放 </body> 前：同步套用中文，然後解除上面那層遮罩。 */
+function i18nBootFor(templatePath) {
+    const zh = zhStringsFor(templatePath);
+    if (!zh) return '';
 
     // JSON 內若出現 </script> 會提早結束腳本區塊，轉義掉
     const json = JSON.stringify(zh).replace(/<\//g, '<\\/');
-    return '<script>(function(){var L;try{L=localStorage.getItem("site-lang")}catch(_){}'
-        + 'if(L!=="zh")return;var D=' + json + ',d=document;'
+    return '<script>(function(){' + RESOLVE_LANG_JS
+        + 'var h=document.documentElement;'
+        + 'if(L!=="zh"){h.classList.remove("i18n-pending");return}'
+        + 'var D=' + json + ',d=document;'
         + 'd.documentElement.lang="zh-TW";'
         + 'var q=d.querySelectorAll("[data-i18n],[data-i18n-html],[data-i18n-title]");'
         + 'for(var i=0;i<q.length;i++){var e=q[i],s=e.dataset;'
         + 'if(s.i18n&&D[s.i18n]!=null)e.textContent=D[s.i18n];'
         + 'if(s.i18nHtml&&D[s.i18nHtml]!=null)e.innerHTML=D[s.i18nHtml];'
-        + 'if(s.i18nTitle&&D[s.i18nTitle]!=null)e.title=D[s.i18nTitle];}})();</script>';
+        + 'if(s.i18nTitle&&D[s.i18nTitle]!=null)e.title=D[s.i18nTitle];}'
+        + 'h.classList.remove("i18n-pending")})();</script>';
 }
 
 module.exports = {
@@ -159,14 +188,14 @@ module.exports = {
             template: './src/home/index.html',
             chunks: ['main'],
             title: 'Eric Wu - Portfolio',
-            templateParameters: { bootHead, i18nBoot: i18nBootFor('./src/home/index.html') },
+            templateParameters: { bootHead, i18nBoot: i18nBootFor('./src/home/index.html'), i18nHead: i18nHeadFor('./src/home/index.html') },
         }),
         new HtmlWebpackPlugin({
             filename: 'configurator.html',
             template: './src/babylonJSDemo/src/configurator/index.html',
             chunks: ['configurator'],
             title: 'Product Configurator',
-            templateParameters: { i18nBoot: i18nBootFor('./src/babylonJSDemo/src/configurator/index.html') },
+            templateParameters: { i18nBoot: i18nBootFor('./src/babylonJSDemo/src/configurator/index.html'), i18nHead: i18nHeadFor('./src/babylonJSDemo/src/configurator/index.html') },
         }),
         new HtmlWebpackPlugin({
             filename: 'pixi_stress.html',
@@ -197,21 +226,21 @@ module.exports = {
             template: './src/rwdShowcase/index.html',
             chunks: ['rwd_showcase'],
             title: 'RWD Showcase',
-            templateParameters: { i18nBoot: i18nBootFor('./src/rwdShowcase/index.html') },
+            templateParameters: { i18nBoot: i18nBootFor('./src/rwdShowcase/index.html'), i18nHead: i18nHeadFor('./src/rwdShowcase/index.html') },
         }),
         new HtmlWebpackPlugin({
             filename: 'findings.html',
             template: './src/findings/index.html',
             chunks: ['findings'],
             title: 'Rendering Findings',
-            templateParameters: { bootHead, i18nBoot: i18nBootFor('./src/findings/index.html') },
+            templateParameters: { bootHead, i18nBoot: i18nBootFor('./src/findings/index.html'), i18nHead: i18nHeadFor('./src/findings/index.html') },
         }),
         new HtmlWebpackPlugin({
             filename: 'shader_lab.html',
             template: './src/shaderLab/index.html',
             chunks: ['shader_lab'],
             title: 'Shader Lab',
-            templateParameters: { bootHead, i18nBoot: i18nBootFor('./src/shaderLab/index.html') },
+            templateParameters: { bootHead, i18nBoot: i18nBootFor('./src/shaderLab/index.html'), i18nHead: i18nHeadFor('./src/shaderLab/index.html') },
         }),
         new CopyWebpackPlugin({
             patterns: [
