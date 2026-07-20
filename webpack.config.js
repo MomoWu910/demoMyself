@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
@@ -45,6 +46,54 @@ const bootHead = [
         + 'addEventListener("pageshow",function(v){if(!v.persisted)return;'
         + 'h.classList.remove("shell-boot");if(t)h.style.backgroundColor=p})})();</script>',
 ].join('');
+
+/**
+ * build 時把 i18n 字典載進來（用 esbuild 轉 TS，專案已有這個依賴）。
+ * 模組頂層只會呼叫 readLang()，其中的 localStorage 存取包在 try/catch 裡，在 Node 下安全。
+ */
+function loadDict() {
+    const out = require('esbuild').buildSync({
+        entryPoints: [path.resolve(__dirname, 'src/i18n/index.ts')],
+        bundle: true,
+        format: 'cjs',
+        platform: 'node',
+        write: false,
+        logLevel: 'silent',
+    });
+    const mod = { exports: {} };
+    new Function('module', 'exports', 'require', out.outputFiles[0].text)(mod, mod.exports, require);
+    return mod.exports.DICT;
+}
+const DICT = loadDict();
+
+/**
+ * 語言切換原本要等 bundle 執行（實測約 1.9s）才把 data-i18n 的英文換成中文，
+ * 偏好中文的使用者每次都會先看到英文再跳一次。
+ *
+ * 這裡在 build 時掃出該頁靜態 HTML 用到的 key，只把這幾條中文字串內聯進頁尾腳本，
+ * 在解析器讀到 </body> 時就同步換好——早於 deferred bundle，也還在 boot 遮罩蓋著的期間，
+ * 所以使用者從第一眼就是中文。bundle 之後照常再 applyDom 一次，值相同不會有變化。
+ */
+function i18nBootFor(templatePath) {
+    const html = fs.readFileSync(path.resolve(__dirname, templatePath), 'utf8');
+    const keys = new Set();
+    for (const m of html.matchAll(/data-i18n(?:-html|-title)?="([^"]+)"/g)) keys.add(m[1]);
+
+    const zh = {};
+    for (const k of keys) if (DICT[k]) zh[k] = DICT[k].zh;
+    if (!Object.keys(zh).length) return '';
+
+    // JSON 內若出現 </script> 會提早結束腳本區塊，轉義掉
+    const json = JSON.stringify(zh).replace(/<\//g, '<\\/');
+    return '<script>(function(){var L;try{L=localStorage.getItem("site-lang")}catch(_){}'
+        + 'if(L!=="zh")return;var D=' + json + ',d=document;'
+        + 'd.documentElement.lang="zh-TW";'
+        + 'var q=d.querySelectorAll("[data-i18n],[data-i18n-html],[data-i18n-title]");'
+        + 'for(var i=0;i<q.length;i++){var e=q[i],s=e.dataset;'
+        + 'if(s.i18n&&D[s.i18n]!=null)e.textContent=D[s.i18n];'
+        + 'if(s.i18nHtml&&D[s.i18nHtml]!=null)e.innerHTML=D[s.i18nHtml];'
+        + 'if(s.i18nTitle&&D[s.i18nTitle]!=null)e.title=D[s.i18nTitle];}})();</script>';
+}
 
 module.exports = {
     mode: isDev ? 'development' : 'production',
@@ -110,7 +159,7 @@ module.exports = {
             template: './src/home/index.html',
             chunks: ['main'],
             title: 'Eric Wu - Portfolio',
-            templateParameters: { bootHead },
+            templateParameters: { bootHead, i18nBoot: i18nBootFor('./src/home/index.html') },
         }),
         new HtmlWebpackPlugin({
             filename: 'configurator.html',
@@ -153,14 +202,14 @@ module.exports = {
             template: './src/findings/index.html',
             chunks: ['findings'],
             title: 'Rendering Findings',
-            templateParameters: { bootHead },
+            templateParameters: { bootHead, i18nBoot: i18nBootFor('./src/findings/index.html') },
         }),
         new HtmlWebpackPlugin({
             filename: 'shader_lab.html',
             template: './src/shaderLab/index.html',
             chunks: ['shader_lab'],
             title: 'Shader Lab',
-            templateParameters: { bootHead },
+            templateParameters: { bootHead, i18nBoot: i18nBootFor('./src/shaderLab/index.html') },
         }),
         new CopyWebpackPlugin({
             patterns: [

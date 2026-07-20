@@ -10,7 +10,9 @@ export type Lang = 'en' | 'zh';
 
 type Entry = { en: string; zh: string };
 
-const DICT: Record<string, Entry> = {
+// 匯出給 webpack 在 build 時取用：把靜態 HTML 會用到的中文字串內聯進頁面，
+// 避免使用者要等 bundle 執行才從英文換成中文（見 webpack.config.js 的 i18nBoot）。
+export const DICT: Record<string, Entry> = {
     // ---- 文件標題 ----
     'title.home': { en: 'Eric Wu | Interactive 3D & Frontend Demos', zh: 'Eric Wu | 互動 3D 與前端 Demo' },
     'title.hub': { en: 'PixiJS Experiments | Eric Wu', zh: 'PixiJS 實驗場 | Eric Wu' },
