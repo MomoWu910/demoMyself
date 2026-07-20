@@ -166,6 +166,7 @@ module.exports = {
             template: './src/babylonJSDemo/src/configurator/index.html',
             chunks: ['configurator'],
             title: 'Product Configurator',
+            templateParameters: { i18nBoot: i18nBootFor('./src/babylonJSDemo/src/configurator/index.html') },
         }),
         new HtmlWebpackPlugin({
             filename: 'pixi_stress.html',
@@ -196,6 +197,7 @@ module.exports = {
             template: './src/rwdShowcase/index.html',
             chunks: ['rwd_showcase'],
             title: 'RWD Showcase',
+            templateParameters: { i18nBoot: i18nBootFor('./src/rwdShowcase/index.html') },
         }),
         new HtmlWebpackPlugin({
             filename: 'findings.html',
