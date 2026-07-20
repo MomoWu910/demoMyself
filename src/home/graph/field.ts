@@ -1,26 +1,86 @@
 import { Filter, GlProgram, GpuProgram, UniformGroup, defaultFilterVert } from 'pixi.js';
 
 /**
- * 首頁的 signature：一面流動的雙色 shader 光場。
+ * 首頁的 signature：一面水。
+ *
+ * 整個畫面是一潭靜水，看到的不是雲本身而是**雲的倒影**——所以 fbm 在 y 方向被壓扁成橫向條紋
+ * （各向異性取樣），這是倒影和霧的差別。節點落在水面上，每隔一段時間滴一滴水，漣漪從它身上散開。
+ *
+ * 關鍵在於漣漪**不畫任何亮圈**：它算出來的是高度場，取解析梯度當水面斜率，拿斜率去偏移倒影的取樣
+ * 座標。漣漪經過的地方雲會被扭開又合攏，亮度變化則來自斜面反光。這樣漣漪和倒影是同一潭水，
+ * 而不是兩層疊在一起的貼紙——差別很大，一畫亮圈就破功。
  *
  * 沿用 Shader Lab 那套「同時手寫 GLSL 與 WGSL」的自訂 filter 寫法（見 shaderLab/effects）。
- * domain-warped fbm 做出有機的流動，一條低頻的相位讓整面在**琥珀（GLSL/WebGL）↔ 紫（WGSL/WebGPU）**
- * 之間緩慢呼吸——這個作品集的識別就是「同一件事做兩遍」，連背景都在講這件事。
+ * 一條低頻相位讓整面在**琥珀（GLSL/WebGL）↔ 紫（WGSL/WebGPU）**之間緩慢呼吸——
+ * 這個作品集的識別就是「同一件事做兩遍」，連水色都在講這件事。
  *
  * 刻意壓得很暗、對比很低：它是背景，不能蓋過節點與文字，所以只在 ink 底色上疊薄薄一層 tone，
  * 再加暈影把邊角壓下去。
  */
+
+/**
+ * 同時餵給 GLSL 與 WGSL 的水面常數——兩邊要調就一起調，不然雙後端會長得不一樣。
+ *
+ * 水滴是**瞬時脈衝**：每一發都帶自己的起始時間，排程完全在 CPU 端（節點每隔幾秒滴一次、
+ * hover 補一發、點擊打一發大的）。shader 只認「這裡有一發從 t0 開始的漣漪」，
+ * 所以三種漣漪走同一條路徑，不必在 fragment 裡寫兩套迴圈。
+ *
+ * slot 數量要撐得住同時存活的漣漪，否則新的一發會蓋掉還在擴散的舊的，看起來就是漣漪「走到一半
+ * 被切斷」。5 個節點 × 每 6 秒一發 × 存活約 11 秒 ≈ 9 發常駐，再加 hover 與點擊，16 格才夠。
+ * 挑格子時選**最舊的**（而不是 ring buffer 無腦輪替），犧牲的永遠是最沒價值的那發。
+ */
+const MAX_DROPS = 16;
+/** 超過這個歲數的漣漪一定衰減光了（exp(-11×0.5)≈0.004），CPU 端主動回收讓格子能重用。 */
+const DROP_LIFETIME = 11;
+const WAVE = {
+    /** 波前每秒擴散多遠（單位＝畫面高度） */
+    speed: 0.19,
+    /** 波紋空間頻率：越大圈數越密 */
+    freq: 48.0,
+    /** 波前往中心的指數衰減：尾巴留幾圈 */
+    tail: 5.5,
+    /** 整發漣漪隨時間的生命衰減 */
+    life: 0.5,
+    /** 節點常駐滴水的平均間隔（秒）——排程在 CPU 端，shader 不認識這個值 */
+    period: 6.0,
+    /** 水面斜率偏移倒影 uv 的強度（斜率已正規化成 O(1)，這裡就是實際的 uv 位移上限） */
+    warp: 0.045,
+    /** 斜面反光強度 */
+    spec: 0.32,
+};
+
+/** 節點常駐滴水的平均間隔（秒）。排程在 scene 那端，這裡只是把節奏的來源留在同一個檔案。 */
+export const DROP_PERIOD = WAVE.period;
 
 // WebGL：GLSL 300 es
 const fragment = /* glsl */ `
 in vec2 vTextureCoord;
 out vec4 finalColor;
 
+// vTextureCoord 的 1.0 **不是**畫面右邊緣——Pixi 從 texture pool 拿的輸入紋理比輸出區域大，
+// 有效範圍只到 uOutputFrame.zw / uInputSize.xy。漣漪的落點是畫面座標，不還原就會整體偏掉。
+// highp 是必要的：預設 filter vertex shader 也宣告了這兩個，vertex 預設 highp 而 fragment 預設
+// mediump，精度不符會 link 失敗（見 shaderLab/chromatic 的同一個坑）。
+uniform highp vec4 uInputSize;
+uniform highp vec4 uOutputFrame;
+
 uniform float uTime;
 uniform float uAspect;
+uniform float uDropCount;
 uniform vec3 uInk;
 uniform vec3 uAmber;
 uniform vec3 uViolet;
+// xy = 落點（正規化螢幕座標），z = 起始時間 t0，w = 強度（0 = 這格沒用）
+uniform vec4 uDrops[${MAX_DROPS}];
+// x = 擴散速度倍率，y = 波紋密度倍率（轉場那發要又快又疏，hover 則細碎）
+uniform vec4 uDropMod[${MAX_DROPS}];
+
+const float W_SPEED = ${WAVE.speed.toFixed(3)};
+const float W_FREQ = ${WAVE.freq.toFixed(1)};
+const float W_TAIL = ${WAVE.tail.toFixed(1)};
+const float W_LIFE = ${WAVE.life.toFixed(3)};
+const float W_WARP = ${WAVE.warp.toFixed(4)};
+const float W_SPEC = ${WAVE.spec.toFixed(3)};
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
@@ -46,14 +106,60 @@ float fbm(vec2 p) {
     return v;
 }
 
+/**
+ * 累加所有水滴在 p 處造成的**水面斜率**（不是高度）。
+ *
+ * 高度 h = sin(x·FREQ) · exp(x·TAIL) · exp(-age·LIFE)，其中 x = d - 波前半徑（波前外側 x>0，還沒傳到）。
+ * 斜率用解析微分而不是有限差分——省掉每滴多算兩次取樣，而且不會因為半解析度而抖。
+ */
+vec2 waterSlope(vec2 p) {
+    vec2 slope = vec2(0.0);
+    int count = int(uDropCount);
+    for (int i = 0; i < ${MAX_DROPS}; i++) {
+        if (i >= count) break; // 上限是常數（有些驅動不吃動態迴圈邊界），實際只跑到活著的發數
+        vec4 drop = uDrops[i];
+        if (drop.w <= 0.0) continue;
+
+        vec2 c = vec2(drop.x * uAspect, drop.y);
+        vec2 d = p - c;
+        float r = length(d);
+        if (r < 1e-4) continue;
+
+        float age = uTime - drop.z;
+        if (age < 0.0) continue; // 還沒開始滴
+
+        float speed = W_SPEED * uDropMod[i].x;
+        float freq = W_FREQ * uDropMod[i].y;
+        float x = r - age * speed;
+        if (x > 0.0) continue; // 波前還沒抵達這裡
+
+        float envelope = exp(x * W_TAIL) * exp(-age * W_LIFE) * drop.w;
+        // d(h)/d(r)：波本身的導數 + 包絡的導數。除以 freq 正規化——否則斜率量級直接正比於
+        // 波紋密度，調密一點整個畫面就被推爛。正規化後 slope 落在 O(1)，warp/spec 的常數才有意義。
+        float dhdr = (cos(x * freq) + (W_TAIL / freq) * sin(x * freq)) * envelope;
+        slope += (d / r) * dhdr;
+    }
+    return slope;
+}
+
 void main() {
-    vec2 uv = vTextureCoord;
+    // 還原成 0..1 的畫面座標，漣漪落點才跟節點對得上
+    vec2 screen = vTextureCoord * uInputSize.xy / uOutputFrame.zw;
+
+    vec2 uv = screen;
     uv.x *= uAspect;
     float t = uTime * 0.03;
 
+    // 水面斜率：漣漪唯一的產物。它推開倒影的取樣座標，也決定斜面反光。
+    vec2 slope = waterSlope(uv);
+    vec2 ruv = uv - slope * W_WARP;
+
+    // 倒影不是霧：雲映在水面上會被壓成橫向條紋，所以 y 方向頻率拉高。
+    vec2 auv = vec2(ruv.x, ruv.y * 2.6);
+
     // domain warp：讓流動有機、不像規則的等高線
-    vec2 q = vec2(fbm(uv * 2.0 + t), fbm(uv * 2.0 - t + vec2(5.2, 1.3)));
-    float f = fbm(uv * 3.0 + q * 1.5 + t);
+    vec2 q = vec2(fbm(auv * 2.0 + t), fbm(auv * 2.0 - t + vec2(5.2, 1.3)));
+    float f = fbm(auv * 3.0 + q * 1.5 + t);
 
     // 低頻相位：整面在琥珀↔紫之間呼吸。中點往琥珀偏，兩色才平衡（原本偏紫）
     float toneMix = 0.38 + 0.46 * sin(uv.x * 1.1 - uv.y * 0.8 + uTime * 0.12);
@@ -63,12 +169,17 @@ void main() {
     tone *= mix(1.3, 1.0, toneMix);
 
     vec3 col = uInk;
-    col += tone * smoothstep(0.35, 0.92, f) * 0.15;          // 主體薄霧
+    col += tone * smoothstep(0.35, 0.92, f) * 0.15;          // 倒影主體
     float ridge = smoothstep(0.55, 0.61, f) - smoothstep(0.61, 0.7, f);
-    col += tone * ridge * 0.10;                               // 脊線上的細絲高光
+    col += tone * ridge * 0.10;                               // 雲隙間的細絲高光
+
+    // 斜面反光：水面傾斜處把光反成另一個角度。這不是疊上去的亮圈，是斜率的直接後果——
+    // 所以它只會出現在漣漪確實扭到倒影的地方，兩者永遠對得上。
+    float spec = clamp(dot(slope, vec2(0.55, -0.84)), -1.0, 1.0);
+    col += tone * spec * W_SPEC;
 
     // 暈影：邊角壓暗，中央讓內容站得住
-    vec2 c = vTextureCoord - 0.5;
+    vec2 c = screen - 0.5;
     float vig = clamp(1.0 - dot(c, c) * 1.15, 0.0, 1.0);
     col *= mix(0.68, 1.0, vig);
 
@@ -90,10 +201,20 @@ struct GlobalFilterUniforms {
 struct FieldUniforms {
     uTime: f32,
     uAspect: f32,
+    uDropCount: f32,
     uInk: vec3<f32>,
     uAmber: vec3<f32>,
     uViolet: vec3<f32>,
+    uDrops: array<vec4<f32>, ${MAX_DROPS}>,
+    uDropMod: array<vec4<f32>, ${MAX_DROPS}>,
 };
+
+const W_SPEED: f32 = ${WAVE.speed.toFixed(3)};
+const W_FREQ: f32 = ${WAVE.freq.toFixed(1)};
+const W_TAIL: f32 = ${WAVE.tail.toFixed(1)};
+const W_LIFE: f32 = ${WAVE.life.toFixed(3)};
+const W_WARP: f32 = ${WAVE.warp.toFixed(4)};
+const W_SPEC: f32 = ${WAVE.spec.toFixed(3)};
 
 @group(0) @binding(0) var<uniform> gfu: GlobalFilterUniforms;
 @group(0) @binding(1) var uTexture: texture_2d<f32>;
@@ -151,14 +272,50 @@ fn fbm(p0: vec2<f32>) -> f32 {
     return v;
 }
 
+// 水面斜率——與 GLSL 版同一套解析微分，兩邊要改就一起改
+fn waterSlope(p: vec2<f32>) -> vec2<f32> {
+    var slope = vec2<f32>(0.0);
+    let count = i32(field.uDropCount);
+    for (var i = 0; i < ${MAX_DROPS}; i++) {
+        if (i >= count) { break; }
+        let drop = field.uDrops[i];
+        if (drop.w <= 0.0) { continue; }
+
+        let c = vec2<f32>(drop.x * field.uAspect, drop.y);
+        let d = p - c;
+        let r = length(d);
+        if (r < 1e-4) { continue; }
+
+        let age = field.uTime - drop.z;
+        if (age < 0.0) { continue; }
+
+        let speed = W_SPEED * field.uDropMod[i].x;
+        let freq = W_FREQ * field.uDropMod[i].y;
+        let x = r - age * speed;
+        if (x > 0.0) { continue; }
+
+        let envelope = exp(x * W_TAIL) * exp(-age * W_LIFE) * drop.w;
+        let dhdr = (cos(x * freq) + (W_TAIL / freq) * sin(x * freq)) * envelope;
+        slope += (d / r) * dhdr;
+    }
+    return slope;
+}
+
 @fragment
 fn mainFragment(@location(0) uv0: vec2<f32>) -> @location(0) vec4<f32> {
-    var uv = uv0;
+    // 還原成 0..1 的畫面座標（uv0 的 1.0 不是畫面右緣，見 GLSL 版註解）
+    let screen = uv0 * gfu.uInputSize.xy / gfu.uOutputFrame.zw;
+
+    var uv = screen;
     uv.x = uv.x * field.uAspect;
     let t = field.uTime * 0.03;
 
-    let q = vec2<f32>(fbm(uv * 2.0 + t), fbm(uv * 2.0 - t + vec2<f32>(5.2, 1.3)));
-    let f = fbm(uv * 3.0 + q * 1.5 + t);
+    let slope = waterSlope(uv);
+    let ruv = uv - slope * W_WARP;
+    let auv = vec2<f32>(ruv.x, ruv.y * 2.6); // 倒影被壓成橫向條紋
+
+    let q = vec2<f32>(fbm(auv * 2.0 + t), fbm(auv * 2.0 - t + vec2<f32>(5.2, 1.3)));
+    let f = fbm(auv * 3.0 + q * 1.5 + t);
 
     var toneMix = 0.38 + 0.46 * sin(uv.x * 1.1 - uv.y * 0.8 + field.uTime * 0.12);
     toneMix = clamp(toneMix, 0.0, 1.0);
@@ -170,7 +327,11 @@ fn mainFragment(@location(0) uv0: vec2<f32>) -> @location(0) vec4<f32> {
     let ridge = smoothstep(0.55, 0.61, f) - smoothstep(0.61, 0.7, f);
     col += tone * ridge * 0.10;
 
-    let c = uv0 - 0.5;
+    // 斜面反光：斜率的直接後果，不是疊上去的亮圈
+    let spec = clamp(dot(slope, vec2<f32>(0.55, -0.84)), -1.0, 1.0);
+    col += tone * spec * W_SPEC;
+
+    let c = screen - 0.5;
     let vig = clamp(1.0 - dot(c, c) * 1.15, 0.0, 1.0);
     col = col * mix(0.68, 1.0, vig);
 
@@ -178,19 +339,55 @@ fn mainFragment(@location(0) uv0: vec2<f32>) -> @location(0) vec4<f32> {
 }
 `;
 
+/** 一發打進水面的漣漪。座標是正規化螢幕座標（0..1，y 向下），跟 projects.ts 的節點同一套。 */
+export interface Drop {
+    x: number;
+    y: number;
+    /** 強度，1 = 標準一滴 */
+    strength?: number;
+    /** 擴散速度倍率，1 = 標準。轉場那發要橫掃全螢幕就得調高 */
+    speed?: number;
+    /** 波紋密度倍率，1 = 標準。越低圈越疏 */
+    freq?: number;
+}
+
 export interface FieldFilter {
     filter: Filter;
     setTime: (seconds: number) => void;
     setAspect: (aspect: number) => void;
+    /** 打一發漣漪進水面。時間軸吃 setTime 餵進來的秒數，所以要先 setTime 再 emit。 */
+    emit: (drop: Drop) => void;
+    /** 清掉所有still在擴散的漣漪（版面重排、bfcache 還原時用） */
+    clearDrops: () => void;
+}
+
+/** 一發還活著的漣漪。live 陣列是真實來源，每幀壓成連續的 uniform 陣列餵給 shader。 */
+interface LiveDrop {
+    x: number;
+    y: number;
+    t0: number;
+    strength: number;
+    speed: number;
+    freq: number;
 }
 
 export function createFieldFilter(): FieldFilter {
+    const drops = new Float32Array(MAX_DROPS * 4);
+    const dropMod = new Float32Array(MAX_DROPS * 4);
+    const live: LiveDrop[] = [];
+    let now = 0;
+
     const uniforms = new UniformGroup({
         uTime: { value: 0, type: 'f32' },
         uAspect: { value: 1, type: 'f32' },
+        // 實際活著的發數。shader 只迴圈到這裡，所以把上限開到 16 不代表每幀都付 16 次的成本。
+        // 用 f32 而不是 i32：uniform buffer 佈局全是 f32 最不容易跟 Pixi 的 std140 打架。
+        uDropCount: { value: 0, type: 'f32' },
         uInk: { value: new Float32Array([0.043, 0.047, 0.063]), type: 'vec3<f32>' },
         uAmber: { value: new Float32Array([1.0, 0.541, 0.239]), type: 'vec3<f32>' },
         uViolet: { value: new Float32Array([0.71, 0.482, 1.0]), type: 'vec3<f32>' },
+        uDrops: { value: drops, type: 'vec4<f32>', size: MAX_DROPS },
+        uDropMod: { value: dropMod, type: 'vec4<f32>', size: MAX_DROPS },
     });
 
     const filter = new Filter({
@@ -205,10 +402,51 @@ export function createFieldFilter(): FieldFilter {
         resolution: 0.5,
     });
 
-    const u = uniforms.uniforms as { uTime: number; uAspect: number };
+    const u = uniforms.uniforms as { uTime: number; uAspect: number; uDropCount: number };
     return {
         filter,
-        setTime: (s) => (u.uTime = s),
+        setTime: (s) => {
+            now = s;
+            u.uTime = s;
+
+            // 回收衰減光的，再把還活著的壓成連續陣列。每幀最多搬 16 筆，CPU 成本可以忽略，
+            // 換到的是 fragment 迴圈次數等於實際發數，而不是恆為上限。
+            for (let i = live.length - 1; i >= 0; i--) {
+                if (s - live[i].t0 > DROP_LIFETIME) live.splice(i, 1);
+            }
+            for (let i = 0; i < live.length; i++) {
+                const d = live[i];
+                drops[i * 4 + 0] = d.x;
+                drops[i * 4 + 1] = d.y;
+                drops[i * 4 + 2] = d.t0;
+                drops[i * 4 + 3] = d.strength;
+                dropMod[i * 4 + 0] = d.speed;
+                dropMod[i * 4 + 1] = d.freq;
+            }
+            u.uDropCount = live.length;
+        },
         setAspect: (a) => (u.uAspect = a),
+        emit: (d) => {
+            live.push({
+                x: d.x,
+                y: d.y,
+                t0: now,
+                strength: d.strength ?? 1,
+                speed: d.speed ?? 1,
+                freq: d.freq ?? 1,
+            });
+            // 滿了才犧牲最舊的那發——它衰減得最多，被切斷最不明顯
+            if (live.length > MAX_DROPS) {
+                let oldest = 0;
+                for (let i = 1; i < live.length; i++) {
+                    if (live[i].t0 < live[oldest].t0) oldest = i;
+                }
+                live.splice(oldest, 1);
+            }
+        },
+        clearDrops: () => {
+            live.length = 0;
+            u.uDropCount = 0;
+        },
     };
 }

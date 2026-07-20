@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Sprite, Text, Texture, TextStyle } from 'pixi.js';
 import { EDGES, NODES, nodeById, type ProjectNode, type Tone } from '../projects';
 import { useHomeStore, homeState, type Backend } from '../store';
-import { createFieldFilter } from './field';
+import { createFieldFilter, DROP_PERIOD } from './field';
 import { enterProject, ENTER_MS } from '../enter';
 import { t, onLangChange } from '../../i18n';
 
@@ -20,7 +20,6 @@ const VIOLET = 0xb57bff;
 interface NodeView {
     def: ProjectNode;
     container: Container;
-    glow: Graphics;
     ring: Graphics;
     glyph: Text;
     label: Text;
@@ -112,7 +111,6 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         c.eventMode = 'static';
         c.cursor = 'pointer';
 
-        const glow = new Graphics();
         const ring = new Graphics();
 
         const glyph = new Text({
@@ -137,17 +135,35 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         });
         label.anchor.set(0.5, 0);
 
-        c.addChild(glow, ring, glyph, label);
+        c.addChild(ring, glyph, label);
         nodeLayer.addChild(c);
 
-        c.on('pointerover', () => useHomeStore.getState().setActive(def.id));
+        c.on('pointerover', () => {
+            useHomeStore.getState().setActive(def.id);
+            // 滑過＝手指碰到水面：一發細碎、稍快的小漣漪，讓 hover 有重量
+            const v = nodeViews.get(def.id);
+            if (v && !reduceMotion) field.emit({ ...dropAt(v), strength: 0.7, speed: 1.4, freq: 1.5 });
+        });
         c.on('pointerout', () => {
             if (homeState().activeId === def.id) useHomeStore.getState().setActive(null);
         });
-        c.on('pointertap', () => enterProject(def.id));
+        c.on('pointertap', () => {
+            // 進場＝整潭水被打了一記：又快又疏的大波，跟著純色圓一起把畫面推開
+            const v = nodeViews.get(def.id);
+            if (v && !reduceMotion) field.emit({ ...dropAt(v), strength: 2.6, speed: 5.0, freq: 0.45 });
+            enterProject(def.id);
+        });
 
-        nodeViews.set(def.id, { def, container: c, glow, ring, glyph, label, px: 0, py: 0, pr: 0, active: false });
+        nodeViews.set(def.id, { def, container: c, ring, glyph, label, px: 0, py: 0, pr: 0, active: false });
     }
+
+    // 每個節點下次該滴水的時間（秒，對齊動畫時鐘）。at <= 0 代表「還沒排」，會在下一幀隨機排一個
+    // 初始時間——這樣五個節點不會在同一秒一起滴，水面才有自然的節奏。
+    const dropSchedule = new Map<string, { at: number }>();
+    for (const def of NODES) dropSchedule.set(def.id, { at: 0 });
+
+    /** 節點在水面上的正規化落點（0..1）。漣漪吃的是這套座標，不是像素。 */
+    const dropAt = (v: NodeView): { x: number; y: number } => ({ x: v.px / W, y: v.py / H });
 
     // ---- 轉場層：點擊節點時，一團該節點顏色的圓從它身上長滿全螢幕 ----
     const fxLayer = new Graphics();
@@ -178,22 +194,18 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
             v.active = false;
             drawNode(v, false);
         }
+
+        // 版面一動，還在擴散的漣漪就對不上新的節點位置了——清掉重來
+        field.clearDrops();
+        for (const s of dropSchedule.values()) s.at = 0;
     };
 
     const drawNode = (v: NodeView, active: boolean): void => {
         const r = v.pr;
-        v.glow.clear();
         v.ring.clear();
 
         const dual = v.def.tone === 'dual';
         const base = TONE[v.def.tone];
-
-        // 外圈柔光（疊幾層漸淡的圓）；窄螢幕收斂擴散，免得上下相鄰節點的光暈互疊糊成一團
-        const glowAlpha = active ? 0.22 : 0.12;
-        const spread = narrow ? 0.3 : 0.5;
-        for (let i = 3; i >= 1; i--) {
-            v.glow.circle(0, 0, r * (1 + i * spread)).fill({ color: base, alpha: (glowAlpha / i) * 0.9 });
-        }
 
         // 節點核心：深色玻璃底
         v.ring.circle(0, 0, r).fill({ color: 0x11141c, alpha: 0.92 });
@@ -239,6 +251,24 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         }
 
         const activeId = homeState().activeId;
+
+        // 節點常駐滴水：各自照自己的時鐘，間隔隨機抖動 ±30%，才不會拍成整齊的節拍。
+        // reduce-motion 時整個水面是凍的，一滴也不排。
+        if (!reduceMotion) {
+            for (const v of nodeViews.values()) {
+                const s = dropSchedule.get(v.def.id)!;
+                if (activeId === v.def.id) {
+                    // 滑鼠正停在這個節點上：這裡的水面歸 hover 那發管，隨機滴水會打架。
+                    // 順手把下次時間往後推，移開後才不會立刻補一發。
+                    s.at = elapsed + DROP_PERIOD * (0.7 + Math.random() * 0.6);
+                } else if (s.at <= 0) {
+                    s.at = elapsed + Math.random() * DROP_PERIOD; // 初次隨機錯開
+                } else if (elapsed >= s.at) {
+                    field.emit({ ...dropAt(v), strength: v.pr / (0.085 * short) });
+                    s.at = elapsed + DROP_PERIOD * (0.7 + Math.random() * 0.6);
+                }
+            }
+        }
 
         // 節點：呼吸 + 高亮/淡出
         for (const v of nodeViews.values()) {
@@ -334,6 +364,9 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         useHomeStore.getState().setEntering(null);
         enterStart = -1;
         fxLayer.clear();
+        // 離開時打的那發轉場大波不該在返回後還掛在水面上
+        field.clearDrops();
+        for (const s of dropSchedule.values()) s.at = 0;
         if (!app.ticker.started && !document.hidden) app.ticker.start();
     });
 }
