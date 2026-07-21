@@ -37,9 +37,13 @@ export const DICT: Record<string, Entry> = {
     'home.tech.shader': { en: 'Shaders', zh: '著色器' },
     'home.tech.frontend': { en: 'Frontend', zh: '前端' },
     'home.tech.bench': { en: 'Measurement', zh: '量測' },
-    // 講「這條線在說什麼」而不是只給一個名詞——原本的「線＝專案間共用」沒說共用什麼、誰跟誰共用
-    'home.legend.line': { en: 'both ends use this tech', zh: '線兩端都用到這項技術' },
+    // 「共用」分兩級，因為被問到「共用什麼？」時兩者的答案完全不同（見 projects.ts 的 EdgeKind）：
+    // 實線＝兩端 import 同一個我寫的模組（有東西在流動），虛線＝各自 import 同一個第三方函式庫。
+    'home.legend.module': { en: 'both ends import the same module I wrote', zh: '兩端 import 同一個我寫的模組' },
+    'home.legend.library': { en: 'built on the same library, no shared code', zh: '建構在同一個函式庫上，沒有共用程式碼' },
     'home.legend.wraps': { en: 'RWD wraps every page', zh: 'RWD 包住站內每一頁' },
+    // 全站共用的模組畫不成線——每個 entry 都 import，畫出來會變成節點兩兩相連的完全圖。
+    'home.legend.shell': { en: 'shell · i18n are imported by every page', zh: 'shell · i18n 每一頁都 import' },
     'home.hint': { en: 'Hover a pass to inspect · click to enter', zh: '滑過節點看細節 · 點擊進入' },
     'home.crossEngine.title': { en: 'Cross-Engine Rendering', zh: '跨引擎渲染' },
     'home.crossEngine.desc': {

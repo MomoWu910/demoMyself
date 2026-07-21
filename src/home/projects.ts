@@ -2,7 +2,15 @@
  * 首頁 render graph 的單一真實來源。
  *
  * 這個作品集的動線被畫成一張「活的 GPU render graph」：每個專案是一個 pass（節點），
- * 邊代表**兩端節點共用的技術**（不是有向的資料流——A 跟 B 之間畫線，是因為兩者都用到這項技術）。這裡描述節點與邊，Pixi 舞台照著畫、
+ * 邊代表**兩端節點共用的技術**（不是有向的資料流——A 跟 B 之間畫線，是因為兩者都用到這項技術）。
+ *
+ * **邊是照 import 關係畫的，而且分兩級**（見 EdgeKind）：兩端 import 同一個自寫模組 ≠
+ * 兩端各自 import 同一個第三方函式庫。原本這兩種混在一起畫成同一條線，會讓人以為
+ * Cross-Engine 跟 Shader Lab 之間有共用程式碼（實際上只是都建在 Pixi 上）；
+ * 而 Cross-Engine→Findings 那條 `Pixi v8` 根本不成立——`src/findings/` 裡一個 pixi
+ * import 都沒有，它是讀 JSON 的資料呈現頁，用 Pixi 的是掛在它底下的三個壓測。已刪。
+ *
+ * 這裡描述節點與邊，Pixi 舞台照著畫、
  * React overlay 照著長 inspector——之後跨頁導覽也吃同一份資料。
  *
  * 座標是正規化的（0..1，y 向下），刻意排出「架構」而非隨機散佈：
@@ -60,14 +68,25 @@ export interface ProjectNode {
     narrow: { x: number; y: number; r: number };
 }
 
+/**
+ * 一條邊憑什麼存在。**這張圖是照 import 關係畫的**，不是照「感覺上有關」，
+ * 所以「共用」分成兩級——被問到「共用什麼？」時兩者的答案完全不同：
+ *
+ * - `module`：兩端都 import **這個 repo 裡我自己寫的同一個模組**（目前只有 `src/bench/`）。
+ *   實線＋沿線流動的封包：Findings 的 JSON 真的是 Shader Lab 那套 runner 產出來的。
+ * - `library`：兩端各自 import **同一個第三方函式庫**，彼此之間沒有互相 import。
+ *   虛線、不畫封包——沒有東西在它們之間流動，只是建構在同一塊地基上。
+ * - `meta`：RWD 那種「包住站內每一頁」的全站關聯，不畫成線（見 scene.ts 的 drawWrapFrame）。
+ */
+export type EdgeKind = 'module' | 'library' | 'meta';
+
 export interface ResourceEdge {
     from: string;
     to: string;
     /** 這條邊代表哪一項共用技術——mono 標籤直接畫在邊上 */
     resource: string;
     tone: Tone;
-    /** RWD 這種「包住一切」的 meta 關聯畫成虛線、比較淡 */
-    meta?: boolean;
+    kind: EdgeKind;
     /**
      * 標籤沿曲線法線的偏移量。正 = 往弧彎出去的那側（預設側），負 = 另一側。
      * 用來拆開兩條邊的標籤在畫面上疊在一起的情形——`bench` 與 `Pixi v8` 的中點很近。
@@ -145,24 +164,29 @@ export const NODES: ProjectNode[] = [
         tags: ['Responsive', 'Device Simulator'],
         tone: 'neutral',
         x: 0.16,
-        y: 0.64,
+        // 0.64 → 0.57：左下的技術棧多了一行圖例之後長高，RWD 的標籤正好被它壓到。
+        // 這是整張圖唯一跟 overlay 文字搶位置的節點（其餘都在畫面中右側）。
+        y: 0.57,
         r: 0.06,
         narrow: { x: 0.32, y: 0.88, r: 0.11 },
     },
 ];
 
 export const EDGES: ResourceEdge[] = [
-    { from: 'crossEngine', to: 'shaderLab', resource: 'Pixi v8', tone: 'pixi' },
-    { from: 'crossEngine', to: 'findings', resource: 'Pixi v8', tone: 'pixi' },
-    // bench 的中點跟 crossEngine→shaderLab 那條的 Pixi v8 幾乎重疊，推到弧的另一側去
-    { from: 'shaderLab', to: 'findings', resource: 'bench', tone: 'neutral', labelOffset: -34 },
+    // 各自 `import from 'pixi.js'`，兩邊沒有互相 import——這是共同依賴，不是共用程式碼。
+    { from: 'crossEngine', to: 'shaderLab', resource: 'Pixi v8', tone: 'pixi', kind: 'library' },
+    // src/bench/（BenchRunner / BenchPanel / drawCallCounter / 型別）被 shaderLab 的
+    // runShaderBench、optimization、findings 三方 import；findings/results/*.json 就是
+    // 同一個 runner 跑出來原樣存檔的。全站唯一真正的點對點程式碼共用。
+    // 中點跟上面那條 Pixi v8 幾乎重疊，標籤推到弧的另一側去。
+    { from: 'shaderLab', to: 'findings', resource: 'bench', tone: 'neutral', kind: 'module', labelOffset: -34 },
     // RWD 包住站內每一頁。meta 邊**不畫成線**——scene.ts 把它們畫成一圈框住所有節點的
     // 點狀輪廓（見 drawWrapFrame）。這裡列全部四個節點，是為了 hover RWD 時每一頁都跟著
     // 亮起來（isConnected 吃這份資料）：既然說「每一頁」，就不能只有其中兩頁有反應。
-    { from: 'rwd', to: 'crossEngine', resource: 'wraps', tone: 'neutral', meta: true },
-    { from: 'rwd', to: 'findings', resource: 'wraps', tone: 'neutral', meta: true },
-    { from: 'rwd', to: 'shaderLab', resource: 'wraps', tone: 'neutral', meta: true },
-    { from: 'rwd', to: 'configurator', resource: 'wraps', tone: 'neutral', meta: true },
+    { from: 'rwd', to: 'crossEngine', resource: 'wraps', tone: 'neutral', kind: 'meta' },
+    { from: 'rwd', to: 'findings', resource: 'wraps', tone: 'neutral', kind: 'meta' },
+    { from: 'rwd', to: 'shaderLab', resource: 'wraps', tone: 'neutral', kind: 'meta' },
+    { from: 'rwd', to: 'configurator', resource: 'wraps', tone: 'neutral', kind: 'meta' },
 ];
 
 export function nodeById(id: string): ProjectNode {

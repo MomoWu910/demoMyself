@@ -287,6 +287,16 @@ html, body {
 .legend-lines > span { display: flex; align-items: center; gap: 8px; }
 .legend-lines .ln { display: inline-block; width: 24px; flex: none; }
 .legend-lines .ln.solid { height: 2px; background: currentColor; }
+/* 畫面上的 library 邊是把同一條曲線切段畫一半，所以樣本用等長的 dash（不是圓點） */
+.legend-lines .ln.dashed {
+    height: 6px;
+    background-image: linear-gradient(to right, currentColor 0 5px, transparent 5px 10px);
+    background-size: 10px 1.4px;
+    background-position: center;
+    background-repeat: repeat-x;
+}
+/* 沒有線可畫的那一項，文字要對齊上面三行的文字欄（樣本 24px + gap 8px） */
+.legend-lines .ln-note { padding-left: 32px; opacity: 0.85; }
 /* 畫面上的 meta 邊是一串**小圓點**（scene.ts 畫 22 個半徑 1 的 circle），不是 dash——
  * 樣本畫成 dash 本來就對不上，怎麼加粗都不像。用 radial-gradient 排出等距圓點，
  * 尺寸與間距照著畫面上那串走。 */

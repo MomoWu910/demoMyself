@@ -120,7 +120,7 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
     const edgeLabelLayer = new Container();
     app.stage.addChild(edgeGfx, edgeLabelLayer);
 
-    const edgeLabels = EDGES.filter((e) => !e.meta).map((e) => {
+    const edgeLabels = EDGES.filter((e) => e.kind !== 'meta').map((e) => {
         const label = new Text({
             text: e.resource,
             style: new TextStyle({
@@ -534,18 +534,35 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
             const involved = !activeId || activeId === edge.from || activeId === edge.to;
             const color = TONE[edge.tone];
 
-            // 基底弧線
-            const seg = 26;
-            edgeGfx.moveTo(ax(a), ay(a));
-            for (let i = 1; i <= seg; i++) {
-                const p = bezier(ax(a), ay(a), cx, cy, ax(b), ay(b), i / seg);
-                edgeGfx.lineTo(p.x, p.y);
+            // 基底弧線。兩級共用畫成兩種線（見 projects.ts 的 EdgeKind）：
+            // module＝實線，library＝虛線。虛線是把同一條曲線切段、只畫其中一半，
+            // 所以兩者的曲率完全一致，讀起來是「同一種線的兩個強度」而不是兩套東西。
+            const lib = edge.kind === 'library';
+            const seg = lib ? 44 : 26;
+            if (lib) {
+                for (let i = 0; i < seg; i += 2) {
+                    const p0 = bezier(ax(a), ay(a), cx, cy, ax(b), ay(b), i / seg);
+                    const p1 = bezier(ax(a), ay(a), cx, cy, ax(b), ay(b), (i + 1) / seg);
+                    edgeGfx.moveTo(p0.x, p0.y);
+                    edgeGfx.lineTo(p1.x, p1.y);
+                }
+            } else {
+                edgeGfx.moveTo(ax(a), ay(a));
+                for (let i = 1; i <= seg; i++) {
+                    const p = bezier(ax(a), ay(a), cx, cy, ax(b), ay(b), i / seg);
+                    edgeGfx.lineTo(p.x, p.y);
+                }
             }
-            edgeGfx.stroke({ color, width: involved ? 1.4 : 1, alpha: involved ? 0.5 : 0.18 });
+            edgeGfx.stroke({
+                color,
+                width: involved ? (lib ? 1.2 : 1.8) : 1,
+                alpha: involved ? (lib ? 0.42 : 0.55) : 0.18,
+            });
 
-            // 共用技術：小點從弧線中點朝「兩端」對稱散出、到端點淡出——
-            // 表達「這項技術被兩個節點共用」，而不是 A 單向送給 B。
-            for (let k = 0; k < 2; k++) {
+            // 沿線流動的封包只給 module 邊：Findings 的 JSON 真的是 Shader Lab 那套 runner
+            // 產出來的，兩端之間有東西在流。library 邊只是各自 import 同一個函式庫，
+            // 沒有任何東西在它們之間流動——畫了封包就是在演一個不存在的資料流。
+            for (let k = 0; k < (lib ? 0 : 2); k++) {
                 const beat = (time * 0.35 + k * 0.5) % 1;
                 const fade = Math.sin(beat * Math.PI); // 中點亮、越靠端點越淡
                 for (const dir of [-1, 1]) {

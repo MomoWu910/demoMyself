@@ -139,17 +139,25 @@ function Legend() {
                             </li>
                         ))}
                     </ul>
-                    {/* 線的圖例縮成一行附註——用實際的線段當樣本，不用圓點：
-                        圓點長得像節點，原本那份圖例會被讀成在講節點，就是因為這個。 */}
+                    {/* 線的圖例——用實際的線段當樣本，不用圓點：圓點長得像節點，
+                        原本那份圖例會被讀成在講節點，就是因為這個。
+                        三種樣本一一對應畫面上的三種線（見 projects.ts 的 EdgeKind）。 */}
                     <span className="legend-lines">
                         <span>
                             <i className="ln solid" />
-                            {t('home.legend.line')}
+                            {t('home.legend.module')}
+                        </span>
+                        <span>
+                            <i className="ln dashed" />
+                            {t('home.legend.library')}
                         </span>
                         <span>
                             <i className="ln dotted" />
                             {t('home.legend.wraps')}
                         </span>
+                        {/* 沒有樣本可畫的那一項：全站共用模組畫成線會變完全圖，只能用文字交代。
+                            縮排對齊上面三行的文字，讀起來才是同一組的第四點。 */}
+                        <span className="ln-note">{t('home.legend.shell')}</span>
                     </span>
                     <span className="hint">{t('home.hint')}</span>
                   </div>
