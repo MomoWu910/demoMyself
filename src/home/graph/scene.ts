@@ -278,6 +278,31 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
     layout();
     app.renderer.on('resize', layout);
 
+    /**
+     * 手機轉向要靠 ResizeObserver，不能只靠 Pixi 內建的那條路。
+     *
+     * `resizeTo` 監聽的是 window 的 resize 事件，但 iOS 在轉向時發出該事件的當下，
+     * viewport 尺寸還沒穩定（回報的常是轉向前的值，或中間的過渡值），而尺寸穩定之後
+     * 不保證會再發一次——canvas 就停在錯的尺寸上，節點座標全部按錯的 W/H 算，整個跑版。
+     *
+     * ResizeObserver 觀察的是容器**實際量到的**尺寸，回呼發生在版面計算完成之後，
+     * 不必去猜哪個事件、要延遲幾毫秒才量得準。
+     */
+    let lastW = 0;
+    let lastH = 0;
+    const ro = new ResizeObserver((entries) => {
+        const r = entries[0].contentRect;
+        const w = Math.round(r.width);
+        const h = Math.round(r.height);
+        // 尺寸沒真的變就跳過：layout() 會清掉還在擴散的漣漪，被無謂地觸發會把使用者
+        // 剛打出的水波一直抹掉（iOS 上工具列收合之類的事件很容易重複觸發）
+        if (w === lastW && h === lastH) return;
+        lastW = w;
+        lastH = h;
+        app.resize(); // 依 resizeTo 重新量測，renderer 尺寸一變就會 emit resize → layout()
+    });
+    ro.observe(container);
+
     // 天色翻面：背景是連續變的，前景則是整套跳過去（理由見 sky.ts 的 applyTheme）。
     // CSS 那半邊靠變數 + transition 自己接手，這裡只管 canvas 裡吃不到 CSS 的東西。
     onThemeChange((light) => {
