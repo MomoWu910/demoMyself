@@ -148,6 +148,8 @@ export const DICT: Record<string, Entry> = {
     'cfg.slider.keyTemp': { en: 'Key Temp', zh: '主光色溫' },
     'cfg.btn.autorotate': { en: '◐ Auto-rotate', zh: '◐ 自動旋轉' },
     'cfg.btn.reset': { en: '⟲ Reset View', zh: '⟲ 重置視角' },
+    'cfg.btn.share': { en: '🔗 Copy Link', zh: '🔗 複製連結' },
+    'cfg.btn.copied': { en: '✓ Copied', zh: '✓ 已複製' },
     'cfg.loading': { en: 'Loading 3D model…', zh: '載入 3D 模型…' },
     'cfg.preset.soft': { en: 'Soft', zh: '柔光棚' },
     'cfg.preset.dramatic': { en: 'Dramatic', zh: '戲劇側光' },

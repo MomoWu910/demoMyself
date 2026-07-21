@@ -52,6 +52,22 @@ export interface CfgSelection {
     autoRotate: boolean;
 }
 
+/** 從 store 抽出可序列化的那一半（分享連結、之後的截圖 metadata 都吃這個） */
+export function selectionOf(s: CfgSelection): CfgSelection {
+    return {
+        currentPart: s.currentPart,
+        partState: s.partState,
+        variant: s.variant,
+        lightingPreset: s.lightingPreset,
+        envIntensity: s.envIntensity,
+        envRotationDeg: s.envRotationDeg,
+        keyIntensity: s.keyIntensity,
+        keyTempK: s.keyTempK,
+        background: s.background,
+        autoRotate: s.autoRotate,
+    };
+}
+
 interface CfgState extends CfgSelection {
     /** Babylon 那一側。放在 store 裡是為了讓每個 action 都能拿到它，元件不會訂閱它。 */
     view: ConfiguratorView | null;
@@ -61,6 +77,8 @@ interface CfgState extends CfgSelection {
     finishes: FinishInfo[];
     tints: TintInfo[];
     variants: string[];
+    /** 這顆模型的原始狀態。分享連結只寫「跟它不一樣」的欄位。 */
+    defaults: CfgSelection | null;
 
     init: (payload: {
         view: ConfiguratorView;
@@ -83,6 +101,8 @@ interface CfgState extends CfgSelection {
     setBackground: (mode: BackgroundMode) => void;
     toggleAutoRotate: () => void;
     resetView: () => void;
+    /** 一次套用一整份設定（從分享連結還原時用） */
+    applySelection: (sel: Partial<CfgSelection>) => void;
 }
 
 export const useCfgStore = create<CfgState>((set, get) => ({
@@ -92,6 +112,7 @@ export const useCfgStore = create<CfgState>((set, get) => ({
     finishes: [],
     tints: [],
     variants: [],
+    defaults: null,
 
     currentPart: 'whole',
     partState: {},
@@ -118,6 +139,8 @@ export const useCfgStore = create<CfgState>((set, get) => ({
             variant: activeVariant,
             ready: true,
         });
+        // 記下這顆模型的原始狀態，分享連結才知道哪些欄位「有被動過」
+        set({ defaults: selectionOf(get()) });
     },
 
     // 純 UI 切換：換的是「接下來要調哪個部件」，場景不動
@@ -182,6 +205,36 @@ export const useCfgStore = create<CfgState>((set, get) => ({
 
     // 只動相機，不屬於「這雙鞋長什麼樣」，所以不進 selection
     resetView: () => get().view?.resetView(),
+
+    /**
+     * 套用一整份設定。順序有講究：
+     * ① variant 會整個換掉材質，要先做，否則後面套的 finish/tint 會被它洗掉；
+     * ② lighting preset 會連帶改 env/key 兩條滑桿，所以要在個別滑桿值之前套，
+     *    不然連結裡明明帶了 env=0.8 卻被 preset 的 1.1 蓋過去。
+     */
+    applySelection: (sel) => {
+        const st = get();
+        if (sel.variant && sel.variant !== st.variant) st.setVariant(sel.variant);
+
+        if (sel.partState) {
+            const merged = { ...st.partState };
+            for (const [partId, ui] of Object.entries(sel.partState)) {
+                if (!merged[partId]) continue; // 網址帶了這顆模型沒有的部件，忽略
+                st.view?.applyFinish(partId, ui.finishId);
+                st.view?.applyTint(partId, ui.tintId);
+                merged[partId] = { ...ui };
+            }
+            set({ partState: merged });
+        }
+
+        if (sel.lightingPreset) st.setLightingPreset(sel.lightingPreset);
+        if (sel.envIntensity !== undefined) st.setEnvIntensity(sel.envIntensity);
+        if (sel.envRotationDeg !== undefined) st.setEnvRotationDeg(sel.envRotationDeg);
+        if (sel.keyIntensity !== undefined) st.setKeyIntensity(sel.keyIntensity);
+        if (sel.keyTempK !== undefined) st.setKeyTempK(sel.keyTempK);
+        if (sel.background) st.setBackground(sel.background);
+        if (sel.autoRotate !== undefined && sel.autoRotate !== st.autoRotate) st.toggleAutoRotate();
+    },
 }));
 
 /** 給非 React 的那一側用（sheet 量測、之後的截圖/分享）。 */

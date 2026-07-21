@@ -3,7 +3,8 @@ import { ConfiguratorView } from './configuratorView';
 import { initI18n } from '../../../i18n';
 import { mountReveal } from '../../../shell/reveal';
 import { wireGoBack } from '../../../shell/goBack';
-import { useCfgStore } from './store';
+import { selectionOf, useCfgStore } from './store';
+import { encodeSelection, readSelection, syncUrl } from './share';
 import { Panel } from './ui/Panel';
 
 /*
@@ -33,8 +34,30 @@ window.addEventListener('DOMContentLoaded', async () => {
     // 所以不會有「空面板閃一下」的中間態，也不需要舊版那組 display:none 開關。
     useCfgStore.getState().init({ view, parts, finishes, tints, variants, activeVariant });
 
+    // 從分享連結還原：一定要在 init 之後（要先知道這顆模型有哪些部件才擋得掉
+    // 網址裡不存在的部件），也要在掛面板之前，面板一畫出來就是還原後的樣子。
+    const fromUrl = readSelection(window.location.search, parts.map((p) => p.id));
+    if (Object.keys(fromUrl).length > 0) useCfgStore.getState().applySelection(fromUrl);
+
     const root = document.getElementById('panel-root');
     if (root) createRoot(root).render(<Panel />);
 
     document.getElementById('loading')?.classList.add('hidden');
+
+    /*
+     * 設定一變就同步回網址列，使用者直接複製網址也拿得到同一組設定。
+     * 用 replaceState + 一拍 rAF 節流：滑桿一路拖過去會連發上百次 set，
+     * 每次都寫網址是白費工（history API 本身在部分瀏覽器有頻率限制）。
+     */
+    let queued = false;
+    useCfgStore.subscribe((s) => {
+        if (queued || !s.defaults) return;
+        queued = true;
+        requestAnimationFrame(() => {
+            queued = false;
+            const cur = useCfgStore.getState();
+            if (!cur.defaults) return;
+            syncUrl(encodeSelection(selectionOf(cur), cur.defaults));
+        });
+    });
 });

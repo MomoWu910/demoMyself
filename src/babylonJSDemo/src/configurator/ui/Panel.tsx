@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../../../../i18n/useT';
-import { useCfgStore } from '../store';
+import { selectionOf, useCfgStore } from '../store';
+import { copyText, encodeSelection, shareUrl } from '../share';
 import type { BackgroundMode } from '../../managers/environmentManager';
 
 /** colorway 變體對應的色塊顏色（球鞋模型內建 midnight / beach / street） */
@@ -126,6 +127,27 @@ function useBottomSheet(panelRef: React.RefObject<HTMLElement | null>, collapsed
         view.setBottomObstruction(window.innerHeight - panel.getBoundingClientRect().top);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [collapsed]);
+}
+
+/** 複製目前設定的連結。複製成功後把自己的字換成「已複製」兩秒，不另外彈東西。 */
+function ShareButton() {
+    const t = useT();
+    const [copied, setCopied] = useState(false);
+
+    const onClick = async () => {
+        const s = useCfgStore.getState();
+        if (!s.defaults) return;
+        const ok = await copyText(shareUrl(encodeSelection(selectionOf(s), s.defaults)));
+        if (!ok) return;
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <button className={`ctrl-btn${copied ? ' on' : ''}`} onClick={onClick}>
+            {copied ? t('cfg.btn.copied') : t('cfg.btn.share')}
+        </button>
+    );
 }
 
 export function Panel() {
@@ -278,6 +300,7 @@ export function Panel() {
                 <button className="ctrl-btn" onClick={s.resetView}>
                     {t('cfg.btn.reset')}
                 </button>
+                <ShareButton />
             </div>
         </>
     );
