@@ -9,15 +9,15 @@
       首屏底色要跟天色對齊。這段**必須**留在 head 裡的 inline script，不能搬進 bundle——
       bundle 載完已經是首次繪製之後，白天打開會先閃一次深墨再翻淺。
 
-      代價是門檻寫死在這裡：7.81 / 16.20 是 sky.ts 那組 keyframe 的 lum 跨過 LIGHT_THRESHOLD(0.58) 的時刻
-      （5.5h/0.10 → 8h/0.62 之間，與 16h/0.60 → 17.5h/0.45 之間）。
+      代價是時段寫死在這裡：7.3 / 16.8 要跟 sky.ts 的 LIGHT_FROM / LIGHT_TO 一致，
+      那兩個數是逐時截圖量背景亮度、取它跨過白字↔深字對比交叉點的時刻。
       **調 sky.ts 的 keyframe 就要回來改這兩個數**，否則首屏會跟天色差半拍。
       放在 bootHead 之前：它會把當下的 background-color 記成還原目標，正好是這裡設的天色。
     -->
     <script>(function(){var h=document.documentElement,t;
     var m=location.search.match(/[?&]hour=([\d.]+)/);
     if(m){t=+m[1]}else{var d=new Date();t=d.getHours()+d.getMinutes()/60}
-    var c=(t>7.81&&t<16.20)?'#cfe0ee':'#0b0c10';
+    var c=(t>7.3&&t<16.8)?'#cfe0ee':'#0b0c10';
     h.style.backgroundColor=c;
     var e=document.querySelector('meta[name=theme-color]');if(e)e.content=c;})();</script>
     <%= bootHead %>

@@ -33,26 +33,33 @@ const KEYS: SkyKey[] = [
     // 月光的存在感交給 sun（冷青白）＋ 下面的月光帶，不是靠把周圍壓黑襯出來。
     { hour: 3, sky: '#0d1426', horizon: '#17213e', water: '#080e1a', sun: '#a8c0ea', lum: 0.03 },
     { hour: 5.5, sky: '#1b2340', horizon: '#4a3a52', water: '#0c1020', sun: '#c58a9a', lum: 0.1 },
-    { hour: 8, sky: '#6d9bd8', horizon: '#c3d9ec', water: '#4a7099', sun: '#fff4e0', lum: 0.62 },
-    { hour: 13, sky: '#7fb0e8', horizon: '#cfe2f2', water: '#4a7ba8', sun: '#ffffff', lum: 0.85 },
+    { hour: 8, sky: '#7aa6de', horizon: '#c3d9ec', water: '#5d86ad', sun: '#fff4e0', lum: 0.62 },
+    { hour: 13, sky: '#8cbaee', horizon: '#dbeaf7', water: '#6a9bcb', sun: '#ffffff', lum: 0.85 },
     // 午後金光。這格存在的理由是**可讀性**不是美感：13 → 17.5 直接插值的話，
     // 前景翻回 dark 的那一刻水面已經暗到深色字讀不了了。有這格撐著，亮的時段就一路亮到翻面前一刻。
-    { hour: 16, sky: '#6d97cf', horizon: '#e8c9a8', water: '#456d96', sun: '#ffd9a8', lum: 0.6 },
+    { hour: 16, sky: '#79a2d6', horizon: '#e8c9a8', water: '#5a83ab', sun: '#ffd9a8', lum: 0.6 },
     { hour: 17.5, sky: '#4a6a9e', horizon: '#ff9a4d', water: '#2a3a5c', sun: '#ffb066', lum: 0.45 },
     { hour: 19.25, sky: '#1e2647', horizon: '#6b4a6e', water: '#101830', sun: '#c08ab0', lum: 0.14 },
     { hour: 21, sky: '#101a30', horizon: '#1d2a4a', water: '#0b1220', sun: '#b0c4ec', lum: 0.06 },
 ];
 
 /**
- * 前景翻成 light 的門檻。
+ * 前景翻成 light 的時段，**用小時數直接界定**，不是從 lum 推。
  *
- * 0.58 是**量出來的**，不是挑的：它讓翻面發生在 07:49 與 16:12，兩個時刻的水面色都還在
- * #40608c 上下——淺底深字撐得住的最暗邊界。門檻設 0.5 的話早上會在天還沒真的亮起來時就翻，
- * 深色文字直接消失在深藍水面上。調 keyframe 的話這個值要一起重算——
- * **而且 index.html 的首屏 inline script 裡有同一組門檻的複本（7.81 / 16.20），也要一起改**。
- * 那份沒辦法共用這裡的程式碼：它必須在 bundle 載入前就跑完，否則白天開會先閃一次深墨。
+ * 7.3 / 16.8 是量出來的：把一整天逐半小時截圖，取文字所在區域的背景相對亮度，
+ * 找它跨過 0.186 的時刻——那是白字(#eceef4)與深字對比相等的交叉點，該翻面的地方。
+ *
+ * 為什麼不用 lum 當門檻（原本的做法）：lum 是手填的感知值，在 keyframe 之間線性插值，
+ * 但畫面實際亮度不是線性的（黎明那兩個半小時是加速上升），而且**文字位在畫面上方，
+ * 那裡是地平線的亮光帶，遠比水體色亮**。兩者一錯位就出現「背景已經很亮卻還是白字」的
+ * 時段——實測 07:30 與 16:30 的對比只有 1.2:1，等於整段文字消失。門檻怎麼調都治不好，
+ * 因為錯的是「拿 lum 當亮度」這件事本身。lum 現在只留給 cloud/vig/glint，那些不需要精確。
+ *
+ * **改 keyframe 顏色就要重新量這兩個數**（scan：逐時截圖取樣背景亮度），
+ * 而且 index.html 的首屏 inline script 有同一組複本，要一起改。
  */
-const LIGHT_THRESHOLD = 0.58;
+const LIGHT_FROM = 7.3;
+const LIGHT_TO = 16.8;
 
 function hex2rgb(hex: string): RGB {
     const n = parseInt(hex.slice(1), 16);
@@ -128,7 +135,7 @@ export function skyAt(hour: number): SkyPalette {
         cloud: lerp(0.2, 0.31, lum),
         vig: lerp(0.76, 0.88, lum),
         glint: lerp(0.3, 0.07, lum),
-        light: lum > LIGHT_THRESHOLD,
+        light: h > LIGHT_FROM && h < LIGHT_TO,
     };
 }
 
@@ -203,8 +210,10 @@ const LIGHT_VARS: Record<string, string> = {
     '--wgsl': '#6134bd',
     '--dual': '#9c3f96',
     '--pixi': '#1361bd',
+    '--three': '#0d7a4a',
+    '--babylon': '#b8322f',
     '--text': '#080d15',
-    '--muted': '#39434f',
+    '--muted': '#121820',
     '--panel': 'rgba(255, 255, 255, 0.66)',
     '--panel-border': 'rgba(10, 20, 35, 0.14)',
     // 語言切換鈕（i18n/index.ts）是全站共用的，靠這組變數跟著首頁翻面；其他頁沒設就落回深色
@@ -224,8 +233,10 @@ const DARK_VARS: Record<string, string> = {
     '--wgsl': '#b57bff',
     '--dual': '#d98ad6',
     '--pixi': '#5aa9ff',
+    '--three': '#4fd18b',
+    '--babylon': '#f2555a',
     '--text': '#eceef4',
-    '--muted': '#8b90a0',
+    '--muted': '#bcc0cb',
     '--panel': 'rgba(15, 18, 26, 0.66)',
     '--panel-border': 'rgba(255, 255, 255, 0.09)',
     '--lang-bg': 'rgba(0, 0, 0, 0.35)',
@@ -233,8 +244,10 @@ const DARK_VARS: Record<string, string> = {
     '--lang-active': 'rgba(255, 255, 255, 0.16)',
     '--lang-fg': '#f4f4f5',
     '--lang-muted': '#a1a1aa',
-    // 淺色字配暗暈就沒有啃邊問題（暗色不會侵蝕亮字形），貼身那層留著拉出邊界
-    '--halo-shadow': '0 0 3px rgba(4, 7, 14, 0.85), 0 0 12px rgba(4, 7, 14, 0.8)',
+    // 淺色字配暗暈就沒有啃邊問題（暗色不會侵蝕亮字形），貼身那層留著拉出邊界。
+    // 調得比 light 版更重，是因為 dark 要獨力扛住黎明/黃昏那兩段死角——背景亮度落在
+    // 白字與深字都達不到 4.5:1 的區間（見 LIGHT_FROM 的說明），只剩這圈暗暈能拉開對比。
+    '--halo-shadow': '0 0 4px rgba(4, 7, 14, 0.95), 0 0 14px rgba(4, 7, 14, 0.92)',
 };
 
 /** Pixi 端要用的前景色。canvas 裡的東西吃不到 CSS 變數，只能另外給一份。 */
@@ -259,7 +272,7 @@ export interface ForegroundColors {
      */
     haloBlur: number;
     /** tone → 代表色 */
-    tone: { glsl: number; wgsl: number; dual: number; pixi: number; neutral: number };
+    tone: { glsl: number; wgsl: number; dual: number; pixi: number; three: number; babylon: number; neutral: number };
 }
 
 const LIGHT_FG: ForegroundColors = {
@@ -268,7 +281,7 @@ const LIGHT_FG: ForegroundColors = {
     label: 0x1e2733,
     halo: 0xffffff,
     haloBlur: 9,
-    tone: { glsl: 0xb8500c, wgsl: 0x6134bd, dual: 0x9c3f96, pixi: 0x1361bd, neutral: 0x5b6472 },
+    tone: { glsl: 0xb8500c, wgsl: 0x6134bd, dual: 0x9c3f96, pixi: 0x1361bd, three: 0x0d7a4a, babylon: 0xb8322f, neutral: 0x5b6472 },
 };
 
 const DARK_FG: ForegroundColors = {
@@ -277,7 +290,7 @@ const DARK_FG: ForegroundColors = {
     label: 0xc9cede,
     halo: 0x05070c,
     haloBlur: 5,
-    tone: { glsl: 0xff8a3d, wgsl: 0xb57bff, dual: 0xd98ad6, pixi: 0x5aa9ff, neutral: 0x9aa0b2 },
+    tone: { glsl: 0xff8a3d, wgsl: 0xb57bff, dual: 0xd98ad6, pixi: 0x5aa9ff, three: 0x4fd18b, babylon: 0xf2555a, neutral: 0x9aa0b2 },
 };
 
 export function foregroundFor(light: boolean): ForegroundColors {

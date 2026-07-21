@@ -13,8 +13,10 @@
     --wgsl: #b57bff; /* 紫 · WGSL / WebGPU */
     --dual: #d98ad6; /* 兩者之間 */
     --pixi: #5aa9ff; /* 藍 · Pixi 底層 */
+    --three: #4fd18b; /* 綠 · Three.js */
+    --babylon: #f2555a; /* 紅 · Babylon.js */
     --text: #eceef4;
-    --muted: #8b90a0;
+    --muted: #bcc0cb;
     --panel: rgba(15, 18, 26, 0.66);
     --panel-border: rgba(255, 255, 255, 0.09);
 
@@ -202,21 +204,60 @@ html, body {
     position: absolute;
     left: clamp(20px, 3.5vw, 40px);
     bottom: clamp(20px, 3.5vw, 40px);
-    font-size: 0.68rem;
+    font-size: 0.8rem;
     color: var(--muted);
 }
 .legend-title {
     display: block;
-    font-size: 0.6rem;
+    font-size: 0.68rem;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: #5c6070;
+    /* 原本寫死 #5c6070，那是照深色底挑的，白天會淡到看不見——跟著主題走 */
+    color: var(--muted);
+    opacity: 0.85;
     margin-bottom: 8px;
 }
 .legend ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-.legend li { display: flex; align-items: center; gap: 8px; letter-spacing: 0.02em; }
-.legend .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
-.legend .hint { display: block; margin-top: 12px; font-size: 0.62rem; opacity: 0.6; }
+/* 每組一行：左邊固定寬的組名，右邊技術項目。組名對齊才讀得出這是四組而不是一長串 */
+.legend li { display: flex; align-items: baseline; gap: 10px; letter-spacing: 0.02em; }
+.tech-label {
+    flex: none;
+    width: 5.2em;
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.8;
+}
+.tech-items { color: var(--muted); }
+.tech-sep { opacity: 0.4; }
+
+/* 線的附註。兩種線各佔一行——擠在同一行時，兩個樣本與兩段文字會讀成一句話，
+ * 分不出哪個樣本配哪段說明。 */
+.legend-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 10px;
+    font-size: 0.7rem;
+    /* 用 --text 而非繼承 --muted：這一行要在白天的亮水面上也讀得出來 */
+    color: var(--text);
+    opacity: 0.8;
+}
+.legend-lines > span { display: flex; align-items: center; gap: 8px; }
+.legend-lines .ln { display: inline-block; width: 24px; flex: none; }
+.legend-lines .ln.solid { height: 2px; background: currentColor; }
+/* 畫面上的 meta 邊是一串**小圓點**（scene.ts 畫 22 個半徑 1 的 circle），不是 dash——
+ * 樣本畫成 dash 本來就對不上，怎麼加粗都不像。用 radial-gradient 排出等距圓點，
+ * 尺寸與間距照著畫面上那串走。 */
+.legend-lines .ln.dotted {
+    height: 6px;
+    background-image: radial-gradient(circle, currentColor 1.6px, transparent 1.8px);
+    background-size: 6px 6px;
+    background-position: center;
+    background-repeat: repeat-x;
+}
+
+.legend .hint { display: block; margin-top: 10px; font-size: 0.72rem; opacity: 0.78; }
 
 /* ---- 時刻軸：右上角、語言鈕左邊的那顆天體 ----
  * 收起時只有一個圖示，把「這面水映的是現在幾點」講出來但不佔份量；
@@ -237,7 +278,8 @@ html, body {
     /* color 的過渡要自己寫：它 portal 到 .overlay 外面了，吃不到那邊的翻面 transition */
     transition: gap 320ms cubic-bezier(0.22, 0.8, 0.3, 1), color 900ms ease,
         background-color 240ms ease, border-color 240ms ease;
-    color: var(--muted);
+    /* --text 而不是 --muted：夜色很暗、圖示又只有線條，用 muted 會沉進背景裡 */
+    color: var(--text);
     pointer-events: auto;
     z-index: 5;
 }
@@ -332,7 +374,9 @@ html, body {
     /* 觸控目標：圖示才 18px，配上容器的 padding 湊到 40px 見方，手指點得到 */
     min-width: 28px;
     min-height: 28px;
-    opacity: 0.65;
+    /* 夜裡（--muted 是冷灰）疊在深藍水面上，0.65 幾乎看不到——這是唯一提示
+     * 「可以撥時間」的東西，不能讓它在凌晨消失 */
+    opacity: 0.9;
     transition: opacity 240ms ease;
     /* 它是 button（觸控靠點它展開），把瀏覽器預設的鈕外觀清掉 */
     padding: 0;

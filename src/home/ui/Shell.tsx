@@ -1,5 +1,5 @@
 import { useHomeStore } from '../store';
-import { NODES, nodeById, RESOURCE_LEGEND, type Tone } from '../projects';
+import { NODES, nodeById, TECH_STACK, type Tone } from '../projects';
 import { enterProject } from '../enter';
 import { useT } from './useT';
 import { SkyDial } from './SkyDial';
@@ -9,6 +9,8 @@ const TONE_CSS: Record<Tone, string> = {
     wgsl: 'var(--wgsl)',
     dual: 'var(--dual)',
     pixi: 'var(--pixi)',
+    three: 'var(--three)',
+    babylon: 'var(--babylon)',
     neutral: 'var(--muted)',
 };
 
@@ -93,18 +95,39 @@ export function Shell() {
             <Inspector />
             <SkyDial />
 
-            {/* hover 時圖例讓位給 inspector（都在畫面下緣） */}
+            {/* hover 時技術棧讓位給 inspector（都在畫面下緣） */}
             {!activeId && (
                 <footer className="legend" aria-hidden="true">
-                    <span className="legend-title">{t('home.legend')}</span>
+                    <span className="legend-title">{t('home.tech.title')}</span>
                     <ul>
-                        {RESOURCE_LEGEND.map((r) => (
-                            <li key={r.resource}>
-                                <span className="dot" style={{ background: TONE_CSS[r.tone] }} />
-                                {r.resource}
+                        {TECH_STACK.map((g) => (
+                            <li key={g.i18nKey}>
+                                <span className="tech-label">{t(g.i18nKey)}</span>
+                                <span className="tech-items">
+                                    {g.items.map((item, i) => (
+                                        <span key={item.name}>
+                                            {i > 0 && <span className="tech-sep"> · </span>}
+                                            <span style={item.tone ? { color: TONE_CSS[item.tone] } : undefined}>
+                                                {item.name}
+                                            </span>
+                                        </span>
+                                    ))}
+                                </span>
                             </li>
                         ))}
                     </ul>
+                    {/* 線的圖例縮成一行附註——用實際的線段當樣本，不用圓點：
+                        圓點長得像節點，原本那份圖例會被讀成在講節點，就是因為這個。 */}
+                    <span className="legend-lines">
+                        <span>
+                            <i className="ln solid" />
+                            {t('home.legend.line')}
+                        </span>
+                        <span>
+                            <i className="ln dotted" />
+                            {t('home.legend.wraps')}
+                        </span>
+                    </span>
                     <span className="hint">{t('home.hint')}</span>
                 </footer>
             )}

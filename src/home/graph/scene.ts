@@ -257,21 +257,32 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         const r = v.pr;
         v.ring.clear();
 
-        const dual = v.def.tone === 'dual';
-        const base = TONE[v.def.tone];
-
         // 節點核心：一片玻璃。夜裡是深色、白天翻成淺色，才一直襯得住上面的 glyph
         v.ring.circle(0, 0, r).fill({ color: FG.core, alpha: 0.92 });
 
-        // 邊環：dual 節點畫成琥珀/紫兩半弧，其餘單色
+        /**
+         * 邊環＝這個 pass 用到的技術，一段一色（見 projects.ts 的 stack）。
+         * 外框因此不只是識別，而是「這東西用什麼做的」——跟左下角技術棧同一套顏色映射。
+         */
+        const segs = v.def.stack ?? [v.def.tone];
         const ringW = active ? 3 : 2;
-        if (dual) {
+        const alpha = active ? 1 : segs.length > 1 ? 0.85 : 0.7;
+
+        if (segs.length === 1) {
+            v.ring.circle(0, 0, r).stroke({ color: TONE[segs[0]], width: ringW, alpha });
+            return;
+        }
+
+        // 從正上方開始均分。段之間留一點縫，否則兩色相接處會糊成漸層、數不出有幾段。
+        const step = (Math.PI * 2) / segs.length;
+        const gap = 0.08;
+        for (let i = 0; i < segs.length; i++) {
+            const a0 = -Math.PI / 2 + i * step + gap / 2;
+            const a1 = a0 + step - gap;
             // 先 moveTo 到弧的起點，否則 arc() 會從路徑預設起點 (0,0) 拉一條線到弧起點——
-            // 那就是節點中央到頂端那條多餘的垂直線。
-            v.ring.moveTo(0, -r).arc(0, 0, r, -Math.PI / 2, Math.PI / 2).stroke({ color: TONE.glsl, width: ringW, alpha: active ? 1 : 0.85 });
-            v.ring.moveTo(0, r).arc(0, 0, r, Math.PI / 2, (Math.PI * 3) / 2).stroke({ color: TONE.wgsl, width: ringW, alpha: active ? 1 : 0.85 });
-        } else {
-            v.ring.circle(0, 0, r).stroke({ color: base, width: ringW, alpha: active ? 1 : 0.7 });
+            // 那就是節點中央到圓周那條多餘的直線。
+            v.ring.moveTo(Math.cos(a0) * r, Math.sin(a0) * r);
+            v.ring.arc(0, 0, r, a0, a1).stroke({ color: TONE[segs[i]], width: ringW, alpha });
         }
     };
 
@@ -412,21 +423,108 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         return { cx: mx + nx * bow, cy: my + ny * bow, nx, ny };
     };
 
+    /**
+     * overlay 上那幾塊文字的位置（標題／技術棧／右上那疊）。包圍框經過它們時要斷開，
+     * 否則點狀線會直接穿過字。canvas 是 fixed inset 0 鋪滿視窗，所以畫布座標就等於視窗座標。
+     *
+     * 快取著用、每半秒更新一次：getBoundingClientRect 會強制 layout，不適合每幀四次；
+     * 但技術棧會在 hover 節點時整塊消失，所以也不能只在 resize 時算一次。
+     */
+    let avoid: Array<[number, number, number, number]> = [];
+    let avoidAt = -1;
+    const refreshAvoid = (now: number): void => {
+        if (now - avoidAt < 0.5 && avoidAt >= 0) return;
+        avoidAt = now;
+        const margin = 10;
+        avoid = ['.wordmark', '.legend', '#lang-slot']
+            .map((s) => document.querySelector(s))
+            .filter((e): e is Element => e !== null)
+            .map((e) => {
+                const r = e.getBoundingClientRect();
+                return [r.left - margin, r.top - margin, r.right + margin, r.bottom + margin] as
+                    [number, number, number, number];
+            });
+    };
+
+    /**
+     * RWD 的「包住站內每一頁」畫成一圈點狀輪廓，把其餘節點整個框起來。
+     *
+     * 原本是從 RWD 拉兩條點線接到兩個節點——但那讀起來是「連到」而不是「包住」，
+     * 而且只接兩個節點，跟「每一頁」直接矛盾。RWD 在架構上不是一個 pass，
+     * 是**裝著其他 pass 的容器**，所以它該畫成邊界而不是邊。
+     *
+     * 框線會避開 RWD 節點自身（在它周圍留缺口），讓節點看起來是**坐在框上**、
+     * 成為框的一部分，而不是被一條線穿過去。
+     */
+    const drawWrapFrame = (time: number, activeId: string | null): void => {
+        const rwd = nodeViews.get('rwd');
+        if (!rwd) return;
+        refreshAvoid(time);
+
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const v of nodeViews.values()) {
+            if (v.def.id === 'rwd') continue;
+            minX = Math.min(minX, ax(v) - v.pr);
+            maxX = Math.max(maxX, ax(v) + v.pr);
+            minY = Math.min(minY, ay(v) - v.pr);
+            maxY = Math.max(maxY, ay(v) + v.pr + 26); // +標籤帶，框才不會切過節點名稱
+        }
+        if (!Number.isFinite(minX)) return;
+
+        // 讓最靠近 RWD 的那條邊穿過它的中心：桌面版 RWD 在左側（框的左邊線），
+        // 窄螢幕 zig-zag 版它落在最下方（框的底邊）。用 min/max 兩邊都自動成立。
+        const pad = short * 0.05;
+        const x0 = Math.min(rwd.px, minX - pad);
+        const y0 = Math.min(rwd.py, minY - pad);
+        const x1 = Math.max(rwd.px, maxX + pad);
+        const y1 = Math.max(rwd.py, maxY + pad);
+        const rad = Math.min(short * 0.06, (x1 - x0) / 2, (y1 - y0) / 2);
+
+        const lit = !activeId || activeId === 'rwd';
+        const color = TONE.neutral;
+        const alpha = lit ? 0.55 : 0.22;
+        const spacing = Math.max(9, short * 0.016);
+        const gap = rwd.pr + 10; // RWD 周圍的缺口
+
+        const put = (px: number, py: number): void => {
+            if (Math.hypot(px - ax(rwd), py - ay(rwd)) < gap) return;
+            for (const [bx0, by0, bx1, by1] of avoid) {
+                if (px >= bx0 && px <= bx1 && py >= by0 && py <= by1) return;
+            }
+            edgeGfx.circle(px, py, 1.7).fill({ color, alpha });
+        };
+
+        for (let t = x0 + rad; t < x1 - rad; t += spacing) {
+            put(t, y0);
+            put(t, y1);
+        }
+        for (let t = y0 + rad; t < y1 - rad; t += spacing) {
+            put(x0, t);
+            put(x1, t);
+        }
+        // 四個圓角
+        const corners: Array<[number, number, number]> = [
+            [x1 - rad, y0 + rad, -Math.PI / 2],
+            [x1 - rad, y1 - rad, 0],
+            [x0 + rad, y1 - rad, Math.PI / 2],
+            [x0 + rad, y0 + rad, Math.PI],
+        ];
+        const steps = Math.max(2, Math.round(((Math.PI / 2) * rad) / spacing));
+        for (const [cx, cy, a0] of corners) {
+            for (let i = 0; i <= steps; i++) {
+                const a = a0 + (i / steps) * (Math.PI / 2);
+                put(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad);
+            }
+        }
+    };
+
     const drawEdges = (time: number, activeId: string | null): void => {
         edgeGfx.clear();
 
-        // meta 邊（RWD「包住每一頁」）：很淡的虛線點，不搶戲，只示意關聯
-        for (const edge of EDGES.filter((e) => e.meta)) {
-            const a = nodeViews.get(edge.from)!;
-            const b = nodeViews.get(edge.to)!;
-            const { cx, cy } = curveOf(a, b);
-            const involved = !activeId || activeId === edge.from || activeId === edge.to;
-            const dots = 22;
-            for (let i = 1; i < dots; i++) {
-                const p = bezier(ax(a), ay(a), cx, cy, ax(b), ay(b), i / dots);
-                edgeGfx.circle(p.x, p.y, 1).fill({ color: TONE[edge.tone], alpha: involved ? 0.28 : 0.1 });
-            }
-        }
+        drawWrapFrame(time, activeId);
 
         for (const { edge, label } of edgeLabels) {
             const a = nodeViews.get(edge.from)!;

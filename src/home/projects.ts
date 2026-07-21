@@ -10,8 +10,14 @@
  * Configurator 是自成一島的 Babylon 3D 旗艦（技術上跟其他人不共用底層——這件事本身就是資訊）。
  */
 
-/** 邊代表的共用技術；tone 決定它畫成什麼顏色（琥珀=GLSL/WebGL，紫=WGSL/WebGPU）。 */
-export type Tone = 'glsl' | 'wgsl' | 'dual' | 'pixi' | 'neutral';
+/**
+ * 技術的顏色語彙（琥珀=GLSL/WebGL，紫=WGSL/WebGPU，藍=Pixi，綠=Three，紅=Babylon）。
+ *
+ * 顏色刻意只開放給**渲染引擎與著色器**，不給 React/TypeScript 那種每個專案都有的東西——
+ * 全部上色的話小圓環上會分到五六段、人眼分不出來，琥珀↔紫那個「同一件事做兩遍」的
+ * 核心識別也會被淹沒。沒有顏色的技術一律走 neutral。
+ */
+export type Tone = 'glsl' | 'wgsl' | 'dual' | 'pixi' | 'three' | 'babylon' | 'neutral';
 
 /** tone → CSS hex。首頁 zoom 轉場與落地頁 reveal 共用同一組色，動線才連得起來。 */
 export const TONE_HEX: Record<Tone, string> = {
@@ -19,6 +25,8 @@ export const TONE_HEX: Record<Tone, string> = {
     wgsl: '#b57bff',
     dual: '#d98ad6',
     pixi: '#5aa9ff',
+    three: '#4fd18b',
+    babylon: '#f2555a',
     neutral: '#9aa0b2',
 };
 
@@ -32,6 +40,15 @@ export interface ProjectNode {
     glyph: string;
     /** 面板與節點上顯示的技術標籤 */
     tags: string[];
+    /**
+     * 外框要畫成哪幾段色＝這個 pass 用到的**引擎與著色器**。
+     *
+     * 節點外框因此不只是識別色，而是「這東西用什麼做的」——跟左下角技術棧同一套映射，
+     * 兩邊互為對照。只列有顏色的技術（見 Tone 的說明），沒有的就不佔一段，
+     * 否則每個圓都會被 React/TypeScript 這種共通項塞滿、失去區辨力。
+     * 省略時退回單色 tone。
+     */
+    stack?: Tone[];
     /** 這個 pass 自身的色調傾向（Shader Lab 是 dual：琥珀↔紫） */
     tone: Tone;
     /** 正規化座標（桌面/寬螢幕） */
@@ -68,6 +85,8 @@ export const NODES: ProjectNode[] = [
         i18nKey: 'home.crossEngine',
         glyph: '⊕',
         tags: ['PixiJS v8', 'Three.js', 'WebGL Context'],
+        // 同一個 WebGL context 上跑 Pixi 與 Three——外框就是這三者
+        stack: ['pixi', 'three', 'glsl'],
         tone: 'pixi',
         x: 0.31,
         y: 0.36,
@@ -80,6 +99,8 @@ export const NODES: ProjectNode[] = [
         i18nKey: 'home.shader',
         glyph: '⇄',
         tags: ['GLSL', 'WGSL', 'React + Zustand'],
+        // 雙寫 GLSL/WGSL：琥珀↔紫，正是這個作品集的識別
+        stack: ['glsl', 'wgsl'],
         tone: 'dual',
         x: 0.72,
         y: 0.31,
@@ -92,6 +113,8 @@ export const NODES: ProjectNode[] = [
         i18nKey: 'home.lab',
         glyph: '∿',
         tags: ['CPU Frame Time', 'Draw Calls', 'bench'],
+        // 量測的對象是 Pixi，也橫跨兩個後端
+        stack: ['pixi', 'glsl', 'wgsl'],
         tone: 'neutral',
         x: 0.42,
         y: 0.66,
@@ -104,7 +127,11 @@ export const NODES: ProjectNode[] = [
         i18nKey: 'home.configurator',
         glyph: '◈',
         tags: ['Babylon.js', 'PBR / IBL', 'glTF'],
-        tone: 'wgsl',
+        // 自成一島的 Babylon，整圈單色——技術上不與其他 pass 共用底層，這件事本身就是資訊
+        stack: ['babylon'],
+        // tone 要跟 stack 的主色一致：它同時是 zoom 轉場與落地頁 reveal 的顏色，
+        // 外框紅、點下去卻轉紫會很突兀
+        tone: 'babylon',
         x: 0.74,
         y: 0.68,
         r: 0.08,
@@ -129,19 +156,65 @@ export const EDGES: ResourceEdge[] = [
     { from: 'crossEngine', to: 'findings', resource: 'Pixi v8', tone: 'pixi' },
     // bench 的中點跟 crossEngine→shaderLab 那條的 Pixi v8 幾乎重疊，推到弧的另一側去
     { from: 'shaderLab', to: 'findings', resource: 'bench', tone: 'neutral', labelOffset: -34 },
-    // RWD 包住站內每一頁——用淡虛線接到幾個節點示意，不喧賓奪主
+    // RWD 包住站內每一頁。meta 邊**不畫成線**——scene.ts 把它們畫成一圈框住所有節點的
+    // 點狀輪廓（見 drawWrapFrame）。這裡列全部四個節點，是為了 hover RWD 時每一頁都跟著
+    // 亮起來（isConnected 吃這份資料）：既然說「每一頁」，就不能只有其中兩頁有反應。
     { from: 'rwd', to: 'crossEngine', resource: 'wraps', tone: 'neutral', meta: true },
     { from: 'rwd', to: 'findings', resource: 'wraps', tone: 'neutral', meta: true },
+    { from: 'rwd', to: 'shaderLab', resource: 'wraps', tone: 'neutral', meta: true },
+    { from: 'rwd', to: 'configurator', resource: 'wraps', tone: 'neutral', meta: true },
 ];
 
 export function nodeById(id: string): ProjectNode {
     return NODES.find((n) => n.id === id) ?? NODES[0];
 }
 
-/** 圖例上要列的共用技術種類——這是 render graph 的圖例 key。 */
-export const RESOURCE_LEGEND: Array<{ resource: string; tone: Tone }> = [
-    { resource: 'WebGL Context', tone: 'glsl' },
-    { resource: 'Pixi v8', tone: 'pixi' },
-    { resource: 'bench', tone: 'neutral' },
-    { resource: 'GLSL · WGSL', tone: 'dual' },
+/**
+ * 左下角那塊列的是**技術棧**，不是 render graph 的圖例。
+ *
+ * 原本放的是圖例（哪條線代表什麼），但它同時混進了節點的識別色（琥珀 WebGL、粉紫 dual），
+ * 那兩色在線上根本不存在，而真正存在的 `wraps` 虛線又沒被列出來——數量與顏色都對不上。
+ * 更根本的是職責錯位：路人第一眼想知道的是「這個人會什麼」，而全站技術原本只藏在
+ * 節點的 tags 裡、要 hover 才看得到。線的意思交給線上本來就有的文字標籤自明。
+ *
+ * tone 只給**識別色真的對得上**的項目：琥珀＝WebGL/GLSL、紫＝WebGPU/WGSL、藍＝Pixi，
+ * 跟節點的雙半弧同一套語彙。其餘留白，不製造新的顏色謎題。
+ */
+export interface TechItem {
+    name: string;
+    tone?: Tone;
+}
+
+export interface TechGroup {
+    /** 組名的 i18n key */
+    i18nKey: string;
+    items: TechItem[];
+}
+
+export const TECH_STACK: TechGroup[] = [
+    {
+        i18nKey: 'home.tech.render',
+        items: [
+            { name: 'PixiJS v8', tone: 'pixi' },
+            { name: 'Three.js', tone: 'three' },
+            { name: 'Babylon.js', tone: 'babylon' },
+        ],
+    },
+    {
+        i18nKey: 'home.tech.shader',
+        items: [
+            { name: 'GLSL', tone: 'glsl' },
+            { name: 'WGSL', tone: 'wgsl' },
+            { name: 'WebGL', tone: 'glsl' },
+            { name: 'WebGPU', tone: 'wgsl' },
+        ],
+    },
+    {
+        i18nKey: 'home.tech.frontend',
+        items: [{ name: 'React' }, { name: 'Zustand' }, { name: 'TypeScript' }],
+    },
+    {
+        i18nKey: 'home.tech.bench',
+        items: [{ name: 'bench' }, { name: 'Frame Time' }, { name: 'Draw Calls' }],
+    },
 ];
