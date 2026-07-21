@@ -380,7 +380,11 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         const dy = ay(b) - ay(a);
         const len = Math.hypot(dx, dy) || 1;
         const bow = Math.min(len * 0.12, short * 0.08);
-        return { cx: mx + (-dy / len) * bow, cy: my + (dx / len) * bow };
+        // 法線也回傳出去：標籤要沿它推開，才是「離開這條線」而不是單純往下——
+        // 線是斜的，只加 y 位移在斜線上會看起來歪掉。
+        const nx = -dy / len;
+        const ny = dx / len;
+        return { cx: mx + nx * bow, cy: my + ny * bow, nx, ny };
     };
 
     const drawEdges = (time: number, activeId: string | null): void => {
@@ -402,7 +406,7 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         for (const { edge, label } of edgeLabels) {
             const a = nodeViews.get(edge.from)!;
             const b = nodeViews.get(edge.to)!;
-            const { cx, cy } = curveOf(a, b);
+            const { cx, cy, nx, ny } = curveOf(a, b);
 
             const involved = !activeId || activeId === edge.from || activeId === edge.to;
             const color = TONE[edge.tone];
@@ -428,8 +432,10 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
                 }
             }
 
-            // 標籤擺中點、微彎的外側
-            label.position.set(cx, cy);
+            // 標籤擺中點、微彎的外側；labelOffset 沿法線再推開，用來拆散疊在一起的標籤。
+            // 隨短邊縮放（基準 780）——固定像素在直屏上相對太大，會把標籤推去撞節點標籤。
+            const off = (edge.labelOffset ?? 0) * (short / 780);
+            label.position.set(cx + nx * off, cy + ny * off);
             label.alpha = involved ? 0.8 : 0.25;
         }
     };

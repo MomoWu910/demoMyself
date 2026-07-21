@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { currentHour, isOverridden, onSkyChange, realHour, setHourOverride } from '../graph/sky';
 
 /**
@@ -9,6 +10,10 @@ import { currentHour, isOverridden, onSkyChange, realHour, setHourOverride } fro
  * 所以它在不被理會時幾乎不佔視覺份量，被理會時才是個玩具。
  *
  * 撥過之後就停在使用者選的時刻（不自動滑回），軌道上留一個「現在」的刻度，點它交還給真實時鐘。
+ *
+ * **用 portal 掛進 `#lang-slot`**：它要待在語言鈕正下方，而語言鈕是 i18n 掛在 overlay 之外的。
+ * 讓兩者成為同一個 flex 容器的子元素，就不必去猜語言鈕多寬、也不會因為字型載入前後
+ * 寬度變化而錯位；元件本身仍留在 Shell 的 React 樹裡。
  */
 
 /** 圖示切換的時刻。跟 sky.ts 的 keyframe 對齊，但這裡是給人看的分段，不必跟明度門檻一致。 */
@@ -67,7 +72,12 @@ const fmt = (h: number): string => {
 
 export function SkyDial() {
     const [hour, setHour] = useState(currentHour);
-    const [open, setOpen] = useState(false);
+    // 展開有兩條路：滑鼠 hover，或點圖示釘住。
+    // 觸控裝置沒有 hover，只能靠釘住——原本窄螢幕直接把軌道收掉，等於手機完全撥不動，
+    // 但觸控其實拖得很順（pointer events 本來就吃 touch），缺的只是一個展開的方法。
+    const [hovered, setHovered] = useState(false);
+    const [pinned, setPinned] = useState(false);
+    const open = hovered || pinned;
     const [overridden, setOverridden] = useState(isOverridden);
     const trackRef = useRef<HTMLDivElement>(null);
 
@@ -88,11 +98,18 @@ export function SkyDial() {
     const phase = phaseOf(hour);
     const now = realHour();
 
-    return (
+    const slot = typeof document === 'undefined' ? null : document.getElementById('lang-slot');
+    if (!slot) return null;
+
+    return createPortal(
         <div
             className={`sky-dial${open ? ' open' : ''}`}
-            onPointerEnter={() => setOpen(true)}
-            onPointerLeave={() => setOpen(false)}
+            // 只認滑鼠的 hover：觸控也會送 pointerenter，但它的「離開」要等使用者去點別處，
+            // 收合時機會很怪。觸控一律走點擊釘住那條路。
+            onPointerEnter={(e) => {
+                if (e.pointerType === 'mouse') setHovered(true);
+            }}
+            onPointerLeave={() => setHovered(false)}
         >
             <div
                 className="dial-track"
@@ -134,9 +151,17 @@ export function SkyDial() {
                 )}
             </div>
             <span className="dial-time">{fmt(hour)}</span>
-            <span className="dial-icon" title={fmt(hour)}>
+            <button
+                type="button"
+                className="dial-icon"
+                title={fmt(hour)}
+                aria-expanded={open}
+                aria-label="Time of day"
+                onClick={() => setPinned((v) => !v)}
+            >
                 <PhaseIcon phase={phase} />
-            </span>
-        </div>
+            </button>
+        </div>,
+        slot
     );
 }

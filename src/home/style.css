@@ -102,7 +102,19 @@ html, body {
 .backend.webgpu { color: var(--wgsl); border-color: rgba(181, 123, 255, 0.4); }
 
 /* 語言切換 */
-#lang-slot { position: fixed; top: clamp(20px, 3.5vw, 40px); right: clamp(20px, 3.5vw, 40px); z-index: 4; }
+/* 右上角那一疊：語言鈕，底下是時刻軸。時刻軸用 portal 掛進來（見 ui/SkyDial.tsx），
+ * 靠同一個 flex 容器排版就不必去猜語言鈕多寬。容器是 top/right 定位的，
+ * 所以時刻軸展開時往左長、不會把語言鈕推走，整疊也不會往下擠。 */
+#lang-slot {
+    position: fixed;
+    top: clamp(20px, 3.5vw, 40px);
+    right: clamp(20px, 3.5vw, 40px);
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; /* 右對齊，收起時圖示才會跟語言鈕的右緣切齊 */
+    gap: 10px;
+}
 
 /* ---- inspector：hover / 聚焦節點時出現 ---- */
 .inspector {
@@ -206,24 +218,39 @@ html, body {
 .legend .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
 .legend .hint { display: block; margin-top: 12px; font-size: 0.62rem; opacity: 0.6; }
 
-/* ---- 時刻軸：右下角那顆天體 ----
+/* ---- 時刻軸：右上角、語言鈕左邊的那顆天體 ----
  * 收起時只有一個圖示，把「這面水映的是現在幾點」講出來但不佔份量；
  * hover 才向左長出軌道。軌道是從右往左展開的，所以圖示的位置不會跑掉。 */
 .sky-dial {
-    position: absolute;
-    right: clamp(20px, 3.5vw, 40px);
-    bottom: clamp(20px, 3.5vw, 40px);
+    /* 位置交給 #lang-slot 那疊 flex——portal 是後掛的，DOM 順序本來就在語言鈕之後，
+     * 直接落在下方，不必調 order。 */
     display: flex;
     align-items: center;
     /* 收起時連 gap 都收掉，整個元件才真的只剩一顆圖示的寬度 */
     gap: 0;
-    transition: gap 320ms cubic-bezier(0.22, 0.8, 0.3, 1);
+    /* 固定的 padding：展開時才填背景，但 padding 不隨狀態變——會變的話圖示位置會跳一下。
+     * 代價是收起時圖示比語言鈕右緣內縮 8px，圖示沒有可見邊框，看不太出來。 */
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    /* color 的過渡要自己寫：它 portal 到 .overlay 外面了，吃不到那邊的翻面 transition */
+    transition: gap 320ms cubic-bezier(0.22, 0.8, 0.3, 1), color 900ms ease,
+        background-color 240ms ease, border-color 240ms ease;
     color: var(--muted);
     pointer-events: auto;
     z-index: 5;
 }
 .sky-dial:hover { color: var(--text); }
-.sky-dial.open { gap: 10px; }
+/* 展開時給它自己的底。沒有底的話，軌道那條細線疊在節點或雲影上會糊在一起——
+ * 窄橫屏尤其明顯，軌道正好穿過節點。有了面板它就明確是一層控制項，而不是畫面的一部分。 */
+.sky-dial.open {
+    gap: 10px;
+    background: var(--panel);
+    border-color: var(--panel-border);
+    backdrop-filter: blur(8px);
+    color: var(--text);
+}
 
 .dial-track {
     position: relative;
@@ -298,17 +325,38 @@ html, body {
 }
 .sky-dial.open .dial-time { opacity: 0.85; max-width: 5em; }
 
-.dial-icon { display: flex; opacity: 0.65; transition: opacity 240ms ease; }
-.sky-dial:hover .dial-icon { opacity: 1; }
+.dial-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 觸控目標：圖示才 18px，配上容器的 padding 湊到 40px 見方，手指點得到 */
+    min-width: 28px;
+    min-height: 28px;
+    opacity: 0.65;
+    transition: opacity 240ms ease;
+    /* 它是 button（觸控靠點它展開），把瀏覽器預設的鈕外觀清掉 */
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+.sky-dial:hover .dial-icon, .sky-dial.open .dial-icon { opacity: 1; }
+.dial-icon:focus-visible { outline: 1px solid currentColor; outline-offset: 3px; border-radius: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
     .dial-track, .dial-time, .dial-icon { transition: none; }
 }
-/* 窄螢幕：留圖示、拿掉軌道（沒有 hover，展不開也拖不準） */
+/* 窄螢幕：軌道縮短一點，展開時少壓到節點；觸控靠點圖示展開（見 ui/SkyDial.tsx）。
+ * 這裡不再整條收掉——收掉等於手機完全撥不動時間。 */
 @media (max-width: 640px) {
-    .sky-dial.open { gap: 0; }
-    .sky-dial.open .dial-track { width: 0; opacity: 0; }
-    .sky-dial.open .dial-time { opacity: 0; max-width: 0; }
+    .sky-dial.open .dial-track { width: clamp(96px, 30vw, 130px); }
+}
+/* 窄橫屏（手機轉橫）：擠的是**高度**不是寬度，寬度判斷抓不到它。
+ * 畫面被壓扁後 Shader Lab 節點（x .72 / y .31）正好頂在右上角，展開的軌道會蓋住它的上緣。
+ * 這個寬度是量出來的：整條面板要窄到左緣落在該節點的右緣之外，844×390 與 932×430 都留得住。 */
+@media (max-height: 500px) {
+    .sky-dial.open .dial-track { width: clamp(60px, 8vw, 76px); }
 }
 
 @keyframes inspIn {

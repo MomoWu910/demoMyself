@@ -51,6 +51,14 @@ export interface ResourceEdge {
     tone: Tone;
     /** RWD 這種「包住一切」的 meta 關聯畫成虛線、比較淡 */
     meta?: boolean;
+    /**
+     * 標籤沿曲線法線的偏移量。正 = 往弧彎出去的那側（預設側），負 = 另一側。
+     * 用來拆開兩條邊的標籤在畫面上疊在一起的情形——`bench` 與 `Pixi v8` 的中點很近。
+     *
+     * 單位是「短邊 780px 時的像素」，實際會隨版面縮放：寫死像素的話，
+     * 在直屏窄screen上這個位移相對整張圖太大，標籤會被推去撞節點自己的標籤。
+     */
+    labelOffset?: number;
 }
 
 export const NODES: ProjectNode[] = [
@@ -119,7 +127,8 @@ export const NODES: ProjectNode[] = [
 export const EDGES: ResourceEdge[] = [
     { from: 'crossEngine', to: 'shaderLab', resource: 'Pixi v8', tone: 'pixi' },
     { from: 'crossEngine', to: 'findings', resource: 'Pixi v8', tone: 'pixi' },
-    { from: 'shaderLab', to: 'findings', resource: 'bench', tone: 'neutral' },
+    // bench 的中點跟 crossEngine→shaderLab 那條的 Pixi v8 幾乎重疊，推到弧的另一側去
+    { from: 'shaderLab', to: 'findings', resource: 'bench', tone: 'neutral', labelOffset: -34 },
     // RWD 包住站內每一頁——用淡虛線接到幾個節點示意，不喧賓奪主
     { from: 'rwd', to: 'crossEngine', resource: 'wraps', tone: 'neutral', meta: true },
     { from: 'rwd', to: 'findings', resource: 'wraps', tone: 'neutral', meta: true },
