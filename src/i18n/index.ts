@@ -28,9 +28,18 @@ export const DICT: Record<string, Entry> = {
 
     // ---- 首頁 ----
     'home.role': { en: 'Frontend Engineer · 3D / High-Interaction / Complex Web Apps', zh: '前端工程師 · 3D / 高互動 / 複雜 Web 應用' },
+    // 刻意寫成「說明書口吻」而不是宣言：每一句都能當場攤開 source 佐證——
+    // 這頁確實是 Pixi 畫的、水面與漣漪的 shader 在 home/graph/field.ts、
+    // 線的兩級分法在 home/projects.ts 的 EdgeKind。寫得漂亮但答不出來的話不要寫。
     'home.tagline': {
-        en: 'Rendering engineer. Every piece here is built twice — GLSL and WGSL, Pixi and Three — and measured, not claimed.',
-        zh: '渲染工程師。這裡每一件都做兩遍——GLSL 與 WGSL、Pixi 與 Three——而且是量出來的，不是講出來的。',
+        en: 'Frontend engineer, 3D and high-interaction web. This page is a render graph I drew with PixiJS and my own shaders — the nodes are projects, the lines are what they actually share in the source.',
+        zh: '前端工程師，做 3D 與高互動的 Web。這頁是我用 PixiJS 和自己寫的 shader 畫的 render graph——節點是專案，線是它們在原始碼裡真正共用的東西。',
+    },
+    // 小螢幕的短版：完整版在 390 寬要排到 7 行，最後兩行會壓在節點上。
+    // 砍掉的是「怎麼讀這張圖」那半句——那件事左下的圖例本來就會講一次。
+    'home.tagline.short': {
+        en: 'Frontend engineer, 3D and high-interaction web. This page is a render graph I drew with PixiJS and my own shaders.',
+        zh: '前端工程師，做 3D 與高互動的 Web。這頁是我用 PixiJS 和自己寫的 shader 畫的 render graph。',
     },
     'home.tech.title': { en: 'Tech stack', zh: '技術棧' },
     'home.tech.render': { en: 'Rendering', zh: '渲染引擎' },

@@ -81,6 +81,18 @@ function A11yNav() {
  * 只看寬度抓不到窄橫屏，同 .sky-dial 的兩條 media query。 */
 const COMPACT_MQ = '(max-width: 640px), (max-height: 500px)';
 
+/** 小螢幕與否。技術棧要不要收起、tagline 用長版還短版，都吃這一個判定。 */
+function useCompact(): boolean {
+    const [compact, setCompact] = useState(() => window.matchMedia(COMPACT_MQ).matches);
+    useEffect(() => {
+        const mq = window.matchMedia(COMPACT_MQ);
+        const onChange = () => setCompact(mq.matches);
+        mq.addEventListener('change', onChange);
+        return () => mq.removeEventListener('change', onChange);
+    }, []);
+    return compact;
+}
+
 /* hover 節點時整個 Legend 會 unmount（讓位給 inspector），展開狀態放元件內就會被一起丟掉——
  * 手機上剛展開、手指掃過一個節點就收回去。存在 module scope 才活得過 unmount。 */
 let legendOpen: boolean | null = null;
@@ -88,23 +100,15 @@ let legendOpen: boolean | null = null;
 /** 左下技術棧：桌機常駐展開，小螢幕收成一顆標題鈕，點了才長出來。 */
 function Legend() {
     const t = useT();
-    const [compact, setCompact] = useState(() => window.matchMedia(COMPACT_MQ).matches);
+    const compact = useCompact();
     const [open, setOpenState] = useState(() => legendOpen ?? !compact);
     const setOpen = (v: boolean) => {
         legendOpen = v;
         setOpenState(v);
     };
 
-    useEffect(() => {
-        const mq = window.matchMedia(COMPACT_MQ);
-        const onChange = () => {
-            setCompact(mq.matches);
-            // 換螢幕型態（手機轉向）就回到該型態的預設：橫轉直時留著展開狀態會直接壓在節點上。
-            setOpen(!mq.matches);
-        };
-        mq.addEventListener('change', onChange);
-        return () => mq.removeEventListener('change', onChange);
-    }, []);
+    // 換螢幕型態（手機轉向）就回到該型態的預設：橫轉直時留著展開狀態會直接壓在節點上。
+    useEffect(() => setOpen(!compact), [compact]);
 
     return (
         <footer className={`legend${open ? ' open' : ''}${compact ? ' compact' : ''}`}>
@@ -171,6 +175,7 @@ export function Shell() {
     const t = useT();
     const activeId = useHomeStore((s) => s.activeId);
     const entering = useHomeStore((s) => s.enteringId);
+    const compact = useCompact();
 
     return (
         <div className={`overlay${entering ? ' entering' : ''}`}>
@@ -179,7 +184,7 @@ export function Shell() {
                     <h1>ERIC WU</h1>
                     <StatusBadge />
                 </div>
-                <p className="tagline">{t('home.tagline')}</p>
+                <p className="tagline">{t(compact ? 'home.tagline.short' : 'home.tagline')}</p>
             </header>
 
             <A11yNav />

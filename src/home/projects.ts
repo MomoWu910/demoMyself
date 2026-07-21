@@ -6,9 +6,11 @@
  *
  * **邊是照 import 關係畫的，而且分兩級**（見 EdgeKind）：兩端 import 同一個自寫模組 ≠
  * 兩端各自 import 同一個第三方函式庫。原本這兩種混在一起畫成同一條線，會讓人以為
- * Cross-Engine 跟 Shader Lab 之間有共用程式碼（實際上只是都建在 Pixi 上）；
- * 而 Cross-Engine→Findings 那條 `Pixi v8` 根本不成立——`src/findings/` 裡一個 pixi
- * import 都沒有，它是讀 JSON 的資料呈現頁，用 Pixi 的是掛在它底下的三個壓測。已刪。
+ * Cross-Engine 跟 Shader Lab 之間有共用程式碼（實際上只是都建在 Pixi 上）。
+ *
+ * 對照 import 時要注意**一個節點的範圍不等於一個資料夾**：Findings 節點涵蓋結論頁
+ * 底下那三個實驗（頁面直接連過去），所以它算「建在 Pixi 上」——雖然 `src/findings/`
+ * 自己一個 pixi import 都沒有。
  *
  * 這裡描述節點與邊，Pixi 舞台照著畫、
  * React overlay 照著長 inspector——之後跨頁導覽也吃同一份資料。
@@ -175,6 +177,10 @@ export const NODES: ProjectNode[] = [
 export const EDGES: ResourceEdge[] = [
     // 各自 `import from 'pixi.js'`，兩邊沒有互相 import——這是共同依賴，不是共用程式碼。
     { from: 'crossEngine', to: 'shaderLab', resource: 'Pixi v8', tone: 'pixi', kind: 'library' },
+    // Findings 節點代表的是**結論頁＋它底下那三個實驗**（findings/index.html 直接連向
+    // Optimization Lab / Stress / Stress2），三個都 import pixi.js。`src/findings/` 這一個
+    // 資料夾裡確實沒有 pixi，但拿單一 HTML 檔的 import 當判準會判錯這個節點的範圍。
+    { from: 'crossEngine', to: 'findings', resource: 'Pixi v8', tone: 'pixi', kind: 'library' },
     // src/bench/（BenchRunner / BenchPanel / drawCallCounter / 型別）被 shaderLab 的
     // runShaderBench、optimization、findings 三方 import；findings/results/*.json 就是
     // 同一個 runner 跑出來原樣存檔的。全站唯一真正的點對點程式碼共用。
