@@ -4,7 +4,11 @@ import { Filter, GlProgram, GpuProgram, UniformGroup, defaultFilterVert } from '
  * 首頁的 signature：一面水。
  *
  * 整個畫面是一潭靜水，看到的不是雲本身而是**雲的倒影**——所以 fbm 在 y 方向被壓扁成橫向條紋
- * （各向異性取樣），這是倒影和霧的差別。節點落在水面上，每隔一段時間滴一滴水，漣漪從它身上散開。
+ * （各向異性取樣），這是倒影和霧的差別。
+ *
+ * 水面平常是**完全靜止**的，只有倒影在緩緩流動。漣漪只在使用者 hover 節點時產生（點擊另有一發
+ * 大的當轉場），所以畫面上每一次擾動都對應一個剛發生的動作，沒有背景自己在動的東西。
+ * 節點則像浮在水面上的葉子，被別人的漣漪推著晃——見 scene.ts 的 sampleWater 用法。
  *
  * 關鍵在於漣漪**不畫任何亮圈**：它算出來的是高度場，取解析梯度當水面斜率，拿斜率去偏移倒影的取樣
  * 座標。漣漪經過的地方雲會被扭開又合攏，亮度變化則來自斜面反光。這樣漣漪和倒影是同一潭水，
@@ -26,8 +30,9 @@ import { Filter, GlProgram, GpuProgram, UniformGroup, defaultFilterVert } from '
  * 所以三種漣漪走同一條路徑，不必在 fragment 裡寫兩套迴圈。
  *
  * slot 數量要撐得住同時存活的漣漪，否則新的一發會蓋掉還在擴散的舊的，看起來就是漣漪「走到一半
- * 被切斷」。5 個節點 × 每 6 秒一發 × 存活約 11 秒 ≈ 9 發常駐，再加 hover 與點擊，16 格才夠。
- * 挑格子時選**最舊的**（而不是 ring buffer 無腦輪替），犧牲的永遠是最沒價值的那發。
+ * 被切斷」。漣漪改成只由 hover 觸發後，閒置時是 0 發；但滑鼠快速掃過多個節點會連發，
+ * 每發存活約 11 秒，所以格子仍要留寬。挑格子時選**最舊的**（而不是 ring buffer 無腦輪替），
+ * 犧牲的永遠是最沒價值的那發。
  */
 const MAX_DROPS = 16;
 /** 超過這個歲數的漣漪一定衰減光了（exp(-11×0.5)≈0.004），CPU 端主動回收讓格子能重用。 */
@@ -41,16 +46,11 @@ const WAVE = {
     tail: 5.5,
     /** 整發漣漪隨時間的生命衰減 */
     life: 0.5,
-    /** 節點常駐滴水的平均間隔（秒）——排程在 CPU 端，shader 不認識這個值 */
-    period: 6.0,
     /** 水面斜率偏移倒影 uv 的強度（斜率已正規化成 O(1)，這裡就是實際的 uv 位移上限） */
     warp: 0.045,
     /** 斜面反光強度 */
     spec: 0.32,
 };
-
-/** 節點常駐滴水的平均間隔（秒）。排程在 scene 那端，這裡只是把節奏的來源留在同一個檔案。 */
-export const DROP_PERIOD = WAVE.period;
 
 // WebGL：GLSL 300 es
 const fragment = /* glsl */ `
@@ -349,6 +349,24 @@ export interface Drop {
     speed?: number;
     /** 波紋密度倍率，1 = 標準。越低圈越疏 */
     freq?: number;
+    /** 誰打出這發的。取樣時可以把自己發出的波排除掉——波源就在它腳下，不排除會被自己震飛 */
+    source?: string;
+}
+
+/**
+ * 水面在某一點對**漂浮物**的作用。
+ *
+ * 注意這裡取的是波的**能量包絡**，不是逐點的波高/斜率——因為節點半徑（約 0.085）跟波長
+ * （2π/72 ≈ 0.087）幾乎一樣大。一片跟波紋等寬的葉子，兩側同時被波峰和波谷托著、受力抵消，
+ * 本來就不會跟著細紋抖；它是被整個波包推起來、推開、再落回。取振盪分量的話算出來會接近 0
+ * （實測位移只有 0.7px），而且那是物理上正確的 0，不是係數調太小。
+ */
+export interface WaterSample {
+    /** 波經過此處的能量，恆正。波包通過時最大，過了就衰減回 0 */
+    energy: number;
+    /** 徑向推力（能量 × 背離波源的方向）。漂浮物被經過的波往外推 */
+    pushX: number;
+    pushY: number;
 }
 
 export interface FieldFilter {
@@ -357,7 +375,12 @@ export interface FieldFilter {
     setAspect: (aspect: number) => void;
     /** 打一發漣漪進水面。時間軸吃 setTime 餵進來的秒數，所以要先 setTime 再 emit。 */
     emit: (drop: Drop) => void;
-    /** 清掉所有still在擴散的漣漪（版面重排、bfcache 還原時用） */
+    /**
+     * 在 CPU 端取樣水面——用的是**和 shader 完全同一份公式**，所以浮在上面的東西怎麼晃，
+     * 跟畫面上倒影怎麼扭，必然對得起來。`exclude` 用來略過某個來源自己發出的波。
+     */
+    sampleWater: (x: number, y: number, exclude?: string) => WaterSample;
+    /** 清掉所有還在擴散的漣漪（版面重排、bfcache 還原時用） */
     clearDrops: () => void;
 }
 
@@ -369,6 +392,7 @@ interface LiveDrop {
     strength: number;
     speed: number;
     freq: number;
+    source?: string;
 }
 
 export function createFieldFilter(): FieldFilter {
@@ -426,6 +450,37 @@ export function createFieldFilter(): FieldFilter {
             u.uDropCount = live.length;
         },
         setAspect: (a) => (u.uAspect = a),
+        sampleWater: (x, y, exclude) => {
+            // 波的存在範圍與衰減跟 shader 的 waterSlope() 是同一套（同樣的 envelope、同樣先進
+            // aspect 空間），差別只在這裡不取 sin/cos 的振盪分量——理由見 WaterSample 的說明。
+            const aspect = u.uAspect;
+            let energy = 0;
+            let pushX = 0;
+            let pushY = 0;
+
+            for (const d of live) {
+                if (exclude !== undefined && d.source === exclude) continue;
+
+                const age = now - d.t0;
+                if (age < 0) continue;
+
+                const dx = (x - d.x) * aspect;
+                const dy = y - d.y;
+                const r = Math.hypot(dx, dy);
+                if (r < 1e-4) continue;
+
+                const speed = WAVE.speed * d.speed;
+                const px = r - age * speed;
+                if (px > 0) continue; // 波前還沒到
+
+                const envelope = Math.exp(px * WAVE.tail) * Math.exp(-age * WAVE.life) * d.strength;
+                energy += envelope;
+                pushX += (dx / r) * envelope;
+                pushY += (dy / r) * envelope;
+            }
+
+            return { energy, pushX, pushY };
+        },
         emit: (d) => {
             live.push({
                 x: d.x,
@@ -434,6 +489,7 @@ export function createFieldFilter(): FieldFilter {
                 strength: d.strength ?? 1,
                 speed: d.speed ?? 1,
                 freq: d.freq ?? 1,
+                source: d.source,
             });
             // 滿了才犧牲最舊的那發——它衰減得最多，被切斷最不明顯
             if (live.length > MAX_DROPS) {

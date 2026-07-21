@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Sprite, Text, Texture, TextStyle } from 'pixi.js';
 import { EDGES, NODES, nodeById, type ProjectNode, type Tone } from '../projects';
 import { useHomeStore, homeState, type Backend } from '../store';
-import { createFieldFilter, DROP_PERIOD } from './field';
+import { createFieldFilter } from './field';
 import { enterProject, ENTER_MS } from '../enter';
 import { t, onLangChange } from '../../i18n';
 
@@ -17,6 +17,15 @@ const TONE: Record<Tone, number> = {
 const AMBER = 0xff8a3d;
 const VIOLET = 0xb57bff;
 
+/**
+ * 節點漂浮的幅度。吃的是波的能量包絡（見 field.ts 的 WaterSample），遠端節點被波掃到時
+ * 能量大約 0.25，所以這組係數換算出來是幾個像素、約 2 度——節點是導覽目標，晃太大會讓
+ * 點擊變難、標籤文字晃久了也累，讀得出來就夠。
+ */
+const FLOAT_SHIFT = 0.025; // 位移 ×短邊
+const FLOAT_TILT = 0.12; // 傾斜（弧度）
+const FLOAT_LIFT = 0.1; // 浮起 → 縮放
+
 interface NodeView {
     def: ProjectNode;
     container: Container;
@@ -26,6 +35,9 @@ interface NodeView {
     px: number;
     py: number;
     pr: number;
+    /** 漂浮造成的位移（像素）。邊也讀這個，連線才不會跟節點脫開 */
+    ox: number;
+    oy: number;
     active: boolean; // 只在這個值變動時才重畫節點幾何，不必每幀
 }
 
@@ -140,9 +152,12 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
 
         c.on('pointerover', () => {
             useHomeStore.getState().setActive(def.id);
-            // 滑過＝手指碰到水面：一發細碎、稍快的小漣漪，讓 hover 有重量
+            // 滑過＝手指碰到水面。這是現在**唯一**的漣漪來源：畫面上每一次晃動都對應使用者剛做的動作，
+            // 沒有背景自己在動的東西。source 記著是誰打的，它自己就不會被這發推。
             const v = nodeViews.get(def.id);
-            if (v && !reduceMotion) field.emit({ ...dropAt(v), strength: 0.7, speed: 1.4, freq: 1.5 });
+            if (v && !reduceMotion) {
+                field.emit({ ...dropAt(v), strength: 0.9, speed: 1.4, freq: 1.5, source: def.id });
+            }
         });
         c.on('pointerout', () => {
             if (homeState().activeId === def.id) useHomeStore.getState().setActive(null);
@@ -150,17 +165,26 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         c.on('pointertap', () => {
             // 進場＝整潭水被打了一記：又快又疏的大波，跟著純色圓一起把畫面推開
             const v = nodeViews.get(def.id);
-            if (v && !reduceMotion) field.emit({ ...dropAt(v), strength: 2.6, speed: 5.0, freq: 0.45 });
+            if (v && !reduceMotion) {
+                field.emit({ ...dropAt(v), strength: 2.6, speed: 5.0, freq: 0.45, source: def.id });
+            }
             enterProject(def.id);
         });
 
-        nodeViews.set(def.id, { def, container: c, ring, glyph, label, px: 0, py: 0, pr: 0, active: false });
+        nodeViews.set(def.id, {
+            def,
+            container: c,
+            ring,
+            glyph,
+            label,
+            px: 0,
+            py: 0,
+            pr: 0,
+            ox: 0,
+            oy: 0,
+            active: false,
+        });
     }
-
-    // 每個節點下次該滴水的時間（秒，對齊動畫時鐘）。at <= 0 代表「還沒排」，會在下一幀隨機排一個
-    // 初始時間——這樣五個節點不會在同一秒一起滴，水面才有自然的節奏。
-    const dropSchedule = new Map<string, { at: number }>();
-    for (const def of NODES) dropSchedule.set(def.id, { at: 0 });
 
     /** 節點在水面上的正規化落點（0..1）。漣漪吃的是這套座標，不是像素。 */
     const dropAt = (v: NodeView): { x: number; y: number } => ({ x: v.px / W, y: v.py / H });
@@ -197,7 +221,11 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
 
         // 版面一動，還在擴散的漣漪就對不上新的節點位置了——清掉重來
         field.clearDrops();
-        for (const s of dropSchedule.values()) s.at = 0;
+        for (const v of nodeViews.values()) {
+            v.ox = 0;
+            v.oy = 0;
+            v.container.rotation = 0;
+        }
     };
 
     const drawNode = (v: NodeView, active: boolean): void => {
@@ -252,32 +280,31 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
 
         const activeId = homeState().activeId;
 
-        // 節點常駐滴水：各自照自己的時鐘，間隔隨機抖動 ±30%，才不會拍成整齊的節拍。
-        // reduce-motion 時整個水面是凍的，一滴也不排。
-        if (!reduceMotion) {
-            for (const v of nodeViews.values()) {
-                const s = dropSchedule.get(v.def.id)!;
-                if (activeId === v.def.id) {
-                    // 滑鼠正停在這個節點上：這裡的水面歸 hover 那發管，隨機滴水會打架。
-                    // 順手把下次時間往後推，移開後才不會立刻補一發。
-                    s.at = elapsed + DROP_PERIOD * (0.7 + Math.random() * 0.6);
-                } else if (s.at <= 0) {
-                    s.at = elapsed + Math.random() * DROP_PERIOD; // 初次隨機錯開
-                } else if (elapsed >= s.at) {
-                    field.emit({ ...dropAt(v), strength: v.pr / (0.085 * short) });
-                    s.at = elapsed + DROP_PERIOD * (0.7 + Math.random() * 0.6);
-                }
-            }
-        }
-
-        // 節點：呼吸 + 高亮/淡出
+        // 節點：漂浮 + 呼吸 + 高亮/淡出
         for (const v of nodeViews.values()) {
             const isActive = activeId === v.def.id;
             const dim = activeId && !isActive && !isConnected(activeId, v.def.id);
             const targetAlpha = dim ? 0.35 : 1;
             v.container.alpha += (targetAlpha - v.container.alpha) * 0.15;
+
+            // 浮在水面上的葉子：被別人的漣漪推著晃。
+            // 兩條規則疊加——① 滑鼠正停著的節點完全不動，它是波源也是你要點的目標，得是靜止的錨點；
+            // ② 任何節點都不受**自己發出**的那發影響，否則波源就在腳下、會被自己震飛。
+            let wave = { energy: 0, pushX: 0, pushY: 0 };
+            if (!reduceMotion && !isActive) {
+                wave = field.sampleWater(v.px / W, v.py / H, v.def.id);
+            }
+            // 被波往外推，波過了就回到原位
+            v.ox += (wave.pushX * short * FLOAT_SHIFT - v.ox) * 0.2;
+            v.oy += (wave.pushY * short * FLOAT_SHIFT - v.oy) * 0.2;
+            v.container.position.set(v.px + v.ox, v.py + v.oy);
+            // 順著推力方向傾一點——這是「浮在水面上」最有效的線索，比浮起多高還明顯
+            v.container.rotation += (wave.pushX * FLOAT_TILT - v.container.rotation) * 0.2;
+
+            // 浮起的高度不用 y 位移表示（那會讀成「在跳」而不是「浮」，也會破壞版面精度），改用微幅縮放
             const pulse = 1 + Math.sin(anim * 1.4 + v.px) * 0.015;
-            const scale = (isActive ? 1.08 : 1) * pulse;
+            const lift = 1 + wave.energy * FLOAT_LIFT;
+            const scale = (isActive ? 1.08 : 1) * pulse * lift;
             v.container.scale.set(v.container.scale.x + (scale - v.container.scale.x) * 0.15);
             // 幾何只在 active 變動時重畫；呼吸/淡出是 transform/alpha，不必重算幾何
             if (isActive !== v.active) {
@@ -292,11 +319,15 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
     const isConnected = (a: string, b: string): boolean =>
         EDGES.some((e) => (e.from === a && e.to === b) || (e.from === b && e.to === a));
 
+    // 邊要接在節點**漂浮後**的位置上，否則節點晃走了連線還釘在原處
+    const ax = (v: NodeView): number => v.px + v.ox;
+    const ay = (v: NodeView): number => v.py + v.oy;
+
     const curveOf = (a: NodeView, b: NodeView) => {
-        const mx = (a.px + b.px) / 2;
-        const my = (a.py + b.py) / 2;
-        const dx = b.px - a.px;
-        const dy = b.py - a.py;
+        const mx = (ax(a) + ax(b)) / 2;
+        const my = (ay(a) + ay(b)) / 2;
+        const dx = ax(b) - ax(a);
+        const dy = ay(b) - ay(a);
         const len = Math.hypot(dx, dy) || 1;
         const bow = Math.min(len * 0.12, short * 0.08);
         return { cx: mx + (-dy / len) * bow, cy: my + (dx / len) * bow };
@@ -313,7 +344,7 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
             const involved = !activeId || activeId === edge.from || activeId === edge.to;
             const dots = 22;
             for (let i = 1; i < dots; i++) {
-                const p = bezier(a.px, a.py, cx, cy, b.px, b.py, i / dots);
+                const p = bezier(ax(a), ay(a), cx, cy, ax(b), ay(b), i / dots);
                 edgeGfx.circle(p.x, p.y, 1).fill({ color: TONE[edge.tone], alpha: involved ? 0.28 : 0.1 });
             }
         }
@@ -328,9 +359,9 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
 
             // 基底弧線
             const seg = 26;
-            edgeGfx.moveTo(a.px, a.py);
+            edgeGfx.moveTo(ax(a), ay(a));
             for (let i = 1; i <= seg; i++) {
-                const p = bezier(a.px, a.py, cx, cy, b.px, b.py, i / seg);
+                const p = bezier(ax(a), ay(a), cx, cy, ax(b), ay(b), i / seg);
                 edgeGfx.lineTo(p.x, p.y);
             }
             edgeGfx.stroke({ color, width: involved ? 1.4 : 1, alpha: involved ? 0.5 : 0.18 });
@@ -342,7 +373,7 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
                 const fade = Math.sin(beat * Math.PI); // 中點亮、越靠端點越淡
                 for (const dir of [-1, 1]) {
                     const tt = 0.5 + dir * 0.5 * beat;
-                    const p = bezier(a.px, a.py, cx, cy, b.px, b.py, tt);
+                    const p = bezier(ax(a), ay(a), cx, cy, ax(b), ay(b), tt);
                     edgeGfx.circle(p.x, p.y, involved ? 2.4 : 1.7).fill({ color, alpha: (involved ? 0.9 : 0.38) * fade });
                 }
             }
@@ -364,9 +395,13 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         useHomeStore.getState().setEntering(null);
         enterStart = -1;
         fxLayer.clear();
-        // 離開時打的那發轉場大波不該在返回後還掛在水面上
+        // 離開時打的那發轉場大波不該在返回後還掛在水面上，節點也要回到沒被推過的位置
         field.clearDrops();
-        for (const s of dropSchedule.values()) s.at = 0;
+        for (const v of nodeViews.values()) {
+            v.ox = 0;
+            v.oy = 0;
+            v.container.rotation = 0;
+        }
         if (!app.ticker.started && !document.hidden) app.ticker.start();
     });
 }
