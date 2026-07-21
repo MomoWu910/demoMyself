@@ -206,7 +206,25 @@ html, body {
     bottom: clamp(20px, 3.5vw, 40px);
     font-size: 0.8rem;
     color: var(--muted);
+    /* 整塊維持穿透，只有 toggle 自己收事件：展開的面板疊在 canvas 節點上時，
+     * 面板搶走 pointer 事件會讓節點 hover 閃爍（同 inspector 那個坑）。 */
+    pointer-events: none;
 }
+/* 標題列＝摺疊開關。小螢幕收起時，畫面左下就只剩這一顆。 */
+.legend-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+    pointer-events: auto;
+    color: inherit;
+}
+.legend-toggle:focus-visible { outline: 1px solid currentColor; outline-offset: 4px; border-radius: 4px; }
 .legend-title {
     display: block;
     font-size: 0.68rem;
@@ -215,14 +233,37 @@ html, body {
     /* 原本寫死 #5c6070，那是照深色底挑的，白天會淡到看不見——跟著主題走 */
     color: var(--muted);
     opacity: 0.85;
-    margin-bottom: 8px;
 }
+/* chevron：內容在按鈕下方（整塊靠 bottom 錨定，展開時是按鈕被頂上去），
+ * 所以收起朝下＝可展開，展開朝上＝可收合。 */
+.legend-caret {
+    width: 6px;
+    height: 6px;
+    border-right: 1.4px solid currentColor;
+    border-bottom: 1.4px solid currentColor;
+    color: var(--muted);
+    opacity: 0.7;
+    transform: rotate(45deg);
+    transition: transform 260ms cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+.legend.open .legend-caret { transform: rotate(-135deg); }
+/* 0fr→1fr 的 grid 過渡：不必知道內容高度就能做出平滑的收合 */
+.legend-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition: grid-template-rows 280ms cubic-bezier(0.22, 0.8, 0.3, 1), opacity 200ms ease;
+}
+.legend.open .legend-body { grid-template-rows: 1fr; opacity: 1; }
+.legend-inner { overflow: hidden; min-height: 0; }
 .legend ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 /* 每組一行：左邊固定寬的組名，右邊技術項目。組名對齊才讀得出這是四組而不是一長串 */
 .legend li { display: flex; align-items: baseline; gap: 10px; letter-spacing: 0.02em; }
 .tech-label {
     flex: none;
-    width: 5.2em;
+    /* 8.6em 是照最長的 MEASUREMENT（含 0.14em 字距）量的——5.2em 裝不下，
+     * 英文版的組名會直接壓到右邊的技術項目上。 */
+    width: 8.6em;
     font-size: 0.68rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -412,9 +453,48 @@ html, body {
     .inspector { animation: none; }
 }
 
-/* 窄螢幕：圖例讓位、inspector 收窄（完整 RWD 在 Phase 4） */
+/* 小螢幕的技術棧：不再整塊消失（那等於手機看不到「這個人會什麼」），
+ * 改成預設收起的一顆膠囊鈕——只佔一行、點了才長出來。膠囊那層底才讓它從水面上跳出來。 */
+.legend.compact .legend-toggle {
+    margin-bottom: 0;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    backdrop-filter: blur(6px);
+}
+.legend.compact.open .legend-toggle { margin-bottom: 8px; }
+/* 有面板當底就不需要反色暈了——halo 是給「直接壓在水面上的字」用的，
+ * 疊在面板上只會在字周圍留一團髒暈（白天特別明顯）。 */
+.legend.compact .legend-toggle, .legend.compact .legend-card,
+.legend.compact .legend-toggle *, .legend.compact .legend-card * { text-shadow: none; }
+/* 展開時給內容同一層底：手機上它必然疊在節點/水面上，沒有底就讀不動 */
+.legend.compact .legend-card {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    backdrop-filter: blur(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .legend-body, .legend-caret { transition: none; }
+}
+
+/* 窄直屏：改靠右下。zig-zag 版面把 RWD Showcase 排在左下角，
+ * 收起的膠囊放左邊就正好壓在它的標籤上；右下那塊是空的。 */
 @media (max-width: 640px) {
-    .legend { display: none; }
+    .legend.compact {
+        /* left 要留著：只給 right 的話寬度由內容決定，展開的卡片會從左邊溢出畫面 */
+        right: clamp(20px, 3.5vw, 40px);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+}
+
+/* 窄螢幕：inspector 收窄（完整 RWD 在 Phase 4） */
+@media (max-width: 640px) {
     /* 手機：inspector 全寬，蓋過 dock-left/right 的左右定位 */
     .inspector,
     .inspector.dock-left,

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useHomeStore } from '../store';
 import { NODES, nodeById, TECH_STACK, type Tone } from '../projects';
 import { enterProject } from '../enter';
@@ -76,29 +77,51 @@ function A11yNav() {
     );
 }
 
-export function Shell() {
+/* 小螢幕＝寬度窄（直屏）或高度矮（手機轉橫），兩種都是技術棧會壓到節點的情況。
+ * 只看寬度抓不到窄橫屏，同 .sky-dial 的兩條 media query。 */
+const COMPACT_MQ = '(max-width: 640px), (max-height: 500px)';
+
+/* hover 節點時整個 Legend 會 unmount（讓位給 inspector），展開狀態放元件內就會被一起丟掉——
+ * 手機上剛展開、手指掃過一個節點就收回去。存在 module scope 才活得過 unmount。 */
+let legendOpen: boolean | null = null;
+
+/** 左下技術棧：桌機常駐展開，小螢幕收成一顆標題鈕，點了才長出來。 */
+function Legend() {
     const t = useT();
-    const activeId = useHomeStore((s) => s.activeId);
-    const entering = useHomeStore((s) => s.enteringId);
+    const [compact, setCompact] = useState(() => window.matchMedia(COMPACT_MQ).matches);
+    const [open, setOpenState] = useState(() => legendOpen ?? !compact);
+    const setOpen = (v: boolean) => {
+        legendOpen = v;
+        setOpenState(v);
+    };
+
+    useEffect(() => {
+        const mq = window.matchMedia(COMPACT_MQ);
+        const onChange = () => {
+            setCompact(mq.matches);
+            // 換螢幕型態（手機轉向）就回到該型態的預設：橫轉直時留著展開狀態會直接壓在節點上。
+            setOpen(!mq.matches);
+        };
+        mq.addEventListener('change', onChange);
+        return () => mq.removeEventListener('change', onChange);
+    }, []);
 
     return (
-        <div className={`overlay${entering ? ' entering' : ''}`}>
-            <header className="wordmark">
-                <div className="mark-row">
-                    <h1>ERIC WU</h1>
-                    <StatusBadge />
-                </div>
-                <p className="tagline">{t('home.tagline')}</p>
-            </header>
-
-            <A11yNav />
-            <Inspector />
-            <SkyDial />
-
-            {/* hover 時技術棧讓位給 inspector（都在畫面下緣） */}
-            {!activeId && (
-                <footer className="legend" aria-hidden="true">
-                    <span className="legend-title">{t('home.tech.title')}</span>
+        <footer className={`legend${open ? ' open' : ''}${compact ? ' compact' : ''}`}>
+            <button
+                type="button"
+                className="legend-toggle"
+                aria-expanded={open}
+                onClick={() => setOpen(!open)}
+            >
+                <span className="legend-title">{t('home.tech.title')}</span>
+                <span className="legend-caret" aria-hidden="true" />
+            </button>
+            <div className="legend-body" aria-hidden={!open}>
+                {/* 兩層是必要的：外層 legend-inner 只做 overflow 裁切（0fr 過渡靠它），
+                    背板的 padding 要放在再內一層，否則收起時 padding 會撐出一條殘留的底。 */}
+                <div className="legend-inner">
+                  <div className="legend-card">
                     <ul>
                         {TECH_STACK.map((g) => (
                             <li key={g.i18nKey}>
@@ -129,8 +152,34 @@ export function Shell() {
                         </span>
                     </span>
                     <span className="hint">{t('home.hint')}</span>
-                </footer>
-            )}
+                  </div>
+                </div>
+            </div>
+        </footer>
+    );
+}
+
+export function Shell() {
+    const t = useT();
+    const activeId = useHomeStore((s) => s.activeId);
+    const entering = useHomeStore((s) => s.enteringId);
+
+    return (
+        <div className={`overlay${entering ? ' entering' : ''}`}>
+            <header className="wordmark">
+                <div className="mark-row">
+                    <h1>ERIC WU</h1>
+                    <StatusBadge />
+                </div>
+                <p className="tagline">{t('home.tagline')}</p>
+            </header>
+
+            <A11yNav />
+            <Inspector />
+            <SkyDial />
+
+            {/* hover 時技術棧讓位給 inspector（都在畫面下緣） */}
+            {!activeId && <Legend />}
         </div>
     );
 }
