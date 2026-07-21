@@ -262,5 +262,11 @@ module.exports = {
         port: 8080, // 指定 port
         open: true, // 啟動時自動打開瀏覽器
         hot: true,  // 啟用熱更新 (Hot Module Replacement)
+        // 綁到所有網卡，同網段的手機/平板才連得到（預設只綁 localhost=127.0.0.1，
+        // 同一個 wifi 也看不到）。啟動後終端機會印出 On Your Network 那個網址。
+        host: '0.0.0.0',
+        // v5 的預設是 'auto'，只認 localhost 與上面的 host；用區網 IP 連進來會被判成
+        // Invalid Host header 而擋掉。開發用 server 就開放，正式站不走這條路。
+        allowedHosts: 'all',
     },
 };  
