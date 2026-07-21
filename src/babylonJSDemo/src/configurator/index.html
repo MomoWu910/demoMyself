@@ -151,64 +151,9 @@
 
     <canvas id="renderCanvas"></canvas>
 
-    <aside class="side-panel" id="panel" style="display:none;">
-        <button class="sheet-handle" id="sheet-toggle" type="button">
-            <span>⚙ <span data-i18n="cfg.sheet.customize">Customize</span></span>
-            <em>▼</em>
-        </button>
-        <div class="section hidden" id="sec-parts">
-            <span class="label" data-i18n="cfg.section.part">Part</span>
-            <div class="pills" id="parts"></div>
-        </div>
-
-        <div class="section" id="sec-finish">
-            <span class="label" data-i18n="cfg.section.finish">Finish</span>
-            <div class="pills" id="finishes"></div>
-        </div>
-
-        <div class="section" id="sec-color">
-            <span class="label" data-i18n="cfg.section.color">Color</span>
-            <div class="swatches" id="tints"></div>
-        </div>
-
-        <div class="section hidden" id="sec-colorway">
-            <span class="label" data-i18n="cfg.section.colorway">Colorway</span>
-            <div class="swatches" id="swatches"></div>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="section">
-            <span class="label" data-i18n="cfg.section.lighting">Lighting</span>
-            <div class="pills" id="lighting-presets"></div>
-            <div class="slider-row">
-                <div class="slabel"><span data-i18n="cfg.slider.envInt">環境光強度</span><span class="val" id="env-int-val">1.1</span></div>
-                <input type="range" id="env-intensity" min="0" max="3" step="0.05" value="1.1">
-            </div>
-            <div class="slider-row">
-                <div class="slabel"><span data-i18n="cfg.slider.envRot">環境旋轉</span><span class="val" id="env-rot-val">0°</span></div>
-                <input type="range" id="env-rotation" min="0" max="360" step="1" value="0">
-            </div>
-            <div class="slider-row">
-                <div class="slabel"><span data-i18n="cfg.slider.keyInt">主光強度</span><span class="val" id="key-int-val">2.2</span></div>
-                <input type="range" id="key-intensity" min="0" max="6" step="0.05" value="2.2">
-            </div>
-            <div class="slider-row">
-                <div class="slabel"><span data-i18n="cfg.slider.keyTemp">主光色溫</span><span class="val" id="key-temp-val">6500K</span></div>
-                <input type="range" id="key-temp" min="2700" max="9000" step="100" value="6500">
-            </div>
-        </div>
-
-        <div class="section">
-            <span class="label" data-i18n="cfg.section.background">Background</span>
-            <div class="pills" id="backgrounds"></div>
-        </div>
-    </aside>
-
-    <div class="bottom-bar" id="bottom-bar" style="display:none;">
-        <button class="ctrl-btn on" id="autorotate" data-i18n="cfg.btn.autorotate">◐ Auto-rotate</button>
-        <button class="ctrl-btn" id="reset" data-i18n="cfg.btn.reset">⟲ Reset View</button>
-    </div>
+    <!-- 控制面板與底部工具列由 React 掛在這裡（見 ui/Panel.tsx）。
+         模型載入完成前 Panel 不畫任何東西，所以這裡不需要佔位或 display:none 開關。 -->
+    <div id="panel-root"></div>
 
     <div id="loading">
         <div class="spinner"></div>

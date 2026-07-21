@@ -128,7 +128,7 @@ module.exports = {
     mode: isDev ? 'development' : 'production',
     entry: {
         main: './src/home/index.tsx',                            // 入口首頁：React 殼 + Pixi render graph
-        configurator: './src/babylonJSDemo/src/configurator/index.ts', // Babylon.js 產品配置器
+        configurator: './src/babylonJSDemo/src/configurator/index.tsx', // Babylon.js 產品配置器
         pixi_stress: './src/pixiJSDemo/stressTest/index.ts',     // Pixi.js 壓力測試
         pixi_stress2: './src/pixiJSDemo/stressTest2/index.ts',   // Pixi.js 壓力測試2
         pixi_optimization: './src/pixiJSDemo/optimization/index.ts', // Pixi.js 最佳實踐
