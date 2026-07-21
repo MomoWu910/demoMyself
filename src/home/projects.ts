@@ -26,7 +26,7 @@ export interface ProjectNode {
     id: string;
     /** 導向的頁面 */
     href: string;
-    /** i18n key 前綴：沿用現有 home.* 文案（{i18nKey}.title / .desc / .cta） */
+    /** i18n key 前綴：沿用現有 home.* 文案（{i18nKey}.title / .desc） */
     i18nKey: string;
     /** 節點上的一個字元符號（不是 emoji 的裝飾，是 pass 的識別記號） */
     glyph: string;

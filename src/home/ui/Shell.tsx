@@ -2,6 +2,7 @@ import { useHomeStore } from '../store';
 import { NODES, nodeById, RESOURCE_LEGEND, type Tone } from '../projects';
 import { enterProject } from '../enter';
 import { useT } from './useT';
+import { SkyDial } from './SkyDial';
 
 const TONE_CSS: Record<Tone, string> = {
     glsl: 'var(--glsl)',
@@ -43,16 +44,6 @@ function Inspector() {
                     </span>
                 ))}
             </div>
-            <a
-                className="insp-enter"
-                href={node.href}
-                onClick={(e) => {
-                    e.preventDefault();
-                    enterProject(node.id);
-                }}
-            >
-                {t(`${node.i18nKey}.cta`)}
-            </a>
         </aside>
     );
 }
@@ -100,6 +91,7 @@ export function Shell() {
 
             <A11yNav />
             <Inspector />
+            <SkyDial />
 
             {/* hover 時圖例讓位給 inspector（都在畫面下緣） */}
             {!activeId && (

@@ -39,33 +39,28 @@ export const DICT: Record<string, Entry> = {
         en: 'PixiJS (2D UI) and Three.js (3D scene) drawing into a <strong>single shared WebGL context</strong> — manual GL state management to avoid depth / stencil / culling pollution, with cannon-es physics.',
         zh: 'PixiJS（2D UI）與 Three.js（3D 場景）繪製進<strong>同一個共用 WebGL context</strong> — 手動管理 GL 狀態以避免 depth / stencil / culling 污染，搭配 cannon-es 物理。',
     },
-    'home.crossEngine.cta': { en: 'Open Demo →', zh: '開啟 Demo →' },
     'home.configurator.title': { en: '3D Product Configurator', zh: '3D 產品配置器' },
     'home.configurator.desc': {
         en: 'Babylon.js real-time configurator: swap finishes (matte / leather / glossy / metallic) and colors, tune studio lighting & background live, with PBR + IBL, soft shadows, post-processing, and colorway variants (glTF KHR_materials_variants).',
         zh: 'Babylon.js 即時配置器：切換質感（matte / leather / glossy / metallic）與顏色、即時調整棚拍打光與背景，搭配 PBR + IBL、柔和陰影、後製，與 colorway 變體（glTF KHR_materials_variants）。',
     },
-    'home.configurator.cta': { en: 'Configure →', zh: '進入配置 →' },
     'home.lab.title': { en: 'Rendering Findings', zh: '渲染效能實測結論' },
     'home.lab.desc': {
         en: 'Two test cases, <strong>identical draw call counts, 6.5× the CPU cost</strong>. A measured report on PixiJS v8: how I profiled it, what it proved, and why a single metric can invert your conclusion.',
         zh: '兩個測試案例，<strong>一模一樣的 draw call 數，CPU 成本卻差 6.5 倍</strong>。一份 PixiJS v8 的實測報告：我怎麼量、量到了什麼，以及為什麼只看單一指標會讓結論完全反過來。',
     },
     'home.lab.foot': { en: 'Measured, not claimed', zh: '量出來的，不是講出來的' },
-    'home.lab.cta': { en: 'Read Report →', zh: '閱讀報告 →' },
     'home.rwd.title': { en: 'RWD Showcase', zh: 'RWD 響應式展示' },
     'home.rwd.desc': {
         en: 'Built-in device simulator: preview every page of this site in iPhone / iPad / desktop viewports, rotate, or free-drag to any window size — layouts stay intact everywhere.',
         zh: '站內建裝置模擬器：以 iPhone / iPad / 桌機視口即時預覽本站每一頁，可轉向、可自由拖拉任意視窗尺寸——所有佈局都不爆版。',
     },
-    'home.rwd.cta': { en: 'Open Simulator →', zh: '開啟模擬器 →' },
     'home.shader.title': { en: 'Shader Lab', zh: 'Shader Lab' },
     'home.shader.desc': {
         en: 'Custom PixiJS v8 shaders with <strong>GLSL and WGSL hand-written side by side</strong> — dissolve, water ripple, and a flag deformed in the vertex stage. Outputs verified by reading the framebuffer on both backends, not by eyeballing them. Live controls in React + Zustand, the shader source on screen, and what each effect actually costs.',
         zh: '自訂 PixiJS v8 shader，<strong>GLSL 與 WGSL 兩份原始碼手寫並存</strong>——溶解、水波折射，以及一面在 vertex 階段被扭曲的旗幟。輸出是讀 framebuffer 在兩個 backend 上逐像素比對出來的，不是用眼睛看的。控制面板用 React + Zustand，原始碼直接攤在畫面上，並說明每個效果真正的代價。',
     },
     'home.shader.foot': { en: 'GLSL + WGSL, both written by hand', zh: 'GLSL + WGSL，兩份都自己寫' },
-    'home.shader.cta': { en: 'Open Lab →', zh: '進入 Lab →' },
 
     // ---- RWD Showcase ----
     'rwd.title': { en: 'RWD Showcase', zh: 'RWD 響應式展示' },
@@ -517,7 +512,10 @@ export function mountLangToggle(opts: { parent?: HTMLElement; style?: Partial<CS
     const wrap = document.createElement('div');
     Object.assign(wrap.style, {
         display: 'inline-flex', gap: '2px', padding: '3px', borderRadius: '10px',
-        background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)',
+        // 吃變數＋fallback：只有把 --lang-* 設起來的頁（首頁會隨天色翻面）才會變，
+        // 其餘各頁沒設變數就落回原本這組深色，不必逐頁改
+        background: 'var(--lang-bg, rgba(0,0,0,0.35))',
+        border: '1px solid var(--lang-border, rgba(255,255,255,0.12))',
         backdropFilter: 'blur(8px)', zIndex: '200', fontFamily: 'Segoe UI, Roboto, sans-serif',
         ...(opts.parent ? {} : { position: 'fixed' as const }),
         ...opts.style,
@@ -529,7 +527,8 @@ export function mountLangToggle(opts: { parent?: HTMLElement; style?: Partial<CS
         b.dataset.lang = lang;
         Object.assign(b.style, {
             border: 'none', cursor: 'pointer', borderRadius: '7px', padding: '5px 11px',
-            fontSize: '13px', background: 'transparent', color: '#a1a1aa', transition: 'all 0.15s',
+            fontSize: '13px', background: 'transparent',
+            color: 'var(--lang-muted, #a1a1aa)', transition: 'all 0.15s',
         });
         b.addEventListener('click', () => setLang(lang));
         return b;
@@ -542,8 +541,8 @@ export function mountLangToggle(opts: { parent?: HTMLElement; style?: Partial<CS
         [enBtn, zhBtn].forEach((b) => {
             const active = b.dataset.lang === current;
             // 中性配色：新首頁與各舊頁的深色背景都合用（原本寫死 cyan 只配舊主題）
-            b.style.background = active ? 'rgba(255,255,255,0.16)' : 'transparent';
-            b.style.color = active ? '#f4f4f5' : '#a1a1aa';
+            b.style.background = active ? 'var(--lang-active, rgba(255,255,255,0.16))' : 'transparent';
+            b.style.color = active ? 'var(--lang-fg, #f4f4f5)' : 'var(--lang-muted, #a1a1aa)';
             b.style.fontWeight = active ? '700' : '500';
         });
     };

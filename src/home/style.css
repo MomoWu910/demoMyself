@@ -1,5 +1,8 @@
 /* 首頁 · The Render Graph
- * 深墨底 + 琥珀↔紫雙色（WebGL↔WebGPU / GLSL↔WGSL）。刻意離開舊版 cyan-on-black。 */
+ * 底色跟著**現在幾點的天空**走（見 graph/sky.ts）：白天淺水藍、黃昏橘、夜裡近黑。
+ * 下面 :root 那組是 dark 的預設值，實際值由 sky.ts 在 runtime 覆蓋成 inline style；
+ * 這裡留完整一份是為了 JS 還沒跑到時不會沒有顏色可用。
+ * 琥珀↔紫（WebGL↔WebGPU / GLSL↔WGSL）從背景退場，只留在節點與品牌色上。 */
 
 @import '../shell/fonts.css';
 
@@ -29,6 +32,20 @@ html, body {
     font-family: var(--mono);
     overflow: hidden;
     overscroll-behavior: none;
+}
+
+/* 天色翻面（見 sky.ts 的 applyTheme）：整套色票是一次跳過去的，靠這層 transition 抹平。
+ * 背景是連續變的、前景是離散的——不這樣做，黃昏會經過一段「灰字疊灰底」完全不能讀的死角。
+ * 900ms 是刻意的慢：這不是互動回饋，是天色在變，快了會讀成閃爍。 */
+.overlay, .overlay * {
+    transition: color 900ms ease, background-color 900ms ease, border-color 900ms ease;
+    /* 一圈反色暈，讓文字不必依賴「背景現在多亮」——理由見 sky.ts 的 halo。
+     * light 與 dark 的層數不同，所以整條 shadow 都由 sky.ts 換掉，不是只換顏色：
+     * 深字配白暈時，貼身那層會從邊緣把字啃細、整個字看起來發灰，只能留散開的一層當背板。 */
+    text-shadow: var(--halo-shadow);
+}
+@media (prefers-reduced-motion: reduce) {
+    .overlay, .overlay * { transition: none; }
 }
 
 /* ---- canvas 內的世界 ---- */
@@ -126,7 +143,7 @@ html, body {
     color: var(--muted);
 }
 .inspector p strong { color: var(--text); font-weight: 600; }
-.insp-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 16px; }
+.insp-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }
 .insp-tag {
     font-size: 0.66rem;
     letter-spacing: 0.03em;
@@ -136,24 +153,6 @@ html, body {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--panel-border);
 }
-.insp-enter {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--mono);
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--ink);
-    background: var(--text);
-    padding: 9px 16px;
-    border-radius: 9px;
-    text-decoration: none;
-    transition: transform 0.15s, box-shadow 0.15s;
-}
-.insp-enter { pointer-events: auto; } /* 卡片本體 none，唯獨這顆鈕可點 */
-.insp-enter:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45); }
-.insp-enter:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
-
 /* inspector 停在節點的對側，才不會蓋住被 hover 的節點 */
 .inspector.dock-left { left: clamp(20px, 3.5vw, 40px); right: auto; }
 .inspector.dock-right { right: clamp(20px, 3.5vw, 40px); left: auto; }
@@ -206,6 +205,111 @@ html, body {
 .legend li { display: flex; align-items: center; gap: 8px; letter-spacing: 0.02em; }
 .legend .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
 .legend .hint { display: block; margin-top: 12px; font-size: 0.62rem; opacity: 0.6; }
+
+/* ---- 時刻軸：右下角那顆天體 ----
+ * 收起時只有一個圖示，把「這面水映的是現在幾點」講出來但不佔份量；
+ * hover 才向左長出軌道。軌道是從右往左展開的，所以圖示的位置不會跑掉。 */
+.sky-dial {
+    position: absolute;
+    right: clamp(20px, 3.5vw, 40px);
+    bottom: clamp(20px, 3.5vw, 40px);
+    display: flex;
+    align-items: center;
+    /* 收起時連 gap 都收掉，整個元件才真的只剩一顆圖示的寬度 */
+    gap: 0;
+    transition: gap 320ms cubic-bezier(0.22, 0.8, 0.3, 1);
+    color: var(--muted);
+    pointer-events: auto;
+    z-index: 5;
+}
+.sky-dial:hover { color: var(--text); }
+.sky-dial.open { gap: 10px; }
+
+.dial-track {
+    position: relative;
+    width: 0;
+    height: 22px;
+    opacity: 0;
+    /* 收起時寬度為 0，展開才長出來。cubic-bezier 收尾慢一點，像是浮出來而不是彈出來 */
+    transition: width 320ms cubic-bezier(0.22, 0.8, 0.3, 1), opacity 240ms ease;
+    cursor: ew-resize;
+    touch-action: none; /* 讓 pointermove 拖得動，不會被瀏覽器判成捲動手勢 */
+}
+.sky-dial.open .dial-track { width: clamp(120px, 17vw, 190px); opacity: 1; }
+/* 軌道本體畫成一條細線，用 ::before 才不會被 dial-fill 蓋住 */
+.dial-track::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: currentColor;
+    opacity: 0.32;
+}
+.dial-track:focus-visible { outline: 1px solid var(--text); outline-offset: 4px; border-radius: 4px; }
+
+.dial-fill {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    height: 1px;
+    background: currentColor;
+    opacity: 0.75;
+}
+/* 撥桿：軌道填滿處的一個小點 */
+.dial-fill::after {
+    content: '';
+    position: absolute;
+    right: -3px;
+    top: -2.5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+/* 真實時刻的刻度，撥走之後靠它找回來 */
+.dial-now {
+    position: absolute;
+    top: 50%;
+    width: 9px;
+    height: 9px;
+    margin: -4.5px 0 0 -4.5px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    background: transparent;
+    opacity: 0.55;
+    cursor: pointer;
+}
+.dial-now:hover { opacity: 1; }
+
+.dial-time {
+    font-family: var(--mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.06em;
+    opacity: 0;
+    /* max-width 而非只有 opacity：透明的文字仍會佔位，收起時整條就不是「只剩圖示」了 */
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity 240ms ease, max-width 320ms cubic-bezier(0.22, 0.8, 0.3, 1);
+    font-variant-numeric: tabular-nums; /* 撥的時候數字不要跳寬度 */
+}
+.sky-dial.open .dial-time { opacity: 0.85; max-width: 5em; }
+
+.dial-icon { display: flex; opacity: 0.65; transition: opacity 240ms ease; }
+.sky-dial:hover .dial-icon { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+    .dial-track, .dial-time, .dial-icon { transition: none; }
+}
+/* 窄螢幕：留圖示、拿掉軌道（沒有 hover，展不開也拖不準） */
+@media (max-width: 640px) {
+    .sky-dial.open { gap: 0; }
+    .sky-dial.open .dial-track { width: 0; opacity: 0; }
+    .sky-dial.open .dial-time { opacity: 0; max-width: 0; }
+}
 
 @keyframes inspIn {
     from { opacity: 0; transform: translateY(10px); }

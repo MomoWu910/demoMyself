@@ -2,20 +2,21 @@ import { Application, Container, Graphics, Sprite, Text, Texture, TextStyle } fr
 import { EDGES, NODES, nodeById, type ProjectNode, type Tone } from '../projects';
 import { useHomeStore, homeState, type Backend } from '../store';
 import { createFieldFilter } from './field';
+import { applyTheme, currentHour, foregroundFor, onSkyChange, onThemeChange, refreshSky, skyAt } from './sky';
 import { enterProject, ENTER_MS } from '../enter';
 import { t, onLangChange } from '../../i18n';
 
-/** tone → 代表色（琥珀=GLSL/WebGL，紫=WGSL/WebGPU，藍=Pixi，灰=中性）。 */
-const TONE: Record<Tone, number> = {
-    glsl: 0xff8a3d,
-    wgsl: 0xb57bff,
-    dual: 0xd98ad6,
-    pixi: 0x5aa9ff,
-    neutral: 0x9aa0b2,
-};
+/**
+ * 前景色不再是常數——天亮時整套翻成深字淺底（見 sky.ts 的 applyTheme）。
+ * 這裡放的是「目前這一套」，主題翻面時整份換掉並重畫 canvas 上的東西。
+ * canvas 裡的 Pixi 物件吃不到 CSS 變數，所以 sky.ts 得另外供一份數字色。
+ */
+let FG = foregroundFor(false);
 
-const AMBER = 0xff8a3d;
-const VIOLET = 0xb57bff;
+/** canvas 上的文字也要那圈反色暈（見 sky.ts 的 halo）。distance 0 = 均勻外光暈，不是投影。 */
+const halo = () => ({ color: FG.halo, alpha: 0.85, blur: FG.haloBlur, distance: 0, angle: 0 });
+/** tone → 代表色（琥珀=GLSL/WebGL，紫=WGSL/WebGPU，藍=Pixi，灰=中性；亮版全部壓暗） */
+let TONE: Record<Tone, number> = FG.tone;
 
 /**
  * 節點漂浮的幅度。吃的是波的能量包絡（見 field.ts 的 WaterSample），遠端節點被波掃到時
@@ -50,13 +51,27 @@ function bezier(ax: number, ay: number, cx: number, cy: number, bx: number, by: 
     };
 }
 
+/** [0..1]×3 → Pixi 吃的 0xRRGGBB */
+function packRGB(c: readonly number[]): number {
+    return (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
+}
+
 export async function mountGraph(container: HTMLElement): Promise<void> {
     const params = new URLSearchParams(window.location.search);
     const preference = params.get('renderer') === 'webgl' ? 'webgl' : 'webgpu';
 
+    // ---- 天色：所有顏色的起點，得在建任何東西之前定案 ----
+    // 節點、標籤的色是在建構時就寫進 TextStyle 的，晚一步定天色會先用錯的色畫一次再翻面。
+    const sky = skyAt(currentHour());
+    FG = foregroundFor(sky.light);
+    TONE = FG.tone;
+    applyTheme(sky.light);
+
     const app = new Application();
     await app.init({
-        background: 0x0b0c10,
+        // canvas 的底色＝水體色。它幾乎立刻被 bg sprite 蓋住，但第一幀還沒畫完的那一瞬看得到，
+        // 用深墨會在白天閃一下黑
+        background: packRGB(sky.water),
         resizeTo: container,
         preference,
         antialias: true,
@@ -89,7 +104,15 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
     // ---- 背景光場 ----
     const bg = new Sprite(Texture.WHITE);
     const field = createFieldFilter();
+    field.setSky(sky);
     bg.filters = [field.filter];
+
+    // 之後的天色變更都從 sky.ts 廣播過來——ticker 每分鐘的例行重查，以及使用者撥動時刻軸。
+    // 撥動要能即時反應，所以不能只靠 ticker 自己查。
+    onSkyChange((p) => {
+        field.setSky(p);
+        app.renderer.background.color = packRGB(p.water);
+    });
     app.stage.addChild(bg);
 
     // ---- 邊層（每幀重畫，讓資源封包會流動）＋ 標籤層 ----
@@ -105,6 +128,7 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
                 fontSize: 11,
                 fill: TONE[e.tone],
                 letterSpacing: 0.5,
+                dropShadow: halo(),
             }),
         });
         label.anchor.set(0.5);
@@ -131,7 +155,7 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
                 fontFamily: 'Archivo, ui-sans-serif, sans-serif',
                 fontSize: 26,
                 fontWeight: '700',
-                fill: 0xf2f4fa,
+                fill: FG.glyph,
             }),
         });
         glyph.anchor.set(0.5);
@@ -141,8 +165,9 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
             style: new TextStyle({
                 fontFamily: 'JetBrains Mono, ui-monospace, monospace',
                 fontSize: 12,
-                fill: 0xc9cede,
+                fill: FG.label,
                 letterSpacing: 0.6,
+                dropShadow: halo(),
             }),
         });
         label.anchor.set(0.5, 0);
@@ -235,16 +260,16 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         const dual = v.def.tone === 'dual';
         const base = TONE[v.def.tone];
 
-        // 節點核心：深色玻璃底
-        v.ring.circle(0, 0, r).fill({ color: 0x11141c, alpha: 0.92 });
+        // 節點核心：一片玻璃。夜裡是深色、白天翻成淺色，才一直襯得住上面的 glyph
+        v.ring.circle(0, 0, r).fill({ color: FG.core, alpha: 0.92 });
 
         // 邊環：dual 節點畫成琥珀/紫兩半弧，其餘單色
         const ringW = active ? 3 : 2;
         if (dual) {
             // 先 moveTo 到弧的起點，否則 arc() 會從路徑預設起點 (0,0) 拉一條線到弧起點——
             // 那就是節點中央到頂端那條多餘的垂直線。
-            v.ring.moveTo(0, -r).arc(0, 0, r, -Math.PI / 2, Math.PI / 2).stroke({ color: AMBER, width: ringW, alpha: active ? 1 : 0.85 });
-            v.ring.moveTo(0, r).arc(0, 0, r, Math.PI / 2, (Math.PI * 3) / 2).stroke({ color: VIOLET, width: ringW, alpha: active ? 1 : 0.85 });
+            v.ring.moveTo(0, -r).arc(0, 0, r, -Math.PI / 2, Math.PI / 2).stroke({ color: TONE.glsl, width: ringW, alpha: active ? 1 : 0.85 });
+            v.ring.moveTo(0, r).arc(0, 0, r, Math.PI / 2, (Math.PI * 3) / 2).stroke({ color: TONE.wgsl, width: ringW, alpha: active ? 1 : 0.85 });
         } else {
             v.ring.circle(0, 0, r).stroke({ color: base, width: ringW, alpha: active ? 1 : 0.7 });
         }
@@ -253,11 +278,36 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
     layout();
     app.renderer.on('resize', layout);
 
+    // 天色翻面：背景是連續變的，前景則是整套跳過去（理由見 sky.ts 的 applyTheme）。
+    // CSS 那半邊靠變數 + transition 自己接手，這裡只管 canvas 裡吃不到 CSS 的東西。
+    onThemeChange((light) => {
+        FG = foregroundFor(light);
+        TONE = FG.tone;
+        for (const v of nodeViews.values()) {
+            v.glyph.style.fill = FG.glyph;
+            v.label.style.fill = FG.label;
+            v.label.style.dropShadow = halo();
+            drawNode(v, v.active);
+        }
+        for (const { edge, label } of edgeLabels) {
+            label.style.fill = TONE[edge.tone];
+            label.style.dropShadow = halo();
+        }
+    });
+
     // ---- 動畫迴圈 ----
     let elapsed = 0;
     let enterStart = -1;
+    let lastSkyCheck = 0;
     app.ticker.add(({ deltaMS }) => {
         elapsed += deltaMS / 1000;
+
+        // 天色每分鐘對一次時鐘就夠。一天的色差攤到 1440 分鐘，單步的跳動遠在肉眼之下——
+        // 逐幀重算是白花錢（每次要跑一輪 keyframe 查表 + 四次色彩插值）。
+        if (elapsed - lastSkyCheck > 60) {
+            lastSkyCheck = elapsed;
+            refreshSky(); // 套用與廣播都在裡面（使用者撥過時刻軸的話，這裡拿到的仍是他撥的值）
+        }
         // reduce-motion：凍結環境動畫（光場/呼吸/資源流動），ticker 仍以低幀跑著只為 hover 反應
         const anim = reduceMotion ? 0 : elapsed;
         field.setTime(anim);

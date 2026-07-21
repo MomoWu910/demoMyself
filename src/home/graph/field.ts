@@ -1,4 +1,5 @@
 import { Filter, GlProgram, GpuProgram, UniformGroup, defaultFilterVert } from 'pixi.js';
+import type { SkyPalette } from './sky';
 
 /**
  * 首頁的 signature：一面水。
@@ -52,6 +53,12 @@ const WAVE = {
     spec: 0.32,
 };
 
+/**
+ * 月光帶的橫向位置與寬度（aspect 空間，跟 uv.x 同一套）。
+ * 0.72 偏右：讓它落在節點圖的空檔上，不從標題或節點正中間穿過去。
+ */
+const GLINT = { x: 0.72, w: 0.2 };
+
 // WebGL：GLSL 300 es
 const fragment = /* glsl */ `
 in vec2 vTextureCoord;
@@ -67,9 +74,13 @@ uniform highp vec4 uOutputFrame;
 uniform float uTime;
 uniform float uAspect;
 uniform float uDropCount;
-uniform vec3 uInk;
-uniform vec3 uAmber;
-uniform vec3 uViolet;
+uniform float uCloud;
+uniform float uVig;
+uniform float uGlint;
+uniform vec3 uSkyTop;
+uniform vec3 uHorizon;
+uniform vec3 uWater;
+uniform vec3 uSun;
 // xy = 落點（正規化螢幕座標），z = 起始時間 t0，w = 強度（0 = 這格沒用）
 uniform vec4 uDrops[${MAX_DROPS}];
 // x = 擴散速度倍率，y = 波紋密度倍率（轉場那發要又快又疏，hover 則細碎）
@@ -81,6 +92,8 @@ const float W_TAIL = ${WAVE.tail.toFixed(1)};
 const float W_LIFE = ${WAVE.life.toFixed(3)};
 const float W_WARP = ${WAVE.warp.toFixed(4)};
 const float W_SPEC = ${WAVE.spec.toFixed(3)};
+const float GLINT_X = ${GLINT.x.toFixed(3)};
+const float GLINT_W = ${GLINT.w.toFixed(3)};
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
@@ -93,6 +106,14 @@ float vnoise(vec2 p) {
         mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
         u.y
     );
+}
+
+/**
+ * 月光帶專用的細波紋。兩層就夠——單層 value noise 在這種高頻下會把自己的格子露出來，
+ * 整片變成方塊狀噪點；但也不需要 fbm 的五個八度，那是給雲用的，這裡只要打散規則感。
+ */
+float ripples(vec2 p) {
+    return vnoise(p) * 0.65 + vnoise(p * 2.3 + vec2(3.1, 7.7)) * 0.35;
 }
 
 float fbm(vec2 p) {
@@ -161,27 +182,48 @@ void main() {
     vec2 q = vec2(fbm(auv * 2.0 + t), fbm(auv * 2.0 - t + vec2(5.2, 1.3)));
     float f = fbm(auv * 3.0 + q * 1.5 + t);
 
-    // 低頻相位：整面在琥珀↔紫之間呼吸。中點往琥珀偏，兩色才平衡（原本偏紫）
-    float toneMix = 0.38 + 0.46 * sin(uv.x * 1.1 - uv.y * 0.8 + uTime * 0.12);
-    toneMix = clamp(toneMix, 0.0, 1.0);
-    vec3 tone = mix(uAmber, uViolet, toneMix);
-    // 琥珀在暗底上的視覺份量比紫弱，補一點亮度讓它站得住
-    tone *= mix(1.3, 1.0, toneMix);
+    // 天色的垂直漸層。畫面**上方**是遠處水面：視線幾乎貼著水掠過去，映到的是地平線那圈暖光；
+    // **下方**是腳邊的水，近乎垂直看下去，映的是天頂。真實水面就是這樣分層的，
+    // 這條漸層是「像一潭水」和「像一團霧」的分水嶺——比換什麼顏色都關鍵。
+    // 反向寫成 1.0 - smoothstep(小, 大, x)：edge0 > edge1 的倒序 smoothstep 在 WGSL 是未定義行為，
+    // 兩邊要保持同一種寫法，不然雙後端會長得不一樣
+    float horizonMix = 1.0 - smoothstep(0.02, 0.62, screen.y);
+    vec3 tone = mix(uSkyTop, uHorizon, horizonMix);
 
-    vec3 col = uInk;
-    col += tone * smoothstep(0.35, 0.92, f) * 0.15;          // 倒影主體
+    // 地平線的光要染在**水面本身**，不能只疊在雲上——不然黃昏會整個消失：橘色只在雲影裡出現，
+    // 而雲影本來就只有兩三成強度，一整面水看起來仍是冷灰。真實的夕陽是遠處那片水都在發橘光。
+    // 平方讓它收在畫面上緣成為一條光帶，而不是把上半面全染掉。
+    float glow = horizonMix * horizonMix;
+    vec3 col = mix(uWater, uHorizon, glow * 0.5);
+    col += tone * smoothstep(0.35, 0.92, f) * uCloud;         // 倒影主體
     float ridge = smoothstep(0.55, 0.61, f) - smoothstep(0.61, 0.7, f);
-    col += tone * ridge * 0.10;                               // 雲隙間的細絲高光
+    col += tone * ridge * uCloud * 0.67;                      // 雲隙間的細絲高光
 
     // 斜面反光：水面傾斜處把光反成另一個角度。這不是疊上去的亮圈，是斜率的直接後果——
     // 所以它只會出現在漣漪確實扭到倒影的地方，兩者永遠對得上。
+    // 取的是**光源色**而不是天色：日正當中是冷白、黃昏是橘金、夜裡是月光的青白，
+    // 有一顆真的光源在照，漣漪才不像自體發光。
     float spec = clamp(dot(slope, vec2(0.55, -0.84)), -1.0, 1.0);
-    col += tone * spec * W_SPEC;
+    col += uSun * spec * W_SPEC;
 
-    // 暈影：邊角壓暗，中央讓內容站得住
+    // 月光帶：光源正下方那條被水波揉碎的亮路。三個因子相乘——
+    // ① 高斯橫向包絡，決定它是一條帶而不是一片；② 靠近地平線才亮（遠處水面才照得到）；
+    // ③ 拿雲的 fbm 當碎片遮罩，讓它斷成粼粼的亮片，不是一根均勻的光柱。
+    // 少了 ③ 會像一道探照燈，那是最容易破功的地方。
+    float gx = (uv.x - GLINT_X * uAspect) / GLINT_W;
+    float band = exp(-gx * gx) * (0.45 + 0.55 * horizonMix);
+    // 碎片遮罩要用**水波**不是雲：拿 f（雲的 fbm）當遮罩的話，亮起來的是雲的形狀，
+    // 看起來就成了「右上角一團亮雲」而不是一條鋪在水上的光路。
+    // x 低頻、y 極高頻＝被壓扁的細長橫紋，那才是水面碎光的樣子（方形斑點就破功了）。
+    // smoothstep 的下緣拉到 0.5：只留最亮的那些片，稀疏才像粼粼，糊成一片就成了一塊亮斑。
+    float ripple = ripples(vec2(ruv.x * 7.0, ruv.y * 130.0 + uTime * 0.05));
+    float shimmer = smoothstep(0.5, 0.92, ripple);
+    col += uSun * band * shimmer * uGlint;
+
+    // 暈影：邊角壓暗，中央讓內容站得住。白天壓太多會顯髒，所以深度跟著天色走。
     vec2 c = screen - 0.5;
     float vig = clamp(1.0 - dot(c, c) * 1.15, 0.0, 1.0);
-    col *= mix(0.68, 1.0, vig);
+    col *= mix(uVig, 1.0, vig);
 
     finalColor = vec4(col, 1.0);
 }
@@ -202,9 +244,13 @@ struct FieldUniforms {
     uTime: f32,
     uAspect: f32,
     uDropCount: f32,
-    uInk: vec3<f32>,
-    uAmber: vec3<f32>,
-    uViolet: vec3<f32>,
+    uCloud: f32,
+    uVig: f32,
+    uGlint: f32,
+    uSkyTop: vec3<f32>,
+    uHorizon: vec3<f32>,
+    uWater: vec3<f32>,
+    uSun: vec3<f32>,
     uDrops: array<vec4<f32>, ${MAX_DROPS}>,
     uDropMod: array<vec4<f32>, ${MAX_DROPS}>,
 };
@@ -215,6 +261,8 @@ const W_TAIL: f32 = ${WAVE.tail.toFixed(1)};
 const W_LIFE: f32 = ${WAVE.life.toFixed(3)};
 const W_WARP: f32 = ${WAVE.warp.toFixed(4)};
 const W_SPEC: f32 = ${WAVE.spec.toFixed(3)};
+const GLINT_X: f32 = ${GLINT.x.toFixed(3)};
+const GLINT_W: f32 = ${GLINT.w.toFixed(3)};
 
 @group(0) @binding(0) var<uniform> gfu: GlobalFilterUniforms;
 @group(0) @binding(1) var uTexture: texture_2d<f32>;
@@ -258,6 +306,11 @@ fn vnoise(p: vec2<f32>) -> f32 {
         mix(hash(i + vec2<f32>(0.0, 1.0)), hash(i + vec2<f32>(1.0, 1.0)), u.x),
         u.y
     );
+}
+
+// 月光帶的細波紋——兩層打散 value noise 的格子（見 GLSL 版註解）
+fn ripples(p: vec2<f32>) -> f32 {
+    return vnoise(p) * 0.65 + vnoise(p * 2.3 + vec2<f32>(3.1, 7.7)) * 0.35;
 }
 
 fn fbm(p0: vec2<f32>) -> f32 {
@@ -317,23 +370,31 @@ fn mainFragment(@location(0) uv0: vec2<f32>) -> @location(0) vec4<f32> {
     let q = vec2<f32>(fbm(auv * 2.0 + t), fbm(auv * 2.0 - t + vec2<f32>(5.2, 1.3)));
     let f = fbm(auv * 3.0 + q * 1.5 + t);
 
-    var toneMix = 0.38 + 0.46 * sin(uv.x * 1.1 - uv.y * 0.8 + field.uTime * 0.12);
-    toneMix = clamp(toneMix, 0.0, 1.0);
-    var tone = mix(field.uAmber, field.uViolet, toneMix);
-    tone = tone * mix(1.3, 1.0, toneMix); // 琥珀在暗底上補一點亮度，兩色才平衡
+    // 天色垂直漸層：上方遠處水面映地平線暖光，下方近處映天頂（見 GLSL 版註解）
+    let horizonMix = 1.0 - smoothstep(0.02, 0.62, screen.y);
+    let tone = mix(field.uSkyTop, field.uHorizon, horizonMix);
 
-    var col = field.uInk;
-    col += tone * smoothstep(0.35, 0.92, f) * 0.15;
+    // 地平線的光染進水面本身，不只疊在雲上（見 GLSL 版註解）
+    let glow = horizonMix * horizonMix;
+    var col = mix(field.uWater, field.uHorizon, glow * 0.5);
+    col += tone * smoothstep(0.35, 0.92, f) * field.uCloud;
     let ridge = smoothstep(0.55, 0.61, f) - smoothstep(0.61, 0.7, f);
-    col += tone * ridge * 0.10;
+    col += tone * ridge * field.uCloud * 0.67;
 
-    // 斜面反光：斜率的直接後果，不是疊上去的亮圈
+    // 斜面反光：斜率的直接後果，不是疊上去的亮圈。取光源色而非天色
     let spec = clamp(dot(slope, vec2<f32>(0.55, -0.84)), -1.0, 1.0);
-    col += tone * spec * W_SPEC;
+    col += field.uSun * spec * W_SPEC;
+
+    // 月光帶：橫向高斯包絡 × 靠近地平線 × fbm 碎片遮罩（見 GLSL 版註解）
+    let gx = (uv.x - GLINT_X * field.uAspect) / GLINT_W;
+    let band = exp(-gx * gx) * (0.45 + 0.55 * horizonMix);
+    let ripple = ripples(vec2<f32>(ruv.x * 7.0, ruv.y * 130.0 + field.uTime * 0.05));
+    let shimmer = smoothstep(0.5, 0.92, ripple);
+    col += field.uSun * band * shimmer * field.uGlint;
 
     let c = screen - 0.5;
     let vig = clamp(1.0 - dot(c, c) * 1.15, 0.0, 1.0);
-    col = col * mix(0.68, 1.0, vig);
+    col = col * mix(field.uVig, 1.0, vig);
 
     return vec4<f32>(col, 1.0);
 }
@@ -373,6 +434,8 @@ export interface FieldFilter {
     filter: Filter;
     setTime: (seconds: number) => void;
     setAspect: (aspect: number) => void;
+    /** 換上某個時刻的天色。呼叫端負責決定「現在幾點」，見 sky.ts */
+    setSky: (palette: SkyPalette) => void;
     /** 打一發漣漪進水面。時間軸吃 setTime 餵進來的秒數，所以要先 setTime 再 emit。 */
     emit: (drop: Drop) => void;
     /**
@@ -407,9 +470,15 @@ export function createFieldFilter(): FieldFilter {
         // 實際活著的發數。shader 只迴圈到這裡，所以把上限開到 16 不代表每幀都付 16 次的成本。
         // 用 f32 而不是 i32：uniform buffer 佈局全是 f32 最不容易跟 Pixi 的 std140 打架。
         uDropCount: { value: 0, type: 'f32' },
-        uInk: { value: new Float32Array([0.043, 0.047, 0.063]), type: 'vec3<f32>' },
-        uAmber: { value: new Float32Array([1.0, 0.541, 0.239]), type: 'vec3<f32>' },
-        uViolet: { value: new Float32Array([0.71, 0.482, 1.0]), type: 'vec3<f32>' },
+        // 天色由 sky.ts 依系統時鐘餵進來（setSky）。這裡的初值只是「還沒餵之前」的深夜，
+        // 不是實際會看到的顏色。
+        uCloud: { value: 0.15, type: 'f32' },
+        uVig: { value: 0.76, type: 'f32' },
+        uGlint: { value: 0.6, type: 'f32' },
+        uSkyTop: { value: new Float32Array([0.027, 0.039, 0.078]), type: 'vec3<f32>' },
+        uHorizon: { value: new Float32Array([0.051, 0.071, 0.141]), type: 'vec3<f32>' },
+        uWater: { value: new Float32Array([0.016, 0.024, 0.047]), type: 'vec3<f32>' },
+        uSun: { value: new Float32Array([0.561, 0.659, 0.847]), type: 'vec3<f32>' },
         uDrops: { value: drops, type: 'vec4<f32>', size: MAX_DROPS },
         uDropMod: { value: dropMod, type: 'vec4<f32>', size: MAX_DROPS },
     });
@@ -426,7 +495,18 @@ export function createFieldFilter(): FieldFilter {
         resolution: 0.5,
     });
 
-    const u = uniforms.uniforms as { uTime: number; uAspect: number; uDropCount: number };
+    const u = uniforms.uniforms as {
+        uTime: number;
+        uAspect: number;
+        uDropCount: number;
+        uCloud: number;
+        uVig: number;
+        uGlint: number;
+        uSkyTop: Float32Array;
+        uHorizon: Float32Array;
+        uWater: Float32Array;
+        uSun: Float32Array;
+    };
     return {
         filter,
         setTime: (s) => {
@@ -450,6 +530,17 @@ export function createFieldFilter(): FieldFilter {
             u.uDropCount = live.length;
         },
         setAspect: (a) => (u.uAspect = a),
+        setSky: (p) => {
+            // 就地寫進既有的 Float32Array（跟 uDrops 同一套做法），不換掉陣列本身——
+            // Pixi 每幀都會把整個 uniform group 同步上去，改內容就夠了。
+            u.uSkyTop.set(p.sky);
+            u.uHorizon.set(p.horizon);
+            u.uWater.set(p.water);
+            u.uSun.set(p.sun);
+            u.uCloud = p.cloud;
+            u.uVig = p.vig;
+            u.uGlint = p.glint;
+        },
         sampleWater: (x, y, exclude) => {
             // 波的存在範圍與衰減跟 shader 的 waterSlope() 是同一套（同樣的 envelope、同樣先進
             // aspect 空間），差別只在這裡不取 sin/cos 的振盪分量——理由見 WaterSample 的說明。
