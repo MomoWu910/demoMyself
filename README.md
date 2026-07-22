@@ -19,6 +19,7 @@
 首頁不是靜態選單，而是一張用 PixiJS 畫的**互動式 render graph**：把整個作品集當成一條 GPU 渲染管線來呈現——每個專案是一個 pass（節點），節點之間的連線代表它們**共用的技術**（WebGL Context、Pixi v8、`src/bench`、GLSL·WGSL；兩端都用到才連線）。這個入口本身就 dogfood 了作品集的技術棧。
 
 - **視覺識別「同一件事做兩遍」**：GLSL + WGSL、Pixi + Three、WebGL + WebGPU、量測而非宣稱。雙色琥珀（GLSL / WebGL）↔ 紫（WGSL / WebGPU）貫穿全站。
+- **節點外框是「這個 pass 用什麼做的」**：每段顏色對應一項引擎或著色器語言，與左下角技術棧同一套映射、互為對照。上色的判準是**這項技術能不能區分節點**，不是它重不重要——TypeScript 每頁都用，畫上去只會讓每個圓多一段一模一樣的顏色，所以它沒有顏色；React 只有兩個 pass 用（另外三個刻意維持零框架或是靜態頁），所以它有。
 - **架構分工**：**React 管 canvas 外的殼（標題 / inspector / 圖例），Pixi 管 canvas 內的世界（shader 光場 / 節點 / 資源流動）**，兩邊只透過一個 Zustand store 溝通，React 不參與 render loop。
 - **互動**：hover 節點高亮它與相連節點、旁邊長出細節卡；點擊時「往節點顏色 zoom」轉場，落地頁再從同色淡出揭開，整站像一個連續空間。鍵盤可 Tab 聚焦、尊重 `prefers-reduced-motion`。
 - **省電**：全螢幕 shader 光場以半解析度渲染、幀率上限 30fps、分頁切走即暫停，避免持續高 GPU 負載讓裝置發燙。
@@ -58,19 +59,51 @@
 
 ### 2. 3D 產品配置器（Babylon.js）— `src/babylonJSDemo/src/configurator/`
 
-以 Babylon.js 打造的即時 3D 產品配置器，聚焦 **PBR 渲染質感**與**即時可配置性**。
+以 Babylon.js 打造的即時 3D 產品配置器，聚焦 **PBR 渲染質感**、**即時可配置性**，以及**由模型結構長出來的 UI**。可切換球鞋與單椅兩顆模型，整組設定能編成網址分享、也能匯出成圖。
 
-**工程重點**
-- **即時材質配置**：切換質感 preset（Matte / Leather / Glossy / Metallic，覆寫 metallic / roughness / clearCoat）、套用顏色 tint，並保留 glTF `KHR_materials_variants` colorway 變體（midnight / beach / street）。
-- **即時打光**：3 組打光 preset（柔光棚 / 戲劇側光 / 電商白）+ 環境光強度 / 旋轉、主光強度 / 色溫四條滑桿；背景可切換 studio 天空盒 / 漸層 / 深色 / 純白。
-- **model-agnostic UI**：自動掃描模型 sub-mesh——多部件就長出分件（鞋面 / 鞋底…）配置 UI，單一 mesh 則退回整件配置，換模型不用改程式。
-- **IBL 環境光照**：以 prefiltered `.env` 環境貼圖作為 image-based lighting，讓 PBR 材質取得正確的環境反射與環境光（studio 攝影棚質感）。
-- **後製管線**：ACES tone mapping、克制的 bloom、FXAA / MSAA、vignette、film grain，選配 SSAO2 環境光遮蔽。
-- **柔和陰影**：方向光 blur exponential shadow map，並自動將載入的模型註冊為投影者。
-- **轉盤互動**：ArcRotateCamera 自動旋轉（互動時暫停）+ 軌道操作 + HTML overlay 玻璃控制面板。
-- **行動裝置適配**：控制面板在手機收合為 bottom sheet；相機依面板遮擋量每幀 lerp 上移（`targetScreenOffset.y`）並拉遠 radius，讓主體完整置中於未被面板蓋住的可視區。
+**model-agnostic：UI 是模型長出來的，不是寫死的**
 
-> 渲染質感層（IBL / 陰影 / 後製）抽成可重用的 `EnvironmentManager`、`ShadowManager`、`PostProcessManager`，參數集中在 `config/scene/renderConfig.ts`；材質 / 部件掃描邏輯在 `materialConfigurator.ts`。
+- 部件**依材質分組**自動產生：單椅有 fabric / wood / metal 三種材質 → 面板長出三個部件；球鞋是單一 mesh 單一材質 → 「部件」整段自動隱藏。換一顆模型不用改任何一行 UI 程式。
+- 早期是「一個 mesh 一個部件」，換上真正分件的模型才發現會長歪：同一張椅子的木頭可能拆成十一個 mesh 卻只有一種木頭材質，面板就長出十一顆調同一件事的按鈕。**使用者心裡的「部件」是材質，不是 mesh。**
+- 部件名稱優先取自材質名（`fabric` / `wood` / `metal` 這類語意化命名），mesh 名常常只是 `Object_12`。
+- **小到看不出來的部件會被濾掉**：品牌標籤、螺絲這類配件佔一顆按鈕，按下去卻看不出哪裡變了——能配置卻看不到效果的選項，比沒有更糟。判準是包圍盒體積佔比（門檻 1%），不是寫死排除名字：實測單椅四個部件是 67% / 83% / 48.5% / **0.24%**，中間隔了三個數量級。
+
+**表面細節：同一種材質，兩種實作並陳**
+
+finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所以「皮革」與「霧面」的差別只是反光強弱、看不出材質。補上法線與粗糙度之後，刻意做成**兩個可切換的來源**，因為兩者的取捨正是這頁想講的事：
+
+| | Shader 程序生成 | CC0 掃描貼圖 |
+|---|---|---|
+| 下載 | **0 KB**（GLSL 2.9 KB 在 bundle 內） | 81–203 KB／材質 |
+| 首次準備 | 2.2 ms（含 GLSL 編譯時 424 ms） | 11–18 ms |
+| 每幀成本 | **相同** | **相同** |
+| 真實感 | 較弱 | 較好 |
+
+- **面板顯示的是下載量與準備耗時，不是 FPS**。兩種來源都只 bake 一次（`ProceduralTexture` 的 `refreshRate = 0`），之後每幀都只是一次貼圖取樣，成本完全相同——擺一個永遠一樣的 FPS 上去等於暗示它們有效能差異。數字全是量到的：傳輸量查 Resource Timing 的 `encodedBodySize`，耗時用 `performance.now()` 夾，不寫死常數（寫死的數字會在換素材之後悄悄變成謊言）。
+- 程序生成那一支 GLSL **同時服務三種紋理 × 兩種輸出**（`uKind` / `uMode`），而不是寫六支——三種紋理只差在高度函式怎麼堆 noise，高度轉法線的推導完全共用。所有 noise 都帶 period 參數先取模，否則貼圖左右邊界的隨機值對不起來，模型上會出現一條直的接縫。
+
+**設定可分享、畫面可匯出**
+
+- 整組設定編進**人看得懂的網址**（`?model=chair&fin.part_0=leather&bg=white&cam=top`）而不是 base64 的一坨：可以直接改網址列來試、貼進 issue 時看得出差在哪，加欄位也不會讓舊連結失效。
+- 五個機位 preset（Hero / Side / Front / Top / Detail）只存角度與距離倍率，實際距離是依模型尺寸算出來的，換一顆大小完全不同的模型不必重調。**機位進得了分享連結，自由拖曳的角度不進**——機位是離散、有名字、能還原的，拖出來的角度不是。
+- **匯出 PNG 刻意讀 canvas 而不是另開 RenderTarget 重畫**：bloom / vignette / grain / SSAO 都掛在 camera 的 post-process 管線上，RTT 路徑不會套用，匯出的圖會跟使用者調了半天的畫面長得不一樣。高解析靠暫時調 `hardwareScalingLevel` 真的多畫像素，不是把小圖放大。
+
+**渲染質感**
+
+- **即時材質配置**：質感 preset（Matte / Leather / Glossy / Metallic，覆寫 metallic / roughness / clearCoat）、顏色 tint，並保留 glTF `KHR_materials_variants` colorway 變體。切換變體後會把使用者的選擇重新疊回新材質。
+- **即時打光**：3 組打光 preset（柔光棚 / 戲劇側光 / 電商白）+ 環境光強度 / 旋轉、主光強度 / 色溫四條滑桿；背景可切 studio 天空盒 / 漸層 / 深色 / 純白。
+- **IBL 環境光照**：以 prefiltered `.env` 環境貼圖作為 image-based lighting，讓 PBR 材質取得正確的環境反射（studio 攝影棚質感）。
+- **後製管線**：ACES tone mapping、克制的 bloom、FXAA / MSAA、vignette、film grain，選配 SSAO2。
+- **柔和陰影**：方向光 blur exponential shadow map，自動將載入的模型註冊為投影者。
+- **一個 ACES 的坑**：場景走 ACES tone mapping，純白背景的 `clearColor` 要給 HDR（>1）的值後製後才接近白；而且**背景與地板要一起處理**——只換 `clearColor` 的話畫面會上半純白、下半深灰，接縫就在地平線上，看起來不像去背而像破圖。
+
+**架構：狀態收成單一來源**
+
+面板是 **React 19 + Zustand**，Babylon 跑自己的 render loop。重點不在「換一套寫法」，而在把散落的狀態收成一份：**每個 action 同時更新狀態並把它套進場景**——引擎不是第二份狀態，是這份狀態的輸出裝置。分成兩邊寫就會回到「UI 顯示 A、場景其實是 B」的老問題。整份狀態可以序列化成網址，從網址還原時只要對同一組 action 重放一次。
+
+**行動裝置適配**：控制面板在手機收合為 bottom sheet；相機依面板遮擋量每幀 lerp 上移（`targetScreenOffset.y`）並拉遠 radius，讓主體完整置中於未被面板蓋住的可視區。
+
+> 渲染質感層（IBL / 陰影 / 後製）抽成可重用的 `EnvironmentManager`、`ShadowManager`、`PostProcessManager`，參數集中在 `config/scene/renderConfig.ts`；材質與部件掃描在 `materialConfigurator.ts`、表面細節在 `surfaceDetail.ts` / `surfaceShader.ts`、分享連結在 `share.ts`。
 
 ### 3. 渲染效能實測報告（PixiJS v8）— `src/findings/`、`src/bench/`
 
@@ -97,7 +130,9 @@
 
 ### 4. Shader Lab：自訂 Filter，GLSL 與 WGSL 雙寫 — `src/shaderLab/`
 
-站內 [`/shader_lab.html`](https://momowu910.github.io/demoMyself/shader_lab.html)。不是套現成的 filter，而是從零手寫 Pixi v8 的自訂 `Filter`——**同一個效果，GLSL 與 WGSL 各寫一份**，WebGL 與 WebGPU 兩條路徑跑出同一個畫面。v8 改版後這塊的公開資料極少，多數細節是讀原始碼與實測逼出來的。面板上可以直接切換檢視兩份原始碼。
+站內 [`/shader_lab.html`](https://momowu910.github.io/demoMyself/shader_lab.html)。不是套現成的 filter，而是從零手寫 Pixi v8 的自訂 `Filter`——**同一個效果，GLSL 與 WGSL 各寫一份**，WebGL 與 WebGPU 兩條路徑跑出同一個畫面。v8 改版後這塊的公開資料極少，多數細節是讀原始碼與實測逼出來的。
+
+面板上**可以直接切換實際跑的 backend**（WebGL ⇄ WebGPU），也能切換檢視兩份原始碼——所以「兩條路徑跑出同一個畫面」這句話，觀眾自己就能驗證：切過去、看同一面旗子，兩邊長得一模一樣。切換靠重載頁面（Pixi 的 renderer 類型在 `Application.init()` 就定了，中途換不了），網址因此帶著 `?renderer=`，可以直接分享「用 WebGL 跑的這頁」。**瀏覽器沒有 WebGPU 時那顆鍵會鎖起來並說明原因**——不支援時 Pixi 會靜默退回 WebGL，不講清楚的話使用者只會以為是自己點錯。
 
 **Dissolve（程序化 noise 溶解 + 灼燒邊緣）**
 
@@ -169,13 +204,28 @@
 - **語言**：TypeScript
 - **渲染引擎**：Babylon.js v8、PixiJS v8、Three.js
 - **Shader**：手寫 GLSL（300 es）與 WGSL，Pixi v8 自訂 `Filter`（`GlProgram` / `GpuProgram` 雙寫）
-- **UI / 狀態**：React 19 + Zustand（Shader Lab 控制面板；canvas 外歸 React、canvas 內歸引擎）
+- **UI / 狀態**：React 19 + Zustand（Shader Lab 與產品配置器的控制面板；canvas 外歸 React、canvas 內歸引擎，兩邊只透過 store 溝通）
 - **效能量測**：自製 benchmark runner（`src/bench/`）— CPU frame time 中位數 / p95、draw call 攔截、環境偵測，可匯出 Markdown / JSON
-- **3D / 材質**：PBR、IBL（`.env` prefiltered environment）、glTF（KHR_materials_variants）
+- **3D / 材質**：PBR、IBL（`.env` prefiltered environment）、glTF（KHR_materials_variants）、程序生成法線／粗糙度貼圖（`ProceduralTexture` + 自寫 GLSL）
 - **物理**：cannon-es
 - **動畫**：GSAP
 - **i18n**：自製輕量中英雙語切換（`src/i18n`，localStorage 持久化）
 - **建置 / 部署**：Webpack、gh-pages
+
+---
+
+## 素材與授權
+
+程式碼以外的素材全部來自可自由使用的來源，出處列在這裡（CC BY 的部分是**授權要求的署名**，不是客套）：
+
+| 素材 | 來源 | 授權 |
+|---|---|---|
+| `shoe.glb` | [MaterialsVariantsShoe](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/MaterialsVariantsShoe) © 2021 Shopify | CC BY 4.0 |
+| `SheenChair.glb` | [SheenChair](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/SheenChair) © 2020 Wayfair, LLC | CC0 1.0 |
+| 表面細節貼圖（fabric / leather / metal） | [ambientCG](https://ambientcg.com) — Fabric019 / Leather011 / Metal009 | CC0 1.0 |
+| 字型 | Archivo、JetBrains Mono（self-host） | SIL Open Font License 1.1 |
+
+貼圖取原始 1K 包裡的 `_NormalGL`（OpenGL 慣例，**不是** `_NormalDX`）與 `_Roughness`，縮到 512px、JPEG 品質 78，六張合計約 430 KB——尺寸是刻意壓的，配置器已經帶著一顆 7.5 MB 的模型。細節見 `src/babylonJSDemo/res/*/CREDITS.md`。
 
 ---
 
