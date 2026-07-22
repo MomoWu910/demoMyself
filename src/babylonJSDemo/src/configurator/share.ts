@@ -23,8 +23,8 @@ const NUM_RANGE = {
     rot: [0, 360],
     key: [0, 6],
     temp: [2700, 9000],
-    tile: [0.5, 12],
-    bump: [0, 3],
+    tile: [0.5, 16],
+    bump: [0, 1.5],
 } as const;
 
 function clamp(v: number, [min, max]: readonly [number, number]): number {

@@ -172,10 +172,11 @@ export const useCfgStore = create<CfgState>((set, get) => ({
     autoRotate: true,
     cameraView: 'hero',
     surfaceSource: 'shader',
-    // 8× 是兩種來源都好看的密度：更低的話 512px 掃描圖會被拉成一片斑駁像髒污，
-    // 更高則 shader 的細胞紋細到看不出形狀。
-    surfaceTiling: 8,
-    surfaceBump: 1,
+    // 這兩個預設值是在真 GPU 上挑的（我原本的 8× / 1.0 是軟體渲染下的判斷，太粗太深，
+    // 第一眼會覺得鞋子怪怪的）。密而淺的紋理讀起來像材質本身的質地，
+    // 深而疏的則會像貼了一層別的東西上去。
+    surfaceTiling: 12,
+    surfaceBump: 0.15,
     surfaceMetrics: null,
     surfaceBusy: false,
 

@@ -414,7 +414,7 @@ export function Panel() {
                         label={t('cfg.slider.tiling')}
                         value={s.surfaceTiling}
                         min={0.5}
-                        max={12}
+                        max={16}
                         step={0.5}
                         format={(v) => `${v.toFixed(1)}×`}
                         onChange={s.setSurfaceTiling}
@@ -423,8 +423,8 @@ export function Panel() {
                         label={t('cfg.slider.bump')}
                         value={s.surfaceBump}
                         min={0}
-                        max={3}
-                        step={0.05}
+                        max={1.5}
+                        step={0.01}
                         format={(v) => v.toFixed(2)}
                         onChange={s.setSurfaceBump}
                     />
