@@ -399,6 +399,12 @@ export const DICT: Record<string, Entry> = {
     'shader.panel.animate': { en: 'Auto-play', zh: '自動播放' },
     'shader.panel.reset': { en: 'Reset', zh: '重設' },
     'shader.panel.fps': { en: 'fps', zh: 'fps' },
+    'shader.panel.backend': { en: 'Rendering backend', zh: '渲染後端' },
+    'shader.panel.switchTo': { en: 'Switch backend (reloads the page)', zh: '切換後端（會重新載入頁面）' },
+    'shader.panel.noWebgpu': {
+        en: 'This browser has no WebGPU support — the page falls back to WebGL.',
+        zh: '這個瀏覽器沒有 WebGPU 支援，頁面會退回 WebGL。',
+    },
 
     'shader.source.glslNote': {
         en: 'WebGL path. GLSL 300 es — Pixi v8 filters run on WebGL2. Pixi supplies the default filter vertex shader, so only the fragment stage is written here.',

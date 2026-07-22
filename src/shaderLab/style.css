@@ -116,9 +116,20 @@ body.shader-page { overflow: hidden; }
     border-radius: 6px;
     border: 1px solid;
 }
-.badge.webgpu { color: #b57bff; border-color: rgba(181, 123, 255, 0.4); background: rgba(181, 123, 255, 0.08); }
-.badge.webgl { color: #ff8a3d; border-color: rgba(255, 138, 61, 0.4); background: rgba(255, 138, 61, 0.08); }
 .badge.pending { color: var(--text-muted); border-color: var(--card-border); }
+
+/* backend 切換：兩顆並排，只有「正在跑的那個」上色。
+   未選中的維持中性灰＝「這個可以切過去」，而不是兩顆都亮著讓人分不出現在是哪個。 */
+.backend-switch { display: flex; gap: 6px; }
+.backend-switch .badge {
+    font-family: inherit; cursor: pointer;
+    color: var(--text-muted); border-color: var(--card-border); background: none;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.backend-switch .badge:hover:not(:disabled):not(.active) { color: var(--text-main); border-color: var(--text-muted); }
+.backend-switch .badge:disabled { cursor: not-allowed; opacity: 0.4; }
+.backend-switch .badge.webgpu.active { color: #b57bff; border-color: rgba(181, 123, 255, 0.4); background: rgba(181, 123, 255, 0.08); }
+.backend-switch .badge.webgl.active { color: #ff8a3d; border-color: rgba(255, 138, 61, 0.4); background: rgba(255, 138, 61, 0.08); }
 .fps {
     font-variant-numeric: tabular-nums;
     font-size: 0.95rem;

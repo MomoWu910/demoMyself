@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLabStore } from '../store';
+import { useLabStore, type Backend } from '../store';
 import { EFFECTS, getEffect, type EffectDef, type ParamDef } from '../effects';
 import { runShaderBenchmark } from '../bench/runShaderBench';
 import { SHADER_COSTS, LAYERING_FINDING, COST_PROVENANCE } from '../bench/costData';
@@ -54,16 +54,62 @@ function ColorRow({ param }: { param: ColorParam }) {
     );
 }
 
-function StatusBar() {
+/**
+ * backend 切換。
+ *
+ * 這個 Lab 的主張是「同一個效果，GLSL 與 WGSL 各寫一份」——原本卻只有一個唯讀
+ * 的 badge，兩份原始碼看得到、卻不能讓它們真的各跑一次。旗子貼圖上那個
+ * `GLSL ⇄ WGSL` 等於在承諾一個不存在的功能。
+ *
+ * **切換靠重載頁面**：Pixi 的 renderer 類型在 `Application.init()` 就定了，
+ * 中途換不了。重載也讓網址帶著 `?renderer=`，可以直接分享「用 WebGL 跑的這頁」。
+ *
+ * 不支援 WebGPU 的瀏覽器會**靜默退回** WebGL（見 stage.ts），所以這裡先問
+ * `navigator.gpu`：沒有就把那顆鍵鎖起來並說明原因，否則使用者點了沒反應，
+ * 只會以為是自己點錯。
+ */
+function BackendSwitch() {
     const t = useT();
     const backend = useLabStore((s) => s.backend);
+    // 用值判斷而不是 `'gpu' in navigator`：屬性存在但被停用（值為 undefined）的瀏覽器
+    // 用 `in` 會判成支援，然後使用者點下去、重載、又靜默退回 WebGL——白跑一趟。
+    const gpuSupported = typeof navigator !== 'undefined' && (navigator as { gpu?: unknown }).gpu != null;
+
+    const switchTo = (target: Backend) => {
+        if (target === backend) return;
+        const params = new URLSearchParams(window.location.search);
+        params.set('renderer', target); // 寫明確值，分享出去的網址看得出跑的是哪個
+        window.location.search = params.toString();
+    };
+
+    return (
+        <div className="backend-switch" role="group" aria-label={t('shader.panel.backend')}>
+            {(['webgl', 'webgpu'] as Backend[]).map((id) => {
+                const blocked = id === 'webgpu' && !gpuSupported;
+                return (
+                    <button
+                        key={id}
+                        type="button"
+                        className={`badge ${id}${backend === id ? ' active' : ''}`}
+                        disabled={blocked || backend === null}
+                        title={blocked ? t('shader.panel.noWebgpu') : t('shader.panel.switchTo')}
+                        onClick={() => switchTo(id)}
+                    >
+                        {id.toUpperCase()}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+function StatusBar() {
+    const t = useT();
     const fps = useLabStore((s) => s.fps);
 
     return (
         <div className="status">
-            <span className={`badge ${backend ?? 'pending'}`}>
-                {backend ? backend.toUpperCase() : '…'}
-            </span>
+            <BackendSwitch />
             <span className="fps">
                 {fps} <small>{t('shader.panel.fps')}</small>
             </span>
