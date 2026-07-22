@@ -19,6 +19,7 @@ import { EnvironmentManager, BackgroundMode } from '../managers/environmentManag
 import { PostProcessManager } from '../managers/postProcessManager';
 import { ShadowManager } from '../managers/shadowManager';
 import { MaterialConfigurator, PartInfo, FinishInfo, TintInfo } from './materialConfigurator';
+import { getSurfaceSet, SurfaceSet, SurfaceSource } from './surfaceDetail';
 
 const SHOE_URL: string = require('../../res/models/shoe.glb');
 
@@ -390,6 +391,29 @@ export class ConfiguratorView {
     /** 套用顏色 tint 到指定部件 */
     public applyTint(partId: string, tintId: string) {
         this.materialConfigurator.applyTint(partId, tintId);
+    }
+
+    /**
+     * 準備並掛上表面細節貼圖，回傳這一組的取得成本（給面板顯示；沒有表面細節就回 null）。
+     *
+     * 是 async 的：兩種來源都要等——shader 要等 GPU 跑完第一次生成，掃描貼圖要等下載
+     * 與解碼。呼叫端不必等它（材質數值早就套好了），貼圖到位後自己會補上去。
+     */
+    public async applySurfaceDetail(
+        partId: string,
+        finishId: string,
+        source: SurfaceSource,
+        tiling: number,
+        bump: number,
+    ): Promise<SurfaceSet | null> {
+        const set = await getSurfaceSet(this.scene, finishId, source);
+        this.materialConfigurator.applySurface(partId, set, tiling, bump);
+        return set;
+    }
+
+    /** 滑桿拖動：只改已掛上的貼圖參數，不重新準備 */
+    public tuneSurface(tiling: number, bump: number) {
+        this.materialConfigurator.tuneSurface(tiling, bump);
     }
 
     /** 套用打光預設（柔光棚 / 戲劇側光 / 電商白） */

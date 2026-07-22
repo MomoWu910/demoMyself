@@ -1,4 +1,5 @@
-import { AbstractMesh, Color3, PBRMaterial } from '@babylonjs/core';
+import { AbstractMesh, BaseTexture, Color3, PBRMaterial } from '@babylonjs/core';
+import type { SurfaceSet } from './surfaceDetail';
 
 /**
  * 這裡所有的 `label` 都是 **i18n key**，不是要直接畫出來的字——UI 端一律 `t(label)`。
@@ -77,12 +78,23 @@ interface OriginalParams {
     clearCoatIntensity: number;
     clearCoatRoughness: number;
     albedoColor: Color3;
+    /**
+     * 模型自己帶的法線 / ORM 貼圖。也要記——表面細節會覆寫這兩個槽，
+     * 而 `original` finish 的意思是「還原成模型原本的樣子」，
+     * 只把它們設成 null 的話，原本就有法線貼圖的模型會被我們洗掉。
+     */
+    bumpTexture: BaseTexture | null;
+    metallicTexture: BaseTexture | null;
+    useRoughnessFromMetallicTextureGreen: boolean;
+    useMetallnessFromMetallicTextureBlue: boolean;
 }
 
 interface Part extends PartInfo {
     meshes: AbstractMesh[];
     finishId: string;
     tintId: string;
+    /** 目前掛著的表面細節貼圖（null = 這個 finish 沒有表面細節） */
+    surface?: SurfaceSet | null;
 }
 
 /**
@@ -226,6 +238,61 @@ export class MaterialConfigurator {
             clearCoatIntensity: mat.clearCoat.intensity,
             clearCoatRoughness: mat.clearCoat.roughness,
             albedoColor: mat.albedoColor.clone(),
+            bumpTexture: mat.bumpTexture,
+            metallicTexture: mat.metallicTexture,
+            useRoughnessFromMetallicTextureGreen: mat.useRoughnessFromMetallicTextureGreen,
+            useMetallnessFromMetallicTextureBlue: mat.useMetallnessFromMetallicTextureBlue,
         });
+    }
+
+    /**
+     * 掛上（或拿掉）表面細節貼圖。
+     *
+     * `set` 為 null 代表這個 finish 沒有表面細節，還原成模型自己帶的那兩張貼圖。
+     *
+     * 粗糙度走 `metallicTexture` 的 **green channel** 是 glTF 的 ORM 慣例。
+     * 但要同時關掉 `useMetallnessFromMetallicTextureBlue`——我們的粗糙度圖是灰階，
+     * blue 裡放的還是粗糙度值，被當成金屬度讀的話，霧面布料會整片變成金屬。
+     *
+     * tiling 與凹凸強度設在 texture 實例上而不是材質上，所以所有部件共用同一組值——
+     * 這是刻意的：那兩條滑桿講的是「這塊布料本身多細」，不是「這個部件多細」。
+     */
+    public applySurface(partId: string, set: SurfaceSet | null, tiling: number, bump: number) {
+        const part = this.parts.find((p) => p.id === partId);
+        if (!part) return;
+        part.surface = set;
+
+        this._forEachPbr(part, (mat) => {
+            this._captureOriginal(mat);
+            const orig = this.originalParams.get(mat.uniqueId)!;
+
+            if (!set) {
+                mat.bumpTexture = orig.bumpTexture;
+                mat.metallicTexture = orig.metallicTexture;
+                mat.useRoughnessFromMetallicTextureGreen = orig.useRoughnessFromMetallicTextureGreen;
+                mat.useMetallnessFromMetallicTextureBlue = orig.useMetallnessFromMetallicTextureBlue;
+                return;
+            }
+
+            set.normal.uScale = set.normal.vScale = tiling;
+            set.rough.uScale = set.rough.vScale = tiling;
+            set.normal.level = bump;
+
+            mat.bumpTexture = set.normal;
+            mat.metallicTexture = set.rough;
+            mat.useRoughnessFromMetallicTextureGreen = true;
+            mat.useRoughnessFromMetallicTextureAlpha = false;
+            mat.useMetallnessFromMetallicTextureBlue = false;
+        });
+    }
+
+    /** 只調整已掛上的表面貼圖參數（滑桿拖動時走這條，不必重新準備貼圖） */
+    public tuneSurface(tiling: number, bump: number) {
+        for (const part of this.parts) {
+            if (!part.surface) continue;
+            part.surface.normal.uScale = part.surface.normal.vScale = tiling;
+            part.surface.rough.uScale = part.surface.rough.vScale = tiling;
+            part.surface.normal.level = bump;
+        }
     }
 }

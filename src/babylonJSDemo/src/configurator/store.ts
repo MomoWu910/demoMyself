@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { CameraViewId, ConfiguratorView } from './configuratorView';
+import { SHADER_BYTES, surfaceKindOf, type SurfaceSource } from './surfaceDetail';
 import type { BackgroundMode } from '../managers/environmentManager';
 import type { FinishInfo, PartInfo, TintInfo } from './materialConfigurator';
 
@@ -61,6 +62,24 @@ export interface CfgSelection {
     background: BackgroundMode;
     autoRotate: boolean;
     cameraView: CameraView;
+    surfaceSource: SurfaceSource;
+    surfaceTiling: number;
+    surfaceBump: number;
+}
+
+/**
+ * 一組表面貼圖的取得成本，量到的、不是估的。
+ *
+ * 這是「shader 生成 vs 掃描貼圖」這組對照唯一誠實的比較軸——兩者準備完之後每幀
+ * 都只是一次貼圖取樣，FPS 完全一樣（理由見 surfaceDetail.ts 檔頭）。
+ */
+export interface SurfaceMetrics {
+    source: SurfaceSource;
+    /** 掃描貼圖的實際傳輸位元組；shader 版為 0 */
+    bytes: number;
+    /** shader 版的 GLSL 原始碼大小——它不是零成本，只是成本在 bundle 裡 */
+    shaderBytes: number;
+    prepMs: number;
 }
 
 /** 從 store 抽出可序列化的那一半（分享連結、之後的截圖 metadata 都吃這個） */
@@ -77,6 +96,9 @@ export function selectionOf(s: CfgSelection): CfgSelection {
         background: s.background,
         autoRotate: s.autoRotate,
         cameraView: s.cameraView,
+        surfaceSource: s.surfaceSource,
+        surfaceTiling: s.surfaceTiling,
+        surfaceBump: s.surfaceBump,
     };
 }
 
@@ -113,6 +135,15 @@ interface CfgState extends CfgSelection {
     setBackground: (mode: BackgroundMode) => void;
     toggleAutoRotate: () => void;
     setCameraView: (id: CameraViewId) => void;
+    setSurfaceSource: (s: SurfaceSource) => void;
+    setSurfaceTiling: (v: number) => void;
+    setSurfaceBump: (v: number) => void;
+    /** 目前這組表面貼圖的取得成本；null = 目前的 finish 沒有表面細節 */
+    surfaceMetrics: SurfaceMetrics | null;
+    /** 表面貼圖準備中（切來源的第一次會下載／跑 shader） */
+    surfaceBusy: boolean;
+    /** 重新準備並掛上某個部件的表面貼圖。不帶參數就是「全部重來」（切來源、切變體時用） */
+    refreshSurface: (partId?: string) => Promise<void>;
     resetView: () => void;
     /** 匯出目前畫面的 PNG data URL（回傳 null 代表場景還沒好） */
     capture: (scale?: number) => Promise<string | null>;
@@ -140,6 +171,13 @@ export const useCfgStore = create<CfgState>((set, get) => ({
     background: 'studio',
     autoRotate: true,
     cameraView: 'hero',
+    surfaceSource: 'shader',
+    // 8× 是兩種來源都好看的密度：更低的話 512px 掃描圖會被拉成一片斑駁像髒污，
+    // 更高則 shader 的細胞紋細到看不出形狀。
+    surfaceTiling: 8,
+    surfaceBump: 1,
+    surfaceMetrics: null,
+    surfaceBusy: false,
 
     init: ({ view, parts, finishes, tints, variants, activeVariant }) => {
         const partState: Record<string, PartUiState> = {};
@@ -164,13 +202,18 @@ export const useCfgStore = create<CfgState>((set, get) => ({
         set({ defaults: selectionOf(get()) });
     },
 
-    // 純 UI 切換：換的是「接下來要調哪個部件」，場景不動
-    setPart: (currentPart) => set({ currentPart }),
+    // 換的是「接下來要調哪個部件」，場景不動；但面板顯示的成本數字要跟著換部件走
+    setPart: (currentPart) => {
+        set({ currentPart });
+        void get().refreshSurface(currentPart);
+    },
 
     setFinish: (finishId) => {
         const { view, currentPart, partState } = get();
         view?.applyFinish(currentPart, finishId);
         set({ partState: { ...partState, [currentPart]: { ...partState[currentPart], finishId } } });
+        // 材質數值是同步套好的，表面貼圖要等準備完才補上去——不擋這一次操作
+        void get().refreshSurface(currentPart);
     },
 
     setTint: (tintId) => {
@@ -181,9 +224,11 @@ export const useCfgStore = create<CfgState>((set, get) => ({
 
     // 變體會整個換掉材質，view 內部會把使用者選的 finish / tint 重套一次；
     // UI 這邊不必動 partState——那份選擇本來就沒變，變的只是它疊在哪組材質上。
+    // 變體會整套換掉材質，連我們掛上去的表面貼圖也一起沒了，所以要全部重掛一次
     setVariant: (variant) => {
         get().view?.selectVariant(variant);
         set({ variant });
+        void get().refreshSurface();
     },
 
     setLightingPreset: (lightingPreset) => {
@@ -237,6 +282,61 @@ export const useCfgStore = create<CfgState>((set, get) => ({
         set({ cameraView: 'hero' });
     },
 
+    setSurfaceSource: (surfaceSource) => {
+        set({ surfaceSource });
+        void get().refreshSurface(); // 每個部件都要換一套來源
+    },
+
+    // 兩條滑桿只改已掛上的貼圖參數，不重新準備——所以拖起來是即時的
+    setSurfaceTiling: (surfaceTiling) => {
+        get().view?.tuneSurface(surfaceTiling, get().surfaceBump);
+        set({ surfaceTiling });
+    },
+
+    setSurfaceBump: (surfaceBump) => {
+        get().view?.tuneSurface(get().surfaceTiling, surfaceBump);
+        set({ surfaceBump });
+    },
+
+    /**
+     * 準備並掛上表面貼圖。
+     *
+     * metrics 只反映**目前選中的部件**——面板上那組數字講的是「你現在看的這個材質
+     * 花了多少」，把所有部件的加總起來反而沒有對應的意義。
+     */
+    refreshSurface: async (partId) => {
+        const st = get();
+        if (!st.view) return;
+        const targets = partId ? [partId] : st.parts.map((p) => p.id);
+
+        set({ surfaceBusy: true });
+        try {
+            for (const id of targets) {
+                const finishId = st.partState[id]?.finishId ?? 'original';
+                const set_ = await st.view.applySurfaceDetail(
+                    id,
+                    finishId,
+                    st.surfaceSource,
+                    st.surfaceTiling,
+                    st.surfaceBump,
+                );
+                if (id !== get().currentPart) continue;
+                set({
+                    surfaceMetrics: set_
+                        ? {
+                              source: st.surfaceSource,
+                              bytes: set_.bytes,
+                              shaderBytes: st.surfaceSource === 'shader' ? SHADER_BYTES : 0,
+                              prepMs: set_.prepMs,
+                          }
+                        : null,
+                });
+            }
+        } finally {
+            set({ surfaceBusy: false });
+        }
+    },
+
     capture: async (scale = 2) => {
         const view = get().view;
         return view ? view.captureScreenshot(scale) : null;
@@ -273,6 +373,13 @@ export const useCfgStore = create<CfgState>((set, get) => ({
         // 機位放在 autoRotate 之後：setCameraView 會關掉自動旋轉，順序反過來的話
         // 連結裡的 spin=1 會被機位推翻。'free' 沒有座標可還原，略過。
         if (sel.cameraView && sel.cameraView !== 'free') st.setCameraView(sel.cameraView);
+
+        // 表面細節放最後：前面的 finish / variant 都會影響該掛哪一組貼圖，
+        // 先套的話會被後面的動作洗掉。三個值先寫進 state，再一次重掛。
+        if (sel.surfaceTiling !== undefined) set({ surfaceTiling: sel.surfaceTiling });
+        if (sel.surfaceBump !== undefined) set({ surfaceBump: sel.surfaceBump });
+        if (sel.surfaceSource) set({ surfaceSource: sel.surfaceSource });
+        void get().refreshSurface();
     },
 }));
 

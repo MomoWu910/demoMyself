@@ -58,6 +58,15 @@
             font-size: 0.63rem; color: var(--text-muted); text-transform: uppercase;
             letter-spacing: 1.2px; font-weight: 600;
         }
+        /* 可摺疊區塊的標題列：長得跟其他標題一模一樣，只多一個箭頭，
+           因為它仍然是標題——不希望它被讀成一顆按鈕而讓人以為會改到場景 */
+        .section > .label.fold {
+            display: flex; justify-content: space-between; align-items: center; width: 100%;
+            background: none; border: none; padding: 0; font-family: inherit; cursor: pointer;
+            text-align: left;
+        }
+        .section > .label.fold:hover { color: var(--text); }
+        .section > .label.fold em { font-style: normal; color: var(--accent); font-size: 0.7rem; }
 
         /* pill 群組（finish / lighting / background） */
         .pills { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -94,6 +103,11 @@
         }
 
         .divider { height: 1px; background: var(--panel-border); margin: 2px 0; }
+
+        /* 表面細節的成本數字（下載量 / 準備耗時），排版比照滑桿的標籤列 */
+        .cost { display: flex; flex-direction: column; gap: 3px; font-size: 0.66rem; color: var(--text-muted); }
+        .cost > div { display: flex; justify-content: space-between; gap: 10px; }
+        .cost .val { color: var(--text); font-variant-numeric: tabular-nums; }
 
         /* 底部小工具列 */
         .bottom-bar {

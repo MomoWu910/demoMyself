@@ -3,6 +3,7 @@ import { useT } from '../../../../i18n/useT';
 import { selectionOf, useCfgStore } from '../store';
 import { copyText, encodeSelection, shareUrl } from '../share';
 import { downloadDataUrl, screenshotFilename } from '../capture';
+import { surfaceKindOf, type SurfaceSource } from '../surfaceDetail';
 import type { CameraViewId } from '../configuratorView';
 import type { BackgroundMode } from '../../managers/environmentManager';
 
@@ -27,6 +28,11 @@ const CAMERA_VIEWS: { id: CameraViewId; key: string }[] = [
     { id: 'detail', key: 'cfg.view.detail' },
 ];
 
+const SURFACE_SOURCES: { id: SurfaceSource; key: string }[] = [
+    { id: 'shader', key: 'cfg.surface.shader' },
+    { id: 'texture', key: 'cfg.surface.texture' },
+];
+
 const BACKGROUNDS: { id: BackgroundMode; key: string }[] = [
     { id: 'studio', key: 'cfg.bg.studio' },
     { id: 'gradient', key: 'cfg.bg.gradient' },
@@ -34,13 +40,43 @@ const BACKGROUNDS: { id: BackgroundMode; key: string }[] = [
     { id: 'white', key: 'cfg.bg.white' },
 ];
 
-/** 一段有標題的區塊 */
-function Section({ label, children, hidden }: { label: string; children: React.ReactNode; hidden?: boolean }) {
+/**
+ * 一段有標題的區塊；`foldable` 的可以點標題收合。
+ *
+ * 收合狀態是元件自己的 local state，不進 store 也不進分享連結——它是「這台螢幕上
+ * 我現在想看什麼」，不是「這雙鞋長什麼樣」。`defaultOpen` 只當初值：使用者手動
+ * 展開後，之後改變視窗大小不該把它關回去。
+ */
+function Section({
+    label,
+    children,
+    hidden,
+    foldable,
+    defaultOpen = true,
+}: {
+    label: string;
+    children: React.ReactNode;
+    hidden?: boolean;
+    foldable?: boolean;
+    defaultOpen?: boolean;
+}) {
+    const [open, setOpen] = useState(defaultOpen);
     if (hidden) return null;
+    if (!foldable) {
+        return (
+            <div className="section">
+                <span className="label">{label}</span>
+                {children}
+            </div>
+        );
+    }
     return (
         <div className="section">
-            <span className="label">{label}</span>
-            {children}
+            <button className="label fold" type="button" onClick={() => setOpen((v) => !v)}>
+                <span>{label}</span>
+                <em>{open ? '▴' : '▾'}</em>
+            </button>
+            {open && children}
         </div>
     );
 }
@@ -189,11 +225,49 @@ function ExportButton() {
     );
 }
 
+/**
+ * 兩種表面細節來源的取得成本。
+ *
+ * **刻意只顯示下載量與準備耗時，不顯示 FPS**：兩種來源準備完之後都只是一次貼圖
+ * 取樣，每幀成本完全相同，擺一個永遠一樣的 FPS 上去等於暗示它們有效能差異。
+ * 這裡的數字全是量到的（傳輸量查 Resource Timing，耗時是 performance.now 夾出來的）。
+ */
+function SurfaceCost() {
+    const t = useT();
+    const m = useCfgStore((s) => s.surfaceMetrics);
+    const busy = useCfgStore((s) => s.surfaceBusy);
+
+    if (busy) return <div className="cost">{t('cfg.surface.preparing')}</div>;
+    if (!m) return null;
+
+    const kb = (n: number) => `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
+    return (
+        <div className="cost">
+            <div>
+                <span>{t('cfg.surface.download')}</span>
+                <span className="val">{m.source === 'shader' ? `0 KB (+${kb(m.shaderBytes)} GLSL)` : kb(m.bytes)}</span>
+            </div>
+            <div title={t('cfg.surface.prepHint')}>
+                <span>{t('cfg.surface.prep')} ⓘ</span>
+                <span className="val">{m.prepMs.toFixed(1)} ms</span>
+            </div>
+            <div>
+                <span>{t('cfg.surface.perFrame')}</span>
+                <span className="val">{t('cfg.surface.same')}</span>
+            </div>
+        </div>
+    );
+}
+
 export function Panel() {
     const t = useT();
     const panelRef = useRef<HTMLElement | null>(null);
     const [collapsed, setCollapsed] = useState(false);
     useBottomSheet(panelRef, collapsed, setCollapsed);
+    // 選了有紋理的 finish 之後整份面板全展開約 854px，加上 max-height 保留的
+    // 120px 上下邊距，要 975px 高的視窗才裝得下（實測 1440×900 溢出 75px）。
+    // 不到這個高度就把兩段進階選項預設收起來。
+    const [compact] = useState(() => window.innerHeight < 975);
 
     const s = useCfgStore();
     if (!s.ready) return null;
@@ -267,7 +341,7 @@ export function Panel() {
 
                 <div className="divider" />
 
-                <Section label={t('cfg.section.lighting')}>
+                <Section label={t('cfg.section.lighting')} foldable defaultOpen={!compact}>
                     <div className="pills">
                         {LIGHTING_PRESETS.map((p) => (
                             <button
@@ -318,6 +392,45 @@ export function Panel() {
                 </Section>
 
                 {/* 機位。使用者自己拖過相機後 cameraView 會變 'free'，這裡就沒有任何一顆是亮的 */}
+                {/* 表面細節。finish 是 original / glossy 時沒有紋理可調，整段收起來 */}
+                <Section
+                    label={t('cfg.section.surface')}
+                    hidden={!surfaceKindOf(part.finishId)}
+                    foldable
+                    defaultOpen={!compact}
+                >
+                    <div className="pills">
+                        {SURFACE_SOURCES.map((src) => (
+                            <button
+                                key={src.id}
+                                className={`pill${src.id === s.surfaceSource ? ' active' : ''}`}
+                                onClick={() => s.setSurfaceSource(src.id)}
+                            >
+                                {t(src.key)}
+                            </button>
+                        ))}
+                    </div>
+                    <Slider
+                        label={t('cfg.slider.tiling')}
+                        value={s.surfaceTiling}
+                        min={0.5}
+                        max={12}
+                        step={0.5}
+                        format={(v) => `${v.toFixed(1)}×`}
+                        onChange={s.setSurfaceTiling}
+                    />
+                    <Slider
+                        label={t('cfg.slider.bump')}
+                        value={s.surfaceBump}
+                        min={0}
+                        max={3}
+                        step={0.05}
+                        format={(v) => v.toFixed(2)}
+                        onChange={s.setSurfaceBump}
+                    />
+                    <SurfaceCost />
+                </Section>
+
                 <Section label={t('cfg.section.view')}>
                     <div className="pills">
                         {CAMERA_VIEWS.map((v) => (

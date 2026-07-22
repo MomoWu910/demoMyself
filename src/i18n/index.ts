@@ -143,6 +143,23 @@ export const DICT: Record<string, Entry> = {
     'cfg.section.lighting': { en: 'Lighting', zh: '打光' },
     'cfg.section.background': { en: 'Background', zh: '背景' },
     'cfg.section.view': { en: 'View', zh: '機位' },
+    'cfg.section.surface': { en: 'Surface Detail', zh: '表面細節' },
+    // 兩個來源刻意標出「生成」與「掃描」的差別，這組對照本身就是這一段要講的事
+    'cfg.surface.shader': { en: 'Shader', zh: 'Shader 生成' },
+    'cfg.surface.texture': { en: 'Scanned', zh: '掃描貼圖' },
+    'cfg.surface.preparing': { en: 'Preparing…', zh: '準備中…' },
+    'cfg.surface.download': { en: 'Download', zh: '下載量' },
+    'cfg.surface.prep': { en: 'First prep', zh: '首次準備' },
+    // 這行是 hover 提示：424ms vs 12ms 的落差看起來很嚇人，但兩邊各自含著什麼要講清楚，
+    // 否則會被讀成「程序生成慢 30 倍」——實際上 shader 那邊大半是一次性的編譯。
+    'cfg.surface.prepHint': {
+        en: 'Measured once per material. Shader includes GLSL compile; scanned includes download + decode.',
+        zh: '每種材質只量一次。Shader 含 GLSL 編譯；掃描貼圖含下載與解碼。',
+    },
+    'cfg.surface.perFrame': { en: 'Per frame', zh: '每幀成本' },
+    'cfg.surface.same': { en: 'identical', zh: '兩者相同' },
+    'cfg.slider.tiling': { en: 'Tiling', zh: '紋理密度' },
+    'cfg.slider.bump': { en: 'Bump', zh: '凹凸強度' },
     'cfg.view.hero': { en: 'Hero', zh: '主視角' },
     'cfg.view.side': { en: 'Side', zh: '側面' },
     'cfg.view.front': { en: 'Front', zh: '正面' },

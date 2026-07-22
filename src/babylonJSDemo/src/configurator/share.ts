@@ -23,6 +23,8 @@ const NUM_RANGE = {
     rot: [0, 360],
     key: [0, 6],
     temp: [2700, 9000],
+    tile: [0.5, 12],
+    bump: [0, 3],
 } as const;
 
 function clamp(v: number, [min, max]: readonly [number, number]): number {
@@ -49,6 +51,10 @@ export function encodeSelection(s: CfgSelection, defaults: CfgSelection): string
     if (!s.autoRotate) q.set('spin', '0');
     // 'free' 不寫——它代表使用者拖出來的角度，沒有能還原的座標（見 store 的 CameraView）
     if (s.cameraView !== 'free' && s.cameraView !== defaults.cameraView) q.set('cam', s.cameraView);
+
+    if (s.surfaceSource !== defaults.surfaceSource) q.set('sd', s.surfaceSource);
+    if (s.surfaceTiling !== defaults.surfaceTiling) q.set('tile', s.surfaceTiling.toFixed(1));
+    if (s.surfaceBump !== defaults.surfaceBump) q.set('bump', s.surfaceBump.toFixed(2));
 
     return q.toString();
 }
@@ -99,6 +105,13 @@ export function readSelection(search: string, validPartIds: string[]): Partial<C
 
     const cam = q.get('cam');
     if (cam && CAMERA_VIEWS.includes(cam)) out.cameraView = cam as CfgSelection['cameraView'];
+
+    const sd = q.get('sd');
+    if (sd === 'shader' || sd === 'texture') out.surfaceSource = sd;
+    const tile = num('tile', NUM_RANGE.tile);
+    if (tile !== undefined) out.surfaceTiling = tile;
+    const bump = num('bump', NUM_RANGE.bump);
+    if (bump !== undefined) out.surfaceBump = bump;
 
     return out;
 }
