@@ -1,5 +1,13 @@
 import { AbstractMesh, Color3, PBRMaterial } from '@babylonjs/core';
 
+/**
+ * 這裡所有的 `label` 都是 **i18n key**，不是要直接畫出來的字——UI 端一律 `t(label)`。
+ *
+ * 這樣寫是因為 `t()` 查不到 key 時原樣回傳 key（見 i18n/index.ts），所以
+ * 「翻譯過的名稱」與「翻不了、只能拿 mesh 原名頂著」兩種情況可以共用同一個欄位，
+ * 不必為了後者多開一個 fallback 欄位再到處判斷該用哪個。
+ */
+
 /** 一個可獨立配置材質的部件（單一 mesh 模型 = 一個「整雙」部件；分件模型 = 鞋面/鞋底/鞋帶…） */
 export interface PartInfo {
     id: string;
@@ -29,35 +37,35 @@ interface FinishPreset {
 }
 
 const FINISH_PRESETS: Record<string, FinishPreset> = {
-    original: { label: 'Original', metallic: 0, roughness: 0, clearCoat: 0 }, // 還原模型原始材質（實際以快照還原）
-    matte: { label: 'Matte', metallic: 0, roughness: 0.92, clearCoat: 0 },
-    leather: { label: 'Leather', metallic: 0, roughness: 0.55, clearCoat: 0.18, clearCoatRoughness: 0.4 },
-    glossy: { label: 'Glossy', metallic: 0, roughness: 0.14, clearCoat: 0.9, clearCoatRoughness: 0.05 },
-    metallic: { label: 'Metallic', metallic: 1, roughness: 0.3, clearCoat: 0 },
+    original: { label: 'cfg.finish.original', metallic: 0, roughness: 0, clearCoat: 0 }, // 還原模型原始材質（實際以快照還原）
+    matte: { label: 'cfg.finish.matte', metallic: 0, roughness: 0.92, clearCoat: 0 },
+    leather: { label: 'cfg.finish.leather', metallic: 0, roughness: 0.55, clearCoat: 0.18, clearCoatRoughness: 0.4 },
+    glossy: { label: 'cfg.finish.glossy', metallic: 0, roughness: 0.14, clearCoat: 0.9, clearCoatRoughness: 0.05 },
+    metallic: { label: 'cfg.finish.metallic', metallic: 1, roughness: 0.3, clearCoat: 0 },
 };
 
 const TINT_PALETTE: TintInfo[] = [
-    { id: 'none', label: 'Original', hex: '' }, // 不上色，保留貼圖原色
-    { id: 'crimson', label: 'Crimson', hex: '#b32134' },
-    { id: 'cobalt', label: 'Cobalt', hex: '#27508f' },
-    { id: 'forest', label: 'Forest', hex: '#2f6d4f' },
-    { id: 'amber', label: 'Amber', hex: '#c8922f' },
-    { id: 'charcoal', label: 'Charcoal', hex: '#33363d' },
-    { id: 'ivory', label: 'Ivory', hex: '#dcd6c8' },
+    { id: 'none', label: 'cfg.tint.none', hex: '' }, // 不上色，保留貼圖原色
+    { id: 'crimson', label: 'cfg.tint.crimson', hex: '#b32134' },
+    { id: 'cobalt', label: 'cfg.tint.cobalt', hex: '#27508f' },
+    { id: 'forest', label: 'cfg.tint.forest', hex: '#2f6d4f' },
+    { id: 'amber', label: 'cfg.tint.amber', hex: '#c8922f' },
+    { id: 'charcoal', label: 'cfg.tint.charcoal', hex: '#33363d' },
+    { id: 'ivory', label: 'cfg.tint.ivory', hex: '#dcd6c8' },
 ];
 
 // 依 mesh 名稱關鍵字推測友善部件名稱
 const PART_KEYWORDS: { kw: string; label: string }[] = [
-    { kw: 'outsole', label: '鞋底' },
-    { kw: 'midsole', label: '中底' },
-    { kw: 'sole', label: '鞋底' },
-    { kw: 'lace', label: '鞋帶' },
-    { kw: 'tongue', label: '鞋舌' },
-    { kw: 'upper', label: '鞋面' },
-    { kw: 'toe', label: '鞋頭' },
-    { kw: 'heel', label: '鞋跟' },
-    { kw: 'collar', label: '鞋口' },
-    { kw: 'logo', label: 'Logo' },
+    { kw: 'outsole', label: 'cfg.part.outsole' },
+    { kw: 'midsole', label: 'cfg.part.midsole' },
+    { kw: 'sole', label: 'cfg.part.sole' },
+    { kw: 'lace', label: 'cfg.part.lace' },
+    { kw: 'tongue', label: 'cfg.part.tongue' },
+    { kw: 'upper', label: 'cfg.part.upper' },
+    { kw: 'toe', label: 'cfg.part.toe' },
+    { kw: 'heel', label: 'cfg.part.heel' },
+    { kw: 'collar', label: 'cfg.part.collar' },
+    { kw: 'logo', label: 'cfg.part.logo' },
 ];
 
 /** 還原用的材質原始參數快照 */
@@ -99,7 +107,7 @@ export class MaterialConfigurator {
         if (meshes.length <= 1) {
             // 單一 mesh：整雙鞋作為唯一部件
             this.parts = [
-                { id: 'whole', label: '整雙鞋', meshes, finishId: 'original', tintId: 'none' },
+                { id: 'whole', label: 'cfg.part.whole', meshes, finishId: 'original', tintId: 'none' },
             ];
             return;
         }
@@ -114,12 +122,16 @@ export class MaterialConfigurator {
         }));
     }
 
+    /**
+     * 回傳的是 i18n key；認不出來的 mesh 就回傳它自己的名字，
+     * 由 `t()` 的「查無此 key 就原樣輸出」接住（見檔頭說明）。
+     */
     private _friendlyLabel(name: string, index: number): string {
         const lower = name.toLowerCase();
         const hit = PART_KEYWORDS.find((k) => lower.includes(k.kw));
         if (hit) return hit.label;
         const cleaned = name.replace(/[_.]/g, ' ').trim();
-        return cleaned.length > 0 ? cleaned : `部件 ${index + 1}`;
+        return cleaned.length > 0 ? cleaned : `Part ${index + 1}`;
     }
 
     /** 供 UI 建立部件選擇器；單一部件時 UI 可隱藏此列 */

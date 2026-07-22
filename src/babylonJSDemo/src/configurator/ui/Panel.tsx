@@ -178,7 +178,7 @@ export function Panel() {
                                 className={`pill${p.id === s.currentPart ? ' active' : ''}`}
                                 onClick={() => s.setPart(p.id)}
                             >
-                                {p.label}
+                                {t(p.label)}
                             </button>
                         ))}
                     </div>
@@ -192,7 +192,7 @@ export function Panel() {
                                 className={`pill${f.id === part.finishId ? ' active' : ''}`}
                                 onClick={() => s.setFinish(f.id)}
                             >
-                                {f.label}
+                                {t(f.label)}
                             </button>
                         ))}
                     </div>
@@ -205,7 +205,7 @@ export function Panel() {
                                 key={tint.id}
                                 className={`swatch${tint.id === 'none' ? ' none' : ''}${tint.id === part.tintId ? ' active' : ''}`}
                                 style={tint.id === 'none' ? undefined : { background: tint.hex }}
-                                title={tint.label}
+                                title={t(tint.label)}
                                 onClick={() => s.setTint(tint.id)}
                             />
                         ))}

@@ -27,8 +27,14 @@
         }
         .back-btn:hover { background: rgba(0,0,0,0.7); }
 
-        /* 頂部標題 */
-        .title-block { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10; text-align: center; pointer-events: none; }
+        /* 頂部標題。自帶膠囊底的理由跟 .back-btn 一樣：文字是固定的淺色，
+           但背景可以被使用者切成純白——沒有底的話白字會整段消失。 */
+        .title-block {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10;
+            text-align: center; pointer-events: none;
+            background: rgba(0,0,0,0.45); border: 1px solid var(--panel-border);
+            border-radius: 12px; padding: 8px 18px; backdrop-filter: blur(8px);
+        }
         .title-block h1 { margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--text); letter-spacing: 0.5px; }
         .title-block p { margin: 2px 0 0; font-size: 0.72rem; color: var(--text-muted); }
 

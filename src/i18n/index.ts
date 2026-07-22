@@ -158,7 +158,32 @@ export const DICT: Record<string, Entry> = {
     'cfg.bg.gradient': { en: 'Gradient', zh: '漸層' },
     'cfg.bg.dark': { en: 'Dark', zh: '深色' },
     'cfg.bg.white': { en: 'White', zh: '純白' },
+    // finish / tint / 部件的名稱都由 materialConfigurator 以 key 的形式吐出來（不是現成的字），
+    // 這裡是它們唯一的翻譯來源。「Original」在兩組裡意思不同：finish 的是「原始材質參數」，
+    // tint 的是「不上色、保留貼圖原色」，所以分開兩個 key，中文才能各自講清楚。
+    'cfg.finish.original': { en: 'Original', zh: '原始' },
+    'cfg.finish.matte': { en: 'Matte', zh: '霧面' },
+    'cfg.finish.leather': { en: 'Leather', zh: '皮革' },
+    'cfg.finish.glossy': { en: 'Glossy', zh: '亮面' },
+    'cfg.finish.metallic': { en: 'Metallic', zh: '金屬' },
+    'cfg.tint.none': { en: 'Original', zh: '原色' },
+    'cfg.tint.crimson': { en: 'Crimson', zh: '緋紅' },
+    'cfg.tint.cobalt': { en: 'Cobalt', zh: '鈷藍' },
+    'cfg.tint.forest': { en: 'Forest', zh: '森綠' },
+    'cfg.tint.amber': { en: 'Amber', zh: '琥珀' },
+    'cfg.tint.charcoal': { en: 'Charcoal', zh: '炭黑' },
+    'cfg.tint.ivory': { en: 'Ivory', zh: '象牙白' },
     'cfg.part.whole': { en: 'Whole Shoe', zh: '整雙鞋' },
+    'cfg.part.outsole': { en: 'Outsole', zh: '鞋底' },
+    'cfg.part.midsole': { en: 'Midsole', zh: '中底' },
+    'cfg.part.sole': { en: 'Sole', zh: '鞋底' },
+    'cfg.part.lace': { en: 'Laces', zh: '鞋帶' },
+    'cfg.part.tongue': { en: 'Tongue', zh: '鞋舌' },
+    'cfg.part.upper': { en: 'Upper', zh: '鞋面' },
+    'cfg.part.toe': { en: 'Toe', zh: '鞋頭' },
+    'cfg.part.heel': { en: 'Heel', zh: '鞋跟' },
+    'cfg.part.collar': { en: 'Collar', zh: '鞋口' },
+    'cfg.part.logo': { en: 'Logo', zh: 'Logo' },
     'cfg.sheet.customize': { en: 'Customize', zh: '配置選項' },
 
     // ---- pixiXthree HUD ----

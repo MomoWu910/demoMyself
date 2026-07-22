@@ -59,6 +59,7 @@ export class ConfiguratorView {
 
     private environmentManager!: EnvironmentManager;
     private shadowManager!: ShadowManager;
+    private _groundMat?: PBRMaterial;
     private postProcessManager!: PostProcessManager;
     private _keyLight!: DirectionalLight; // 主光（陰影來源）
     private _fillLight!: HemisphericLight; // 半球補光
@@ -173,13 +174,36 @@ export class ConfiguratorView {
     private _initGround() {
         const ground = MeshBuilder.CreateGround('ground', { width: 40, height: 40 }, this.scene);
         const mat = new PBRMaterial('groundMat', this.scene);
-        mat.albedoColor = new Color3(0.06, 0.06, 0.07);
         mat.metallic = 0.3;
         mat.roughness = 0.35; // 略帶反射，呈現產品攝影棚地板質感
         mat.environmentIntensity = 0.6;
         ground.material = mat;
         ground.receiveShadows = true;
         ground.position.y = 0;
+        this._groundMat = mat;
+        this._applyGroundTone('studio');
+    }
+
+    /**
+     * 地板色跟著背景模式走。
+     *
+     * 分開一個 method 是因為背景與地板本來就是「同一件事的兩半」：切成 White 卻只換
+     * scene.clearColor 的話，畫面會上半純白、下半深灰，接縫就在地平線上——看起來
+     * 不像去背，像背景破圖。電商白要的是無縫白，所以地板要一起變亮。
+     */
+    private _applyGroundTone(mode: BackgroundMode) {
+        if (!this._groundMat) return;
+        if (mode === 'white') {
+            // albedo 上限是 1，而場景走 ACES tone mapping 會把它壓成灰；
+            // 補在 environmentIntensity 上（IBL 是這面地板的主要照明來源）才推得到接近白。
+            this._groundMat.albedoColor = new Color3(1, 1, 1);
+            this._groundMat.environmentIntensity = 2.6;
+            this._groundMat.roughness = 0.85; // 白底不要鏡面反射，否則會照出天空盒的深色
+        } else {
+            this._groundMat.albedoColor = new Color3(0.06, 0.06, 0.07);
+            this._groundMat.environmentIntensity = 0.6;
+            this._groundMat.roughness = 0.35;
+        }
     }
 
     /**
@@ -286,9 +310,10 @@ export class ConfiguratorView {
         this.environmentManager.setRotationY(radians);
     }
 
-    /** 背景模式 */
+    /** 背景模式（含地板色——見 _applyGroundTone） */
     public setBackgroundMode(mode: BackgroundMode) {
         this.environmentManager.setBackgroundMode(mode);
+        this._applyGroundTone(mode);
     }
 
     /** 底部 UI（bottom sheet / 工具列）目前蓋住的畫面高度，供相機框景避開 */
