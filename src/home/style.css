@@ -15,6 +15,7 @@
     --pixi: #5aa9ff; /* 藍 · Pixi 底層 */
     --three: #4fd18b; /* 綠 · Three.js */
     --babylon: #f2555a; /* 紅 · Babylon.js */
+    --react: #c3e327; /* 檸檬綠 · React（只有 Shader Lab 與 Configurator 用，見 projects.ts） */
     --text: #eceef4;
     --muted: #bcc0cb;
     --panel: rgba(15, 18, 26, 0.66);

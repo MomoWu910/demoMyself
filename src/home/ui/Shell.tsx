@@ -12,6 +12,7 @@ const TONE_CSS: Record<Tone, string> = {
     pixi: 'var(--pixi)',
     three: 'var(--three)',
     babylon: 'var(--babylon)',
+    react: 'var(--react)',
     neutral: 'var(--muted)',
 };
 

@@ -212,6 +212,7 @@ const LIGHT_VARS: Record<string, string> = {
     '--pixi': '#1361bd',
     '--three': '#0d7a4a',
     '--babylon': '#b8322f',
+    '--react': '#6e8400',
     '--text': '#080d15',
     '--muted': '#121820',
     '--panel': 'rgba(255, 255, 255, 0.66)',
@@ -235,6 +236,7 @@ const DARK_VARS: Record<string, string> = {
     '--pixi': '#5aa9ff',
     '--three': '#4fd18b',
     '--babylon': '#f2555a',
+    '--react': '#c3e327',
     '--text': '#eceef4',
     '--muted': '#bcc0cb',
     '--panel': 'rgba(15, 18, 26, 0.66)',
@@ -272,7 +274,7 @@ export interface ForegroundColors {
      */
     haloBlur: number;
     /** tone → 代表色 */
-    tone: { glsl: number; wgsl: number; dual: number; pixi: number; three: number; babylon: number; neutral: number };
+    tone: { glsl: number; wgsl: number; dual: number; pixi: number; three: number; babylon: number; react: number; neutral: number };
 }
 
 const LIGHT_FG: ForegroundColors = {
@@ -281,7 +283,7 @@ const LIGHT_FG: ForegroundColors = {
     label: 0x1e2733,
     halo: 0xffffff,
     haloBlur: 9,
-    tone: { glsl: 0xb8500c, wgsl: 0x6134bd, dual: 0x9c3f96, pixi: 0x1361bd, three: 0x0d7a4a, babylon: 0xb8322f, neutral: 0x5b6472 },
+    tone: { glsl: 0xb8500c, wgsl: 0x6134bd, dual: 0x9c3f96, pixi: 0x1361bd, three: 0x0d7a4a, babylon: 0xb8322f, react: 0x6e8400, neutral: 0x5b6472 },
 };
 
 const DARK_FG: ForegroundColors = {
@@ -290,7 +292,7 @@ const DARK_FG: ForegroundColors = {
     label: 0xc9cede,
     halo: 0x05070c,
     haloBlur: 5,
-    tone: { glsl: 0xff8a3d, wgsl: 0xb57bff, dual: 0xd98ad6, pixi: 0x5aa9ff, three: 0x4fd18b, babylon: 0xf2555a, neutral: 0x9aa0b2 },
+    tone: { glsl: 0xff8a3d, wgsl: 0xb57bff, dual: 0xd98ad6, pixi: 0x5aa9ff, three: 0x4fd18b, babylon: 0xf2555a, react: 0xc3e327, neutral: 0x9aa0b2 },
 };
 
 export function foregroundFor(light: boolean): ForegroundColors {

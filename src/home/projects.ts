@@ -21,13 +21,24 @@
  */
 
 /**
- * 技術的顏色語彙（琥珀=GLSL/WebGL，紫=WGSL/WebGPU，藍=Pixi，綠=Three，紅=Babylon）。
+ * 技術的顏色語彙（琥珀=GLSL/WebGL，紫=WGSL/WebGPU，藍=Pixi，綠=Three，紅=Babylon，
+ * 檸檬綠=React）。
  *
- * 顏色刻意只開放給**渲染引擎與著色器**，不給 React/TypeScript 那種每個專案都有的東西——
- * 全部上色的話小圓環上會分到五六段、人眼分不出來，琥珀↔紫那個「同一件事做兩遍」的
- * 核心識別也會被淹沒。沒有顏色的技術一律走 neutral。
+ * 判準是**這項技術能不能區分節點**，不是它重不重要：上色的前提是「有些 pass 有、
+ * 有些沒有」。TypeScript 每頁都用，畫上去只會讓每個圓都多一段一模一樣的顏色。
+ *
+ * React 原本被歸在「每個專案都有」而排除，但那個前提是錯的——查 import 只有
+ * Shader Lab 與 Configurator 用（各 2 個檔案），Cross-Engine 刻意維持零框架
+ * （lil-gui / Pixi 畫的 HUD）、Findings 與 RWD 是靜態頁。五個節點裡只有兩個有，
+ * 區辨力足夠，而且它標示出一件真的架構事實：**只有需要資料驅動 UI 的兩頁，
+ * 才採用「React 管 canvas 外、引擎管 canvas 內」的分工**。
+ *
+ * 檸檬綠是算出來的，不是挑順眼的：現有色的色相集中在 24° 與 148°~358°，
+ * 70° 正好是最大的空缺，與每一個現有色的 CIELAB 距離都 ≥58（其他候選最多 46）。
+ * 不用 React 官方青 #61dafb，一來它與 neutral 灰只差 34，二來 cyan-on-black
+ * 正是這個作品集刻意離開的那張「AI 預設臉」。
  */
-export type Tone = 'glsl' | 'wgsl' | 'dual' | 'pixi' | 'three' | 'babylon' | 'neutral';
+export type Tone = 'glsl' | 'wgsl' | 'dual' | 'pixi' | 'three' | 'babylon' | 'react' | 'neutral';
 
 /** tone → CSS hex。首頁 zoom 轉場與落地頁 reveal 共用同一組色，動線才連得起來。 */
 export const TONE_HEX: Record<Tone, string> = {
@@ -37,6 +48,7 @@ export const TONE_HEX: Record<Tone, string> = {
     pixi: '#5aa9ff',
     three: '#4fd18b',
     babylon: '#f2555a',
+    react: '#c3e327',
     neutral: '#9aa0b2',
 };
 
@@ -120,8 +132,8 @@ export const NODES: ProjectNode[] = [
         i18nKey: 'home.shader',
         glyph: '⇄',
         tags: ['GLSL', 'WGSL', 'React + Zustand'],
-        // 雙寫 GLSL/WGSL：琥珀↔紫，正是這個作品集的識別
-        stack: ['glsl', 'wgsl'],
+        // 雙寫 GLSL/WGSL：琥珀↔紫，正是這個作品集的識別；面板是 React + Zustand
+        stack: ['glsl', 'wgsl', 'react'],
         tone: 'dual',
         x: 0.72,
         y: 0.31,
@@ -148,8 +160,9 @@ export const NODES: ProjectNode[] = [
         i18nKey: 'home.configurator',
         glyph: '◈',
         tags: ['Babylon.js', 'PBR / IBL', 'glTF'],
-        // 自成一島的 Babylon，整圈單色——技術上不與其他 pass 共用底層，這件事本身就是資訊
-        stack: ['babylon'],
+        // 自成一島的 Babylon——技術上不與其他 pass 共用渲染底層，這件事本身就是資訊。
+        // 唯一的例外是那圈檸檬綠：面板跟 Shader Lab 一樣是 React 管的。
+        stack: ['babylon', 'react'],
         // tone 要跟 stack 的主色一致：它同時是 zoom 轉場與落地頁 reveal 的顏色，
         // 外框紅、點下去卻轉紫會很突兀
         tone: 'babylon',
@@ -241,7 +254,9 @@ export const TECH_STACK: TechGroup[] = [
     },
     {
         i18nKey: 'home.tech.frontend',
-        items: [{ name: 'React' }, { name: 'Zustand' }, { name: 'TypeScript' }],
+        // React 有顏色、Zustand 與 TypeScript 沒有：判準是「能不能區分節點」。
+        // 這兩個跟著 React 走（有 React 的頁才有 Zustand）或每頁都用，畫上去不帶資訊。
+        items: [{ name: 'React', tone: 'react' }, { name: 'Zustand' }, { name: 'TypeScript' }],
     },
     {
         i18nKey: 'home.tech.bench',
