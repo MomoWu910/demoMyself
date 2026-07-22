@@ -4,7 +4,9 @@
 
 🔗 **線上 Demo**：https://momowu910.github.io/demoMyself/
 
-<!-- [TODO 截圖] 放 1 張跨引擎 demo 或產品配置器主視覺（建議寬版）。 -->
+![首頁 render graph——節點是專案，外框顏色是它用什麼做的，線是原始碼裡真正的共用關係](docs/screenshots/home.png)
+
+<sup>首頁本身就是作品集的入口與第一個 demo：一張用 PixiJS 與自寫 shader 畫的互動 render graph。</sup>
 
 ---
 
@@ -49,6 +51,8 @@
 
 ### 1. 跨引擎渲染整合：PixiJS × Three.js 共用 WebGL Context — `src/pixiJSDemo/pixiXthree/`
 
+![PixiJS 的 2D HUD 與 Three.js 的 3D 物理場景畫在同一個 WebGL context](docs/screenshots/cross-engine.png)
+
 旗艦 demo，一個互動物理沙盒。讓 **PixiJS（2D HUD）** 與 **Three.js（3D 物理場景）** 繪製在**同一個 WebGL Context**，而非疊兩層 Canvas。拖曳可傾斜容器讓物件滾動，2D HUD 疊在 3D 上即時顯示 FPS / Draw Call / 物件數，並提供 Add / Shake / Reset / Gravity 控制。
 
 **解決的硬問題**
@@ -58,6 +62,8 @@
 - **物理整合**：搭配 cannon-es，容器為 kinematic body，傾斜時以角速度推動內部剛體（球 / 方塊）做出真實翻滾。
 
 ### 2. 3D 產品配置器（Babylon.js）— `src/babylonJSDemo/src/configurator/`
+
+![產品配置器：部件（Fabric / Wood / Metal）由模型的材質自動長出，表面細節可切 shader 生成或掃描貼圖並顯示各自的實測成本](docs/screenshots/configurator.jpg)
 
 以 Babylon.js 打造的即時 3D 產品配置器，聚焦 **PBR 渲染質感**、**即時可配置性**，以及**由模型結構長出來的 UI**。可切換球鞋與單椅兩顆模型，整組設定能編成網址分享、也能匯出成圖。
 
@@ -107,6 +113,8 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 
 ### 3. 渲染效能實測報告（PixiJS v8）— `src/findings/`、`src/bench/`
 
+![Rendering Findings：數據由站內 benchmark runner 產出，原始 JSON 原樣保存](docs/screenshots/findings.png)
+
 重點不是「我做了壓測」，而是「我量出了什麼」。站內 [`/findings.html`](https://momowu910.github.io/demoMyself/findings.html) 是一份**可重現**的技術報告：數據由站內的 benchmark runner 直接產出，原始 JSON 原樣存在 `src/findings/results/`，沒有手動修飾過任何一個數字。
 
 **量測方法**（`src/bench/`）
@@ -129,6 +137,8 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 - **Super Shiba Mark**（`pixiJSDemo/stressTest2/`）：光譜另一端，10 萬+ Sprite 塞進單一批次，瓶頸從 GPU 移到 CPU-bound 變換。
 
 ### 4. Shader Lab：自訂 Filter，GLSL 與 WGSL 雙寫 — `src/shaderLab/`
+
+![Shader Lab：自訂 Pixi v8 filter，GLSL 與 WGSL 雙寫，面板左上可直接切換實際跑的 backend](docs/screenshots/shader-lab.png)
 
 站內 [`/shader_lab.html`](https://momowu910.github.io/demoMyself/shader_lab.html)。不是套現成的 filter，而是從零手寫 Pixi v8 的自訂 `Filter`——**同一個效果，GLSL 與 WGSL 各寫一份**，WebGL 與 WebGPU 兩條路徑跑出同一個畫面。v8 改版後這塊的公開資料極少，多數細節是讀原始碼與實測逼出來的。
 
@@ -187,6 +197,8 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 控制面板是 **React 19 + Zustand**，Pixi 跑自己的 render loop，兩邊唯一的接點是一個 store——面板寫參數，舞台每幀讀。React 完全不參與 render loop（60fps 的東西不該經過 virtual DOM）。這是這類產品的真實架構，而不是把引擎硬塞進 component 生命週期。加一個新 shader = 新增一個 `EffectDef` 檔案並註冊，頁面、參數控制項、原始碼檢視都會自動長出來。
 
 ### 5. RWD Showcase：站內建裝置模擬器 — `src/rwdShowcase/`
+
+![RWD Showcase：以 iframe 用實際 CSS 尺寸載入站內任一頁，斷點反應是真的](docs/screenshots/rwd.png)
 
 全站（含每個 canvas demo 的 HUD）都做了 RWD——任何裝置、任意拖拉視窗都不會爆版。這一頁把它變成可互動的展示：
 
