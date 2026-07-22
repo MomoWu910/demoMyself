@@ -77,9 +77,12 @@ function BackendSwitch() {
 
     const switchTo = (target: Backend) => {
         if (target === backend) return;
-        const params = new URLSearchParams(window.location.search);
-        params.set('renderer', target); // 寫明確值，分享出去的網址看得出跑的是哪個
-        window.location.search = params.toString();
+        const url = new URL(window.location.href);
+        url.searchParams.set('renderer', target); // 寫明確值，分享出去的網址看得出跑的是哪個
+        // **replace 不是 assign**：切 backend 是「換一種方式呈現同一頁」，不是前進到新頁面。
+        // 用 assign（或直接寫 location.search）會多推一筆歷史，而返回鈕走的是 history.back()
+        // （見 shell/goBack.ts），按下去只會退回切換前的同一頁，而不是回首頁。
+        window.location.replace(url.toString());
     };
 
     return (
