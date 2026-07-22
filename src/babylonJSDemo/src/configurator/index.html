@@ -42,15 +42,17 @@
         .side-panel {
             position: absolute; top: 50%; right: 22px; transform: translateY(-50%); z-index: 10;
             width: 268px; max-height: calc(100vh - 120px); max-height: calc(100dvh - 120px); overflow-y: auto;
-            display: flex; flex-direction: column; gap: 18px;
+            /* gap 收到 12（原本 18）：多了「機位」一段之後，18 會讓最後的「背景」在
+               800px 高的視窗掉出可視範圍，要捲一下才看得到最常用的白底切換。 */
+            display: flex; flex-direction: column; gap: 12px;
             background: var(--panel-bg); border: 1px solid var(--panel-border);
-            border-radius: 16px; padding: 20px 18px; backdrop-filter: blur(18px);
+            border-radius: 16px; padding: 17px 18px; backdrop-filter: blur(18px);
             box-shadow: 0 8px 40px rgba(0,0,0,0.45);
         }
         .side-panel::-webkit-scrollbar { width: 6px; }
         .side-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
 
-        .section { display: flex; flex-direction: column; gap: 9px; }
+        .section { display: flex; flex-direction: column; gap: 8px; }
         .section.hidden { display: none; }
         .section > .label {
             font-size: 0.63rem; color: var(--text-muted); text-transform: uppercase;
@@ -95,8 +97,12 @@
 
         /* 底部小工具列 */
         .bottom-bar {
-            position: absolute; bottom: max(26px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10;
-            display: flex; align-items: center; gap: 10px;
+            position: absolute; bottom: max(26px, env(safe-area-inset-bottom)); z-index: 10;
+            /* 置中用 left/right + margin auto，不用 left:50% + translateX：絕對定位元素的
+               寬度是「從 left 邊緣到容器右緣」算出來的，left:50% 等於只剩半個畫面可用，
+               四顆按鈕會被 wrap 成四行。給滿左右邊界再 fit-content 才量得到真正的可用寬。 */
+            left: 12px; right: 12px; width: fit-content; margin: 0 auto;
+            display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px;
             background: var(--panel-bg); border: 1px solid var(--panel-border);
             border-radius: 14px; padding: 10px 14px; backdrop-filter: blur(16px);
             box-shadow: 0 8px 40px rgba(0,0,0,0.4);
@@ -128,7 +134,9 @@
 
         @media (max-width: 720px) {
             .side-panel {
-                right: 12px; left: 12px; width: auto; top: auto; bottom: 86px; transform: none;
+                /* bottom 要讓開整條工具列：四顆按鈕在窄螢幕會 wrap 成兩行（約 100px 高），
+                   沿用原本 86px 的話面板會壓在工具列上，連 sheet 把手都點不到。 */
+                right: 12px; left: 12px; width: auto; top: auto; bottom: 122px; transform: none;
                 max-height: 46vh; max-height: 46dvh;
                 transition: max-height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
             }

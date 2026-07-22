@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ConfiguratorView } from './configuratorView';
+import type { CameraViewId, ConfiguratorView } from './configuratorView';
 import type { BackgroundMode } from '../managers/environmentManager';
 import type { FinishInfo, PartInfo, TintInfo } from './materialConfigurator';
 
@@ -38,6 +38,16 @@ export const PRESET_SLIDERS: Record<string, { env: number; key: number }> = {
     ecom: { env: 1.7, key: 2.0 },
 };
 
+/**
+ * 目前的機位。'free' = 使用者自己拖出來的角度，不對應任何一個 preset。
+ *
+ * 相機本來被排除在可分享的設定之外（見 resetView 的註解：「只動相機，不屬於這雙鞋長
+ * 什麼樣」）。**機位是例外**——它是離散的、有名字的、能寫進網址再還原的；自由拖曳
+ * 出來的那個角度不是。分享一張構圖時，鏡頭就是構圖的一半，所以 preset 進 selection，
+ * free 則等於「沒有指定」，還原時不會去動相機。
+ */
+export type CameraView = CameraViewId | 'free';
+
 /** 可序列化的那一半（Phase 2 的分享連結只需要這些） */
 export interface CfgSelection {
     currentPart: string;
@@ -50,6 +60,7 @@ export interface CfgSelection {
     keyTempK: number;
     background: BackgroundMode;
     autoRotate: boolean;
+    cameraView: CameraView;
 }
 
 /** 從 store 抽出可序列化的那一半（分享連結、之後的截圖 metadata 都吃這個） */
@@ -65,6 +76,7 @@ export function selectionOf(s: CfgSelection): CfgSelection {
         keyTempK: s.keyTempK,
         background: s.background,
         autoRotate: s.autoRotate,
+        cameraView: s.cameraView,
     };
 }
 
@@ -100,7 +112,10 @@ interface CfgState extends CfgSelection {
     setKeyTempK: (k: number) => void;
     setBackground: (mode: BackgroundMode) => void;
     toggleAutoRotate: () => void;
+    setCameraView: (id: CameraViewId) => void;
     resetView: () => void;
+    /** 匯出目前畫面的 PNG data URL（回傳 null 代表場景還沒好） */
+    capture: (scale?: number) => Promise<string | null>;
     /** 一次套用一整份設定（從分享連結還原時用） */
     applySelection: (sel: Partial<CfgSelection>) => void;
 }
@@ -124,6 +139,7 @@ export const useCfgStore = create<CfgState>((set, get) => ({
     keyTempK: 6500,
     background: 'studio',
     autoRotate: true,
+    cameraView: 'hero',
 
     init: ({ view, parts, finishes, tints, variants, activeVariant }) => {
         const partState: Record<string, PartUiState> = {};
@@ -139,6 +155,11 @@ export const useCfgStore = create<CfgState>((set, get) => ({
             variant: activeVariant,
             ready: true,
         });
+        // 使用者一動相機，機位高亮就該熄掉。已經是 free 就不再 set，
+        // 否則拖曳期間每一次 pointermove 都會推一次狀態、白白重繪整個面板。
+        view.onUserOrbit = () => {
+            if (get().cameraView !== 'free') set({ cameraView: 'free' });
+        };
         // 記下這顆模型的原始狀態，分享連結才知道哪些欄位「有被動過」
         set({ defaults: selectionOf(get()) });
     },
@@ -203,8 +224,23 @@ export const useCfgStore = create<CfgState>((set, get) => ({
         set({ autoRotate });
     },
 
-    // 只動相機，不屬於「這雙鞋長什麼樣」，所以不進 selection
-    resetView: () => get().view?.resetView(),
+    // 機位會關掉自動旋轉（見 view.setCameraView），狀態要跟著同步，
+    // 否則「自動旋轉」按鈕會亮著但鞋子不動。
+    setCameraView: (cameraView) => {
+        get().view?.setCameraView(cameraView);
+        set({ cameraView, autoRotate: false });
+    },
+
+    // 回到 hero 機位並重新框景。相機自由角度不進 selection，但機位有名字，所以要同步
+    resetView: () => {
+        get().view?.resetView();
+        set({ cameraView: 'hero' });
+    },
+
+    capture: async (scale = 2) => {
+        const view = get().view;
+        return view ? view.captureScreenshot(scale) : null;
+    },
 
     /**
      * 套用一整份設定。順序有講究：
@@ -234,6 +270,9 @@ export const useCfgStore = create<CfgState>((set, get) => ({
         if (sel.keyTempK !== undefined) st.setKeyTempK(sel.keyTempK);
         if (sel.background) st.setBackground(sel.background);
         if (sel.autoRotate !== undefined && sel.autoRotate !== st.autoRotate) st.toggleAutoRotate();
+        // 機位放在 autoRotate 之後：setCameraView 會關掉自動旋轉，順序反過來的話
+        // 連結裡的 spin=1 會被機位推翻。'free' 沒有座標可還原，略過。
+        if (sel.cameraView && sel.cameraView !== 'free') st.setCameraView(sel.cameraView);
     },
 }));
 

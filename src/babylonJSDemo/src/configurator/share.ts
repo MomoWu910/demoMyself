@@ -15,6 +15,7 @@ import type { BackgroundMode } from '../managers/environmentManager';
  */
 
 const BACKGROUNDS: BackgroundMode[] = ['studio', 'gradient', 'dark', 'white'];
+const CAMERA_VIEWS = ['hero', 'side', 'front', 'top', 'detail'];
 
 /** 數字參數的範圍——網址是使用者可以亂改的輸入，夾在合法範圍內才不會把場景弄壞 */
 const NUM_RANGE = {
@@ -46,6 +47,8 @@ export function encodeSelection(s: CfgSelection, defaults: CfgSelection): string
     if (s.background !== defaults.background) q.set('bg', s.background);
     // 自動旋轉只有「關掉」值得寫進去：預設就是開著
     if (!s.autoRotate) q.set('spin', '0');
+    // 'free' 不寫——它代表使用者拖出來的角度，沒有能還原的座標（見 store 的 CameraView）
+    if (s.cameraView !== 'free' && s.cameraView !== defaults.cameraView) q.set('cam', s.cameraView);
 
     return q.toString();
 }
@@ -93,6 +96,9 @@ export function readSelection(search: string, validPartIds: string[]): Partial<C
     const bg = q.get('bg');
     if (bg && (BACKGROUNDS as string[]).includes(bg)) out.background = bg as BackgroundMode;
     if (q.get('spin') === '0') out.autoRotate = false;
+
+    const cam = q.get('cam');
+    if (cam && CAMERA_VIEWS.includes(cam)) out.cameraView = cam as CfgSelection['cameraView'];
 
     return out;
 }

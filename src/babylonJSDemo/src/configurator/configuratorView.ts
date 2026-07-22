@@ -38,6 +38,25 @@ interface LightingPreset {
     keyDirection: Vector3;
 }
 
+/**
+ * 鏡頭機位。
+ *
+ * 只存 alpha / beta / 距離倍率，不存絕對 radius——實際距離是 `_baseRadius`（依模型
+ * 尺寸算出來的框景距離）乘上這個倍率，換一顆大小完全不同的模型也不必重調這張表。
+ *
+ * `free` 是使用者自己拖出來的視角，沒有座標可言，所以它不在這張表裡：拖動相機時
+ * store 的 cameraView 會被設成 'free'，代表「現在不對應任何一個機位」。
+ */
+export type CameraViewId = 'hero' | 'side' | 'front' | 'top' | 'detail';
+
+export const CAMERA_VIEWS: Record<CameraViewId, { alpha: number; beta: number; radiusScale: number }> = {
+    hero: { alpha: -Math.PI / 2.5, beta: Math.PI / 2.4, radiusScale: 1 },      // 預設的 3/4 側前
+    side: { alpha: -Math.PI / 2, beta: Math.PI / 2.05, radiusScale: 0.92 },    // 正側面，看輪廓線
+    front: { alpha: 0, beta: Math.PI / 2.15, radiusScale: 0.95 },              // 正面
+    top: { alpha: -Math.PI / 2.5, beta: 0.42, radiusScale: 1.05 },             // 俯視，看鞋面配色分佈
+    detail: { alpha: -Math.PI / 3.4, beta: Math.PI / 2.7, radiusScale: 0.66 }, // 近拍材質
+};
+
 const LIGHTING_PRESETS: Record<string, LightingPreset> = {
     soft: { keyIntensity: 2.2, envIntensity: 1.1, fillIntensity: 0.15, keyDirection: new Vector3(-0.5, -1, -0.6) },
     dramatic: { keyIntensity: 3.6, envIntensity: 0.45, fillIntensity: 0.05, keyDirection: new Vector3(-0.9, -0.6, -0.3) },
@@ -60,6 +79,10 @@ export class ConfiguratorView {
     private environmentManager!: EnvironmentManager;
     private shadowManager!: ShadowManager;
     private _groundMat?: PBRMaterial;
+    /** 鏡頭 tween 的目標角度；null = 沒有正在進行的機位切換 */
+    private _viewTween: { alpha: number; beta: number } | null = null;
+    /** 目前機位的距離倍率，乘在 _baseRadius 上（見 CAMERA_VIEWS） */
+    private _viewRadiusScale = 1;
     private postProcessManager!: PostProcessManager;
     private _keyLight!: DirectionalLight; // 主光（陰影來源）
     private _fillLight!: HemisphericLight; // 半球補光
@@ -73,6 +96,15 @@ export class ConfiguratorView {
     private _desiredRadius = 0;     // 遮擋變化時要 lerp 到的 radius
     private _radiusLerp = false;    // 只在遮擋改變後短暫接管 radius，不干擾使用者滾輪縮放
 
+    /**
+     * 使用者自己動了相機（拖曳軌道或滾輪縮放）時通知一次。
+     *
+     * UI 靠它把「目前機位」的高亮拿掉：畫面已經不是那個機位了，按鈕卻還亮著的話，
+     * 使用者會以為自己按的沒有生效。不從 camera 的矩陣變化去判斷，是因為 tween 與
+     * 自動旋轉也會改矩陣，分不出是誰動的。
+     */
+    public onUserOrbit?: () => void;
+
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
         this.engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
@@ -80,6 +112,11 @@ export class ConfiguratorView {
         this.scene.useRightHandedSystem = true;
 
         window.addEventListener('resize', () => this.engine.resize());
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (e.buttons !== 0) this.onUserOrbit?.(); // 按著拖才算，單純滑過去不算
+        });
+        canvas.addEventListener('wheel', () => this.onUserOrbit?.(), { passive: true });
     }
 
     /**
@@ -118,6 +155,8 @@ export class ConfiguratorView {
                 if (Math.abs(d) < 0.002) this._radiusLerp = false;
                 else this.camera.radius += d * 0.12;
             }
+
+            this._stepViewTween();
         });
 
         this.postProcessManager = new PostProcessManager(this.scene, [this.camera]);
@@ -255,8 +294,81 @@ export class ConfiguratorView {
         if (this._baseRadius <= 0) return;
         const H = this.engine.getRenderHeight();
         const visible = Math.max(0.4, 1 - this._bottomObstruction / Math.max(1, H));
-        this._desiredRadius = this._baseRadius / visible;
+        this._desiredRadius = (this._baseRadius * this._viewRadiusScale) / visible;
         this._radiusLerp = true;
+    }
+
+    /**
+     * 切到某個機位。
+     *
+     * 兩件事值得說明：
+     * ① **自動旋轉會被關掉**——它每一幀都在推 alpha，跟 tween 同時跑的話會邊轉邊被拉回，
+     *    看起來像卡住。選機位本來就是「我要這個構圖」，跟自動展示是互斥的意圖。
+     * ② **alpha 走最短路徑**：目前 -2.5 要轉到 0，直接 lerp 會繞遠路（甚至反方向轉快一整圈），
+     *    先把角度差折進 ±π 再補回去。
+     */
+    public setCameraView(id: CameraViewId) {
+        const v = CAMERA_VIEWS[id];
+        if (!v) return;
+
+        this.setAutoRotate(false);
+
+        const twoPi = Math.PI * 2;
+        let d = (v.alpha - this.camera.alpha) % twoPi;
+        if (d > Math.PI) d -= twoPi;
+        if (d < -Math.PI) d += twoPi;
+
+        this._viewTween = { alpha: this.camera.alpha + d, beta: v.beta };
+        this._viewRadiusScale = v.radiusScale;
+        this._updateRadiusForObstruction();
+    }
+
+    /** 機位切換的每幀推進。與 radius 的 lerp 同樣的收斂寫法，速度也刻意一致。 */
+    private _stepViewTween() {
+        const t = this._viewTween;
+        if (!t) return;
+        const da = t.alpha - this.camera.alpha;
+        const db = t.beta - this.camera.beta;
+        if (Math.abs(da) < 0.001 && Math.abs(db) < 0.001) {
+            this.camera.alpha = t.alpha;
+            this.camera.beta = t.beta;
+            this._viewTween = null;
+            return;
+        }
+        this.camera.alpha += da * 0.12;
+        this.camera.beta += db * 0.12;
+    }
+
+    /**
+     * 匯出目前畫面的 PNG（回傳 data URL）。
+     *
+     * **刻意讀 canvas 而不是另開 RenderTarget 重畫**：這顆場景的 bloom / vignette / grain /
+     * SSAO 都掛在 camera 的 post-process 管線上，RTT 那條路徑不會套用它們，匯出的圖會跟
+     * 使用者眼前調了半天的畫面長得不一樣——「所見即所得」在配置器裡是重點，不是小事。
+     * engine 建構時已開 preserveDrawingBuffer，canvas 讀得到內容。
+     *
+     * 解析度靠 hardwareScalingLevel 暫時調高（scale=2 → 內部 buffer 兩倍寬高，真的用更多
+     * 像素重畫一次），不是把小圖放大。截完必須還原，否則使用者會留在 2 倍負載的畫面上。
+     */
+    public async captureScreenshot(scale = 2): Promise<string> {
+        const prevScaling = this.engine.getHardwareScalingLevel();
+        // 手機把面板頂上來時相機是偏移的；那是為了避開 UI，不該烙進成品圖
+        const prevOffsetY = this.camera.targetScreenOffset.y;
+        const prevObstruction = this._bottomObstruction;
+
+        try {
+            this._bottomObstruction = 0;
+            this.camera.targetScreenOffset.y = 0;
+            this.engine.setHardwareScalingLevel(prevScaling / scale);
+            this.engine.resize();
+            this.scene.render();
+            return this.canvas.toDataURL('image/png');
+        } finally {
+            this.engine.setHardwareScalingLevel(prevScaling);
+            this.engine.resize();
+            this._bottomObstruction = prevObstruction;
+            this.camera.targetScreenOffset.y = prevOffsetY;
+        }
     }
 
     /**
@@ -336,8 +448,11 @@ export class ConfiguratorView {
      * 重置相機視角
      */
     public resetView() {
-        this.camera.alpha = -Math.PI / 2.5;
-        this.camera.beta = Math.PI / 2.4;
+        const hero = CAMERA_VIEWS.hero;
+        this._viewTween = null; // 重置是「立刻回到原位」，不跟正在進行的機位 tween 搶
+        this._viewRadiusScale = hero.radiusScale;
+        this.camera.alpha = hero.alpha;
+        this.camera.beta = hero.beta;
         this._frameCameraToProduct();
     }
 

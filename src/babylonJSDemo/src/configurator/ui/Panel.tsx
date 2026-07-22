@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useT } from '../../../../i18n/useT';
 import { selectionOf, useCfgStore } from '../store';
 import { copyText, encodeSelection, shareUrl } from '../share';
+import { downloadDataUrl, screenshotFilename } from '../capture';
+import type { CameraViewId } from '../configuratorView';
 import type { BackgroundMode } from '../../managers/environmentManager';
 
 /** colorway 變體對應的色塊顏色（球鞋模型內建 midnight / beach / street） */
@@ -15,6 +17,14 @@ const LIGHTING_PRESETS = [
     { id: 'soft', key: 'cfg.preset.soft' },
     { id: 'dramatic', key: 'cfg.preset.dramatic' },
     { id: 'ecom', key: 'cfg.preset.ecom' },
+];
+
+const CAMERA_VIEWS: { id: CameraViewId; key: string }[] = [
+    { id: 'hero', key: 'cfg.view.hero' },
+    { id: 'side', key: 'cfg.view.side' },
+    { id: 'front', key: 'cfg.view.front' },
+    { id: 'top', key: 'cfg.view.top' },
+    { id: 'detail', key: 'cfg.view.detail' },
 ];
 
 const BACKGROUNDS: { id: BackgroundMode; key: string }[] = [
@@ -150,6 +160,35 @@ function ShareButton() {
     );
 }
 
+/**
+ * 匯出目前畫面的 PNG。
+ *
+ * 拍照那一幀會用兩倍解析度重畫，在低階機器上可能卡住半秒，所以按下去先把按鈕鎖起來
+ * 並換成「匯出中」——沒有回饋的話使用者會以為沒反應而連按，連續幾次 2 倍重畫更卡。
+ */
+function ExportButton() {
+    const t = useT();
+    const [busy, setBusy] = useState(false);
+
+    const onClick = async () => {
+        if (busy) return;
+        setBusy(true);
+        try {
+            const s = useCfgStore.getState();
+            const dataUrl = await s.capture(2);
+            if (dataUrl) downloadDataUrl(dataUrl, screenshotFilename(selectionOf(s)));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <button className={`ctrl-btn${busy ? ' on' : ''}`} onClick={onClick} disabled={busy}>
+            {busy ? t('cfg.btn.exporting') : t('cfg.btn.export')}
+        </button>
+    );
+}
+
 export function Panel() {
     const t = useT();
     const panelRef = useRef<HTMLElement | null>(null);
@@ -278,6 +317,21 @@ export function Panel() {
                     />
                 </Section>
 
+                {/* 機位。使用者自己拖過相機後 cameraView 會變 'free'，這裡就沒有任何一顆是亮的 */}
+                <Section label={t('cfg.section.view')}>
+                    <div className="pills">
+                        {CAMERA_VIEWS.map((v) => (
+                            <button
+                                key={v.id}
+                                className={`pill${v.id === s.cameraView ? ' active' : ''}`}
+                                onClick={() => s.setCameraView(v.id)}
+                            >
+                                {t(v.key)}
+                            </button>
+                        ))}
+                    </div>
+                </Section>
+
                 <Section label={t('cfg.section.background')}>
                     <div className="pills">
                         {BACKGROUNDS.map((b) => (
@@ -301,6 +355,7 @@ export function Panel() {
                     {t('cfg.btn.reset')}
                 </button>
                 <ShareButton />
+                <ExportButton />
             </div>
         </>
     );
