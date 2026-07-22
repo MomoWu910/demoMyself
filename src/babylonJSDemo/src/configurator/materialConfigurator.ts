@@ -1,4 +1,4 @@
-import { AbstractMesh, BaseTexture, Color3, PBRMaterial } from '@babylonjs/core';
+import { AbstractMesh, BaseTexture, Color3, PBRMaterial, Vector3 } from '@babylonjs/core';
 import type { SurfaceSet } from './surfaceDetail';
 
 /**
@@ -157,13 +157,47 @@ export class MaterialConfigurator {
             return;
         }
 
-        this.parts = [...groups.entries()].map(([matName, group], i) => ({
+        this.parts = this._dropTinyParts(root, [...groups.entries()]).map(([matName, group], i) => ({
             id: `part_${i}`,
             label: this._friendlyLabel(matName, group[0].name, i),
             meshes: group,
             finishId: 'original',
             tintId: 'none',
         }));
+    }
+
+    /**
+     * 濾掉小到看不出來的部件。
+     *
+     * 分件模型常帶著品牌標籤、螺絲、內襯這類配件，它們在面板上會佔一顆按鈕，
+     * 但使用者按下去根本看不出哪裡變了——**能配置卻看不到效果的選項，比沒有更糟**。
+     *
+     * 用包圍盒體積佔比而不是寫死排除 `label` 這種名字，是為了讓它對任何模型都成立。
+     * 門檻 1% 是量出來的：SheenChair 的四個部件依序是 67% / 83% / 48.5% / **0.24%**，
+     * 中間隔了三個數量級，怎麼切都不會誤傷。
+     *
+     * 保底：若濾完剩不到兩個部件（整顆模型都是碎件），就全部保留——寧可面板長一點，
+     * 也不要把一個分件模型呈現成沒有部件可調。
+     */
+    private _dropTinyParts(root: AbstractMesh, groups: [string, AbstractMesh[]][]): [string, AbstractMesh[]][] {
+        const volumeOf = (list: AbstractMesh[]): number => {
+            let min: Vector3 | null = null;
+            let max: Vector3 | null = null;
+            for (const m of list) {
+                const b = m.getHierarchyBoundingVectors(true);
+                min = min ? Vector3.Minimize(min, b.min) : b.min.clone();
+                max = max ? Vector3.Maximize(max, b.max) : b.max.clone();
+            }
+            if (!min || !max) return 0;
+            const s = max.subtract(min);
+            return s.x * s.y * s.z;
+        };
+
+        const rootVol = volumeOf([root]);
+        if (rootVol <= 0) return groups;
+
+        const kept = groups.filter(([, list]) => volumeOf(list) / rootVol >= 0.01);
+        return kept.length >= 2 ? kept : groups;
     }
 
     /**
