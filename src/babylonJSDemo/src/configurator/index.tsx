@@ -6,6 +6,7 @@ import { wireGoBack } from '../../../shell/goBack';
 import { selectionOf, useCfgStore } from './store';
 import { encodeSelection, readSelection, syncUrl } from './share';
 import { Panel } from './ui/Panel';
+import { DEFAULT_PRODUCT, PRODUCTS } from './products';
 
 /*
  * 配置器入口。分工同首頁與 Shader Lab：**React 管 canvas 外的面板、Babylon 管 canvas 內，
@@ -25,14 +26,18 @@ window.addEventListener('DOMContentLoaded', async () => {
     const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement | null;
     if (!canvas) return;
 
+    // 網址指定了模型就直接載那顆——先載預設再換等於白下載一顆 glb（7.5MB）
+    const wanted = new URLSearchParams(window.location.search).get('model');
+    const product = PRODUCTS.some((p) => p.id === wanted) ? (wanted as string) : DEFAULT_PRODUCT;
+
     const view = new ConfiguratorView(canvas);
-    const { variants, activeVariant, parts, finishes, tints } = await view.init();
+    const { variants, activeVariant, parts, finishes, tints } = await view.init(product);
     view.run();
     (globalThis as any).__CFG_VIEW__ = view; // debug handle（比照 __PIXI_APP__ 慣例）
 
     // 先把模型帶回來的選項灌進 store，再掛面板——Panel 在 ready 之前不畫任何東西，
     // 所以不會有「空面板閃一下」的中間態，也不需要舊版那組 display:none 開關。
-    useCfgStore.getState().init({ view, parts, finishes, tints, variants, activeVariant });
+    useCfgStore.getState().init({ view, parts, finishes, tints, variants, activeVariant, product });
 
     // 從分享連結還原：一定要在 init 之後（要先知道這顆模型有哪些部件才擋得掉
     // 網址裡不存在的部件），也要在掛面板之前，面板一畫出來就是還原後的樣子。

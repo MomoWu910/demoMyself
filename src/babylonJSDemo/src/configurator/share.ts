@@ -1,4 +1,5 @@
 import type { CfgSelection, PartUiState } from './store';
+import { PRODUCTS } from './products';
 import type { BackgroundMode } from '../managers/environmentManager';
 
 /**
@@ -35,6 +36,9 @@ function clamp(v: number, [min, max]: readonly [number, number]): number {
 export function encodeSelection(s: CfgSelection, defaults: CfgSelection): string {
     const q = new URLSearchParams();
 
+    // 模型放第一個：它決定了後面所有 fin./tint. 的部件 id 是什麼意思
+    if (s.product !== defaults.product) q.set('model', s.product);
+
     for (const [partId, ui] of Object.entries(s.partState)) {
         const base = defaults.partState[partId] as PartUiState | undefined;
         if (ui.finishId !== (base?.finishId ?? 'original')) q.set(`fin.${partId}`, ui.finishId);
@@ -66,6 +70,9 @@ export function encodeSelection(s: CfgSelection, defaults: CfgSelection): string
 export function readSelection(search: string, validPartIds: string[]): Partial<CfgSelection> {
     const q = new URLSearchParams(search);
     const out: Partial<CfgSelection> = {};
+
+    const model = q.get('model');
+    if (model && PRODUCTS.some((p) => p.id === model)) out.product = model;
 
     const partState: Record<string, PartUiState> = {};
     let hasPart = false;

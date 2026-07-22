@@ -4,15 +4,30 @@ import { selectionOf, useCfgStore } from '../store';
 import { copyText, encodeSelection, shareUrl } from '../share';
 import { downloadDataUrl, screenshotFilename } from '../capture';
 import { surfaceKindOf, type SurfaceSource } from '../surfaceDetail';
+import { PRODUCTS } from '../products';
 import type { CameraViewId } from '../configuratorView';
 import type { BackgroundMode } from '../../managers/environmentManager';
 
-/** colorway 變體對應的色塊顏色（球鞋模型內建 midnight / beach / street） */
+/**
+ * colorway 色塊的顏色。
+ *
+ * 鍵是**關鍵字**不是完整名稱：模型作者取的變體名沒有統一格式，鞋子是乾淨的
+ * `midnight`，椅子則是 `Mango Velvet` 這種「顏色 + 材質」。用完整名稱當鍵的話，
+ * 換一顆模型全部落空、色塊變成一排看不出差別的灰點。
+ */
 const VARIANT_SWATCH: Record<string, string> = {
     midnight: '#2a3550',
     beach: '#d8b98a',
     street: '#9aa0a6',
+    mango: '#c8502a',
+    peacock: '#1f6f78',
 };
+
+function swatchOf(variant: string): string {
+    const lower = variant.toLowerCase();
+    const hit = Object.keys(VARIANT_SWATCH).find((k) => lower.includes(k));
+    return hit ? VARIANT_SWATCH[hit] : '#888';
+}
 
 const LIGHTING_PRESETS = [
     { id: 'soft', key: 'cfg.preset.soft' },
@@ -264,10 +279,11 @@ export function Panel() {
     const panelRef = useRef<HTMLElement | null>(null);
     const [collapsed, setCollapsed] = useState(false);
     useBottomSheet(panelRef, collapsed, setCollapsed);
-    // 選了有紋理的 finish 之後整份面板全展開約 854px，加上 max-height 保留的
-    // 120px 上下邊距，要 975px 高的視窗才裝得下（實測 1440×900 溢出 75px）。
-    // 不到這個高度就把兩段進階選項預設收起來。
-    const [compact] = useState(() => window.innerHeight < 975);
+    // 門檻照**最高的組合**算：分件模型（多「產品」「部件」兩段）+ 有紋理的 finish
+    // （多「表面細節」整段）全展開要 1002px，加上 max-height 保留的 120px 上下邊距。
+    // 用鞋子的高度去估的話，1080p 螢幕換到椅子就會溢出 44px。
+    // 不到這個高度就把兩段進階選項預設收起——標題列仍在，不會讓人不知道有這段。
+    const [compact] = useState(() => window.innerHeight < 1125);
 
     const s = useCfgStore();
     if (!s.ready) return null;
@@ -282,7 +298,24 @@ export function Panel() {
                     <em>▼</em>
                 </button>
 
-                {/* 部件：單一 mesh 的模型只有「整雙」一個部件，整段就不必出現 */}
+                {/* 產品。這一段是整個配置器 model-agnostic 的證明：換一顆模型，
+                    下面的「部件」會跟著長出／收起，其餘每一段都照樣運作。 */}
+                <Section label={t('cfg.section.product')}>
+                    <div className="pills">
+                        {PRODUCTS.map((p) => (
+                            <button
+                                key={p.id}
+                                className={`pill${p.id === s.product ? ' active' : ''}`}
+                                disabled={s.productLoading}
+                                onClick={() => void s.setProduct(p.id)}
+                            >
+                                {t(p.labelKey)}
+                            </button>
+                        ))}
+                    </div>
+                </Section>
+
+                {/* 部件：單一材質的模型只有「整件」一個部件，整段就不必出現 */}
                 <Section label={t('cfg.section.part')} hidden={s.parts.length <= 1}>
                     <div className="pills">
                         {s.parts.map((p) => (
@@ -331,7 +364,7 @@ export function Panel() {
                             <div
                                 key={name}
                                 className={`swatch${name === s.variant ? ' active' : ''}`}
-                                style={{ background: VARIANT_SWATCH[name.toLowerCase()] ?? '#888' }}
+                                style={{ background: swatchOf(name) }}
                                 title={name}
                                 onClick={() => s.setVariant(name)}
                             />

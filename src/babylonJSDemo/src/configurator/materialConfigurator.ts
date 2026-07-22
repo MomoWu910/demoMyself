@@ -55,8 +55,22 @@ const TINT_PALETTE: TintInfo[] = [
     { id: 'ivory', label: 'cfg.tint.ivory', hex: '#dcd6c8' },
 ];
 
-// 依 mesh 名稱關鍵字推測友善部件名稱
+/**
+ * 從材質／mesh 名稱推測部件名稱。
+ *
+ * 上半是通用材質詞（任何產品都可能出現），下半是鞋類專有詞。**順序有意義**：
+ * 由上往下第一個命中的就採用，所以 `leather` 這種同時是材質也是質感的詞放在通用區。
+ * 認不出來也沒關係，會退回材質名本身（見 _friendlyLabel）。
+ */
 const PART_KEYWORDS: { kw: string; label: string }[] = [
+    { kw: 'fabric', label: 'cfg.part.fabric' },
+    { kw: 'cloth', label: 'cfg.part.fabric' },
+    { kw: 'wood', label: 'cfg.part.wood' },
+    { kw: 'metal', label: 'cfg.part.metal' },
+    { kw: 'glass', label: 'cfg.part.glass' },
+    { kw: 'plastic', label: 'cfg.part.plastic' },
+    { kw: 'label', label: 'cfg.part.label' },
+    { kw: 'leather', label: 'cfg.part.leather' },
     { kw: 'outsole', label: 'cfg.part.outsole' },
     { kw: 'midsole', label: 'cfg.part.midsole' },
     { kw: 'sole', label: 'cfg.part.sole' },
@@ -112,38 +126,64 @@ export class MaterialConfigurator {
         this._collectParts(productRoot);
     }
 
-    /** 掃描階層內所有具幾何的 mesh，建立部件清單 */
+    /**
+     * 掃描階層內所有具幾何的 mesh，**依材質分組**成部件。
+     *
+     * 早期是「一個 mesh 一個部件」，換上真正分件的模型後才發現那樣會長歪：
+     * 同一張椅子的木頭可能拆成十一個 mesh，卻只有一種木頭材質，面板就長出十一顆
+     * 按鈕、其中一堆調的是同一件事。**使用者心裡的「部件」是材質，不是 mesh。**
+     *
+     * 分組鍵用材質名稱而非材質物件：colorway 變體會整套抽換材質物件，但分組是載入
+     * 當下算好就固定的（part.meshes 不變），所以用什麼當鍵其實只影響命名——
+     * 用名稱的好處是它同時就是現成的部件標籤來源。
+     */
     private _collectParts(root: AbstractMesh) {
         const meshes = [root, ...root.getChildMeshes()].filter((m) => m.getTotalVertices() > 0);
 
-        if (meshes.length <= 1) {
-            // 單一 mesh：整雙鞋作為唯一部件
+        const groups = new Map<string, AbstractMesh[]>();
+        for (const m of meshes) {
+            // 沒有材質名可分的，各自成組（退回舊行為，總比全部併成一組好）
+            const key = m.material?.name || `#${m.uniqueId}`;
+            const list = groups.get(key);
+            if (list) list.push(m);
+            else groups.set(key, [m]);
+        }
+
+        if (groups.size <= 1) {
+            // 單一材質：整件作為唯一部件，UI 會把「部件」那段整段隱藏
             this.parts = [
                 { id: 'whole', label: 'cfg.part.whole', meshes, finishId: 'original', tintId: 'none' },
             ];
             return;
         }
 
-        // 多部件：每個 mesh 一個部件，推測友善名稱
-        this.parts = meshes.map((m, i) => ({
+        this.parts = [...groups.entries()].map(([matName, group], i) => ({
             id: `part_${i}`,
-            label: this._friendlyLabel(m.name, i),
-            meshes: [m],
+            label: this._friendlyLabel(matName, group[0].name, i),
+            meshes: group,
             finishId: 'original',
             tintId: 'none',
         }));
     }
 
     /**
-     * 回傳的是 i18n key；認不出來的 mesh 就回傳它自己的名字，
-     * 由 `t()` 的「查無此 key 就原樣輸出」接住（見檔頭說明）。
+     * 部件標籤：先看材質名、再看 mesh 名，都認不出來就拿材質名原樣頂著。
+     *
+     * **材質名優先**是因為分件模型的材質幾乎都取得很語意化（`fabric Mystere Mango
+     * Velvet`、`wood Brown`、`metal`），而 mesh 名常常是 `Object_12` 這種。
+     * 關鍵字表退成備援——它原本只有鞋類詞彙，換一顆椅子就全部落空。
+     *
+     * 回傳的是 i18n key；認不出來時回傳的原字串會被 `t()` 的
+     * 「查無此 key 就原樣輸出」接住（見檔頭說明）。
      */
-    private _friendlyLabel(name: string, index: number): string {
-        const lower = name.toLowerCase();
-        const hit = PART_KEYWORDS.find((k) => lower.includes(k.kw));
-        if (hit) return hit.label;
-        const cleaned = name.replace(/[_.]/g, ' ').trim();
-        return cleaned.length > 0 ? cleaned : `Part ${index + 1}`;
+    private _friendlyLabel(materialName: string, meshName: string, index: number): string {
+        for (const source of [materialName, meshName]) {
+            const lower = source.toLowerCase();
+            const hit = PART_KEYWORDS.find((k) => lower.includes(k.kw));
+            if (hit) return hit.label;
+        }
+        const cleaned = materialName.replace(/[_.]/g, ' ').trim();
+        return cleaned.length > 0 && !cleaned.startsWith('#') ? cleaned : `Part ${index + 1}`;
     }
 
     /** 供 UI 建立部件選擇器；單一部件時 UI 可隱藏此列 */

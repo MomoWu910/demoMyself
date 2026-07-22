@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { CameraViewId, ConfiguratorView } from './configuratorView';
 import { SHADER_BYTES, surfaceKindOf, type SurfaceSource } from './surfaceDetail';
+import { DEFAULT_PRODUCT } from './products';
 import type { BackgroundMode } from '../managers/environmentManager';
 import type { FinishInfo, PartInfo, TintInfo } from './materialConfigurator';
 
@@ -51,6 +52,7 @@ export type CameraView = CameraViewId | 'free';
 
 /** 可序列化的那一半（Phase 2 的分享連結只需要這些） */
 export interface CfgSelection {
+    product: string;
     currentPart: string;
     partState: Record<string, PartUiState>;
     variant: string;
@@ -85,6 +87,7 @@ export interface SurfaceMetrics {
 /** 從 store 抽出可序列化的那一半（分享連結、之後的截圖 metadata 都吃這個） */
 export function selectionOf(s: CfgSelection): CfgSelection {
     return {
+        product: s.product,
         currentPart: s.currentPart,
         partState: s.partState,
         variant: s.variant,
@@ -121,8 +124,12 @@ interface CfgState extends CfgSelection {
         tints: TintInfo[];
         variants: string[];
         activeVariant: string;
+        product: string;
     }) => void;
 
+    setProduct: (id: string) => Promise<void>;
+    /** 換模型中（要下載並重建場景裡的產品） */
+    productLoading: boolean;
     setPart: (id: string) => void;
     setFinish: (finishId: string) => void;
     setTint: (tintId: string) => void;
@@ -160,6 +167,7 @@ export const useCfgStore = create<CfgState>((set, get) => ({
     variants: [],
     defaults: null,
 
+    product: DEFAULT_PRODUCT,
     currentPart: 'whole',
     partState: {},
     variant: '',
@@ -179,8 +187,9 @@ export const useCfgStore = create<CfgState>((set, get) => ({
     surfaceBump: 0.15,
     surfaceMetrics: null,
     surfaceBusy: false,
+    productLoading: false,
 
-    init: ({ view, parts, finishes, tints, variants, activeVariant }) => {
+    init: ({ view, parts, finishes, tints, variants, activeVariant, product }) => {
         const partState: Record<string, PartUiState> = {};
         for (const p of parts) partState[p.id] = { finishId: 'original', tintId: 'none' };
         set({
@@ -190,6 +199,7 @@ export const useCfgStore = create<CfgState>((set, get) => ({
             tints,
             variants,
             partState,
+            product,
             currentPart: parts[0]?.id ?? 'whole',
             variant: activeVariant,
             ready: true,
@@ -199,8 +209,64 @@ export const useCfgStore = create<CfgState>((set, get) => ({
         view.onUserOrbit = () => {
             if (get().cameraView !== 'free') set({ cameraView: 'free' });
         };
-        // 記下這顆模型的原始狀態，分享連結才知道哪些欄位「有被動過」
-        set({ defaults: selectionOf(get()) });
+        // 記下原始狀態，分享連結才知道哪些欄位「有被動過」。
+        // product 固定寫 DEFAULT_PRODUCT 而不是實際載入的那顆：從 ?model=chair 進來時
+        // 若把 defaults 也記成 chair，「跟預設不同才寫進網址」的規則會判定它沒被動過，
+        // 再複製出去的連結就掉了模型，開起來變成鞋。
+        set({ defaults: { ...selectionOf(get()), product: DEFAULT_PRODUCT } });
+    },
+
+    /**
+     * 換一顆產品模型。
+     *
+     * **部件狀態整份重建，不沿用**：新模型的部件跟舊的毫無關係，只是剛好都叫
+     * `part_0`。沿用的話「椅子的木腳選了皮革」會莫名其妙套到鞋子的某個部件上。
+     * 這也是為什麼 partState 不進「已經調好的東西要保留」那類考量——它是綁模型的。
+     *
+     * 打光、背景、機位、表面細節那些**不綁模型的設定則刻意保留**：換個產品看同一組
+     * 打光本來就是配置器的正常用法。
+     */
+    setProduct: async (id) => {
+        const st = get();
+        if (!st.view || id === st.product || st.productLoading) return;
+
+        set({ productLoading: true });
+        try {
+            const info = await st.view.setProduct(id);
+            const partState: Record<string, PartUiState> = {};
+            for (const p of info.parts) partState[p.id] = { finishId: 'original', tintId: 'none' };
+            set({
+                product: id,
+                parts: info.parts,
+                finishes: info.finishes,
+                tints: info.tints,
+                variants: info.variants,
+                variant: info.activeVariant,
+                partState,
+                currentPart: info.parts[0]?.id ?? 'whole',
+                surfaceMetrics: null,
+            });
+
+            // defaults 裡「綁模型」的那幾個欄位要跟著換成新模型的初始值，否則
+            // 分享連結會拿椅子的預設變體去比鞋子的，網址上多出一個 cw=midnight
+            // 這種其實等於預設、寫了也沒意義的參數。product 一欄仍固定是預設模型，
+            // 那是「要不要寫 model=」的判斷依據（見 init）。
+            const d = get().defaults;
+            if (d) {
+                set({
+                    defaults: {
+                        ...d,
+                        variant: info.activeVariant,
+                        partState,
+                        currentPart: info.parts[0]?.id ?? 'whole',
+                    },
+                });
+            }
+
+            await get().refreshSurface();
+        } finally {
+            set({ productLoading: false });
+        }
     },
 
     // 換的是「接下來要調哪個部件」，場景不動；但面板顯示的成本數字要跟著換部件走
@@ -351,6 +417,12 @@ export const useCfgStore = create<CfgState>((set, get) => ({
      */
     applySelection: (sel) => {
         const st = get();
+        // 模型通常在 init 就已經照網址載對了（見 index.tsx），這裡只擋「網址跟現況
+        // 不一致」的例外情形；真的要換的話後面那些設定會由 setProduct 重建，所以直接返回。
+        if (sel.product && sel.product !== st.product) {
+            void st.setProduct(sel.product);
+            return;
+        }
         if (sel.variant && sel.variant !== st.variant) st.setVariant(sel.variant);
 
         if (sel.partState) {

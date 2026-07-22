@@ -209,6 +209,17 @@ export const DICT: Record<string, Entry> = {
     'cfg.part.heel': { en: 'Heel', zh: '鞋跟' },
     'cfg.part.collar': { en: 'Collar', zh: '鞋口' },
     'cfg.part.logo': { en: 'Logo', zh: 'Logo' },
+    // 通用材質部件（分件模型的材質名幾乎都用這些詞）
+    'cfg.part.fabric': { en: 'Fabric', zh: '布料' },
+    'cfg.part.wood': { en: 'Wood', zh: '木料' },
+    'cfg.part.metal': { en: 'Metal', zh: '金屬' },
+    'cfg.part.glass': { en: 'Glass', zh: '玻璃' },
+    'cfg.part.plastic': { en: 'Plastic', zh: '塑膠' },
+    'cfg.part.label': { en: 'Label', zh: '標籤' },
+    'cfg.part.leather': { en: 'Leather', zh: '皮革' },
+    'cfg.product.shoe': { en: 'Shoe', zh: '球鞋' },
+    'cfg.product.chair': { en: 'Chair', zh: '單椅' },
+    'cfg.section.product': { en: 'Product', zh: '產品' },
     'cfg.sheet.customize': { en: 'Customize', zh: '配置選項' },
 
     // ---- pixiXthree HUD ----

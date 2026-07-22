@@ -20,8 +20,7 @@ import { PostProcessManager } from '../managers/postProcessManager';
 import { ShadowManager } from '../managers/shadowManager';
 import { MaterialConfigurator, PartInfo, FinishInfo, TintInfo } from './materialConfigurator';
 import { getSurfaceSet, SurfaceSet, SurfaceSource } from './surfaceDetail';
-
-const SHOE_URL: string = require('../../res/models/shoe.glb');
+import { DEFAULT_PRODUCT, productById, type ProductDef } from './products';
 
 export interface ConfiguratorReadyInfo {
     variants: string[];
@@ -84,6 +83,8 @@ export class ConfiguratorView {
     private _viewTween: { alpha: number; beta: number } | null = null;
     /** 目前機位的距離倍率，乘在 _baseRadius 上（見 CAMERA_VIEWS） */
     private _viewRadiusScale = 1;
+    /** 目前這顆模型的朝向修正（見 products.ts 的 alphaOffset） */
+    private _alphaOffset = 0;
     private postProcessManager!: PostProcessManager;
     private _keyLight!: DirectionalLight; // 主光（陰影來源）
     private _fillLight!: HemisphericLight; // 半球補光
@@ -122,9 +123,10 @@ export class ConfiguratorView {
 
     /**
      * 初始化場景並載入產品模型
+     * @param productId 要載入哪顆產品（見 products.ts）
      * @returns 可用的材質變體資訊，供 UI 建立切換按鈕
      */
-    public async init(): Promise<ConfiguratorReadyInfo> {
+    public async init(productId: string = DEFAULT_PRODUCT): Promise<ConfiguratorReadyInfo> {
         this._initCamera();
         this._initLights();
 
@@ -137,8 +139,9 @@ export class ConfiguratorView {
         this.shadowManager = new ShadowManager(this.scene, this._keyLight);
         this.shadowManager.init();
 
-        await this._loadProduct();
-        this._frameCameraToProduct();
+        // 直接載入指定的那顆——從 ?model=chair 進來時先載預設再換，等於白下載一顆模型
+        await this._loadProduct(productById(productId));
+        this.resetView();
 
         // 依底部 UI 遮擋量把框景中心平滑上移，讓產品置中在「沒被蓋住」的可視區；
         // 同時把 radius 拉遠，讓產品「塞得進」變小的可視區
@@ -247,10 +250,38 @@ export class ConfiguratorView {
     }
 
     /**
-     * 載入產品模型並讀取其材質變體
+     * 換一顆產品模型：載入、重新框景，回傳新模型長出來的 UI 資訊。
+     *
+     * 呼叫端（store）拿到回傳值後要**重建整份部件狀態**——新模型的部件跟舊的毫無
+     * 關係，沿用舊的 partState 會把「鞋面選了皮革」套到椅子的某個 id 相同但意義
+     * 完全不同的部件上。
      */
-    private async _loadProduct() {
-        const result = await SceneLoader.ImportMeshAsync(null, '', SHOE_URL, this.scene);
+    public async setProduct(id: string): Promise<ConfiguratorReadyInfo> {
+        await this._loadProduct(productById(id));
+        // 換模型後回到 hero 機位：新模型的朝向與尺寸都不同，沿用舊角度多半會拍到背面
+        this.resetView();
+        return {
+            variants: this.variants,
+            activeVariant: this.activeVariant,
+            parts: this.materialConfigurator.getParts(),
+            finishes: this.materialConfigurator.getFinishes(),
+            tints: this.materialConfigurator.getTints(),
+        };
+    }
+
+    /**
+     * 載入產品模型並讀取其材質變體。可重複呼叫——舊模型連同它的材質與貼圖一起
+     * dispose，否則每換一次模型就在場景裡留下一份看不見但仍佔記憶體的舊資產。
+     */
+    private async _loadProduct(product: ProductDef) {
+        this._alphaOffset = product.alphaOffset ?? 0;
+
+        if (this.productRoot) {
+            this.productRoot.dispose(false, true);
+            this.productRoot = undefined;
+        }
+
+        const result = await SceneLoader.ImportMeshAsync(null, '', product.url, this.scene);
         this.productRoot = result.meshes[0];
 
         // 讓模型站在地板上：以階層包圍盒底部對齊 y=0
@@ -314,8 +345,9 @@ export class ConfiguratorView {
 
         this.setAutoRotate(false);
 
+        const target = v.alpha + this._alphaOffset;
         const twoPi = Math.PI * 2;
-        let d = (v.alpha - this.camera.alpha) % twoPi;
+        let d = (target - this.camera.alpha) % twoPi;
         if (d > Math.PI) d -= twoPi;
         if (d < -Math.PI) d += twoPi;
 
@@ -475,7 +507,7 @@ export class ConfiguratorView {
         const hero = CAMERA_VIEWS.hero;
         this._viewTween = null; // 重置是「立刻回到原位」，不跟正在進行的機位 tween 搶
         this._viewRadiusScale = hero.radiusScale;
-        this.camera.alpha = hero.alpha;
+        this.camera.alpha = hero.alpha + this._alphaOffset;
         this.camera.beta = hero.beta;
         this._frameCameraToProduct();
     }
