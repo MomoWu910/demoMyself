@@ -326,6 +326,17 @@ export class MaterialConfigurator {
         });
     }
 
+    /**
+     * 把表面貼圖從所有材質上卸下，還原成模型自己帶的那些。
+     *
+     * **模型被 dispose 前一定要先呼叫**：`dispose(false, true)` 會連材質上掛著的
+     * 貼圖一起銷毀，而表面貼圖是 surfaceDetail 那份跨模型共用的快取——被順手清掉
+     * 之後，快取裡留下的是已銷毀的殭屍物件，切回這顆模型就會拿它去貼。
+     */
+    public detachSurfaces() {
+        for (const part of this.parts) this.applySurface(part.id, null, 1, 1);
+    }
+
     /** 只調整已掛上的表面貼圖參數（滑桿拖動時走這條，不必重新準備貼圖） */
     public tuneSurface(tiling: number, bump: number) {
         for (const part of this.parts) {

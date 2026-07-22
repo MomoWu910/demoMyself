@@ -313,6 +313,9 @@ export function Panel() {
                             </button>
                         ))}
                     </div>
+                    {/* 換模型要下載好幾 MB。舊模型會一直站著直到新的就緒（見 _loadProduct），
+                        但沒有任何提示的話，使用者只會覺得「按了沒反應」。 */}
+                    {s.productLoading && <div className="cost">{t('cfg.product.loading')}</div>}
                 </Section>
 
                 {/* 部件：單一材質的模型只有「整件」一個部件，整段就不必出現 */}

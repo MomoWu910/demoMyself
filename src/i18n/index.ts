@@ -220,6 +220,7 @@ export const DICT: Record<string, Entry> = {
     'cfg.product.shoe': { en: 'Shoe', zh: '球鞋' },
     'cfg.product.chair': { en: 'Chair', zh: '單椅' },
     'cfg.section.product': { en: 'Product', zh: '產品' },
+    'cfg.product.loading': { en: 'Loading model…', zh: '載入模型中…' },
     'cfg.sheet.customize': { en: 'Customize', zh: '配置選項' },
 
     // ---- pixiXthree HUD ----

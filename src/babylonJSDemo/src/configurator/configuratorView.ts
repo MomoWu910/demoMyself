@@ -276,10 +276,18 @@ export class ConfiguratorView {
     private async _loadProduct(product: ProductDef) {
         this._alphaOffset = product.alphaOffset ?? 0;
 
-        if (this.productRoot) {
-            this.productRoot.dispose(false, true);
-            this.productRoot = undefined;
-        }
+        /*
+         * **先載新的、就緒了才丟舊的**，順序不能反。
+         *
+         * 早期是先 dispose 再 await 載入，中間那段畫面上什麼都沒有——本機只空
+         * 300ms 還不明顯，線上要下載好幾 MB，看起來就是「產品憑空消失了」。
+         * 現在舊模型會一直站著，直到新模型完全就緒才交棒。
+         *
+         * await 之後的落地對齊、變體套用、交棒全在同一個同步區塊內跑完，中間不會有
+         * 任何一幀被畫出來，所以不需要額外把新模型藏起來（藏起來反而會讓包圍盒量不準）。
+         */
+        const previous = this.productRoot;
+        const previousConfigurator = this.materialConfigurator;
 
         const result = await SceneLoader.ImportMeshAsync(null, '', product.url, this.scene);
         this.productRoot = result.meshes[0];
@@ -297,6 +305,12 @@ export class ConfiguratorView {
         if (this.variants.length > 0) {
             this.activeVariant = this.variants[0];
             KHR_materials_variants.SelectVariant(this.productRoot as Mesh, this.activeVariant);
+        }
+
+        // 新模型就緒，舊的才交棒。卸下表面貼圖再 dispose——理由見 detachSurfaces。
+        if (previous) {
+            previousConfigurator?.detachSurfaces();
+            previous.dispose(false, true);
         }
 
         // 掃描部件並建立材質配置器（自動判斷單一 mesh 或多部件模型）
