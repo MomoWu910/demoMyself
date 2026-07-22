@@ -1,0 +1,551 @@
+/* 自 host 字型（Archivo / JetBrains Mono，latin 子集）——不再依賴 Google Fonts CDN */
+@font-face{font-family:'Archivo';font-style:normal;font-weight:500;font-display:optional;src:url(/demoMyself/fonts/archivo-500.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'Archivo';font-style:normal;font-weight:600;font-display:optional;src:url(/demoMyself/fonts/archivo-600.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'Archivo';font-style:normal;font-weight:700;font-display:optional;src:url(/demoMyself/fonts/archivo-700.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'Archivo';font-style:normal;font-weight:800;font-display:optional;src:url(/demoMyself/fonts/archivo-800.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'Archivo';font-style:normal;font-weight:900;font-display:optional;src:url(/demoMyself/fonts/archivo-900.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:optional;src:url(/demoMyself/fonts/jetbrains-mono-400.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:optional;src:url(/demoMyself/fonts/jetbrains-mono-500.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:600;font-display:optional;src:url(/demoMyself/fonts/jetbrains-mono-600.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+
+/* 首頁 · The Render Graph
+ * 底色跟著**現在幾點的天空**走（見 graph/sky.ts）：白天淺水藍、黃昏橘、夜裡近黑。
+ * 下面 :root 那組是 dark 的預設值，實際值由 sky.ts 在 runtime 覆蓋成 inline style；
+ * 這裡留完整一份是為了 JS 還沒跑到時不會沒有顏色可用。
+ * 琥珀↔紫（WebGL↔WebGPU / GLSL↔WGSL）從背景退場，只留在節點與品牌色上。 */
+
+:root {
+    --ink: #0b0c10;
+    --ink-2: #11141c;
+    --glsl: #ff8a3d; /* 琥珀 · GLSL / WebGL */
+    --wgsl: #b57bff; /* 紫 · WGSL / WebGPU */
+    --dual: #d98ad6; /* 兩者之間 */
+    --pixi: #5aa9ff; /* 藍 · Pixi 底層 */
+    --three: #4fd18b; /* 綠 · Three.js */
+    --babylon: #f2555a; /* 紅 · Babylon.js */
+    --react: #c3e327; /* 檸檬綠 · React（只有 Shader Lab 與 Configurator 用，見 projects.ts） */
+    --text: #eceef4;
+    --muted: #bcc0cb;
+    --panel: rgba(15, 18, 26, 0.66);
+    --panel-border: rgba(255, 255, 255, 0.09);
+
+    --display: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--mono);
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
+/* 天色翻面（見 sky.ts 的 applyTheme）：整套色票是一次跳過去的，靠這層 transition 抹平。
+ * 背景是連續變的、前景是離散的——不這樣做，黃昏會經過一段「灰字疊灰底」完全不能讀的死角。
+ * 900ms 是刻意的慢：這不是互動回饋，是天色在變，快了會讀成閃爍。 */
+.overlay, .overlay * {
+    transition: color 900ms ease, background-color 900ms ease, border-color 900ms ease;
+    /* 一圈反色暈，讓文字不必依賴「背景現在多亮」——理由見 sky.ts 的 halo。
+     * light 與 dark 的層數不同，所以整條 shadow 都由 sky.ts 換掉，不是只換顏色：
+     * 深字配白暈時，貼身那層會從邊緣把字啃細、整個字看起來發灰，只能留散開的一層當背板。 */
+    text-shadow: var(--halo-shadow);
+}
+@media (prefers-reduced-motion: reduce) {
+    .overlay, .overlay * { transition: none; }
+}
+
+/* ---- canvas 內的世界 ---- */
+#field-stage {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+}
+#field-stage canvas { display: block; }
+
+/* ---- canvas 外的殼 ---- */
+.overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none; /* 讓滑鼠穿透到 canvas 的節點；互動元素自己再開啟 */
+    padding: clamp(20px, 3.5vw, 40px);
+}
+
+/* 標題 */
+.wordmark { position: absolute; top: clamp(20px, 3.5vw, 40px); left: clamp(20px, 3.5vw, 40px); }
+.mark-row { display: flex; align-items: center; gap: 14px; }
+.wordmark h1 {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 900;
+    font-size: clamp(1.9rem, 4.6vw, 3.4rem);
+    letter-spacing: 0.14em;
+    line-height: 0.98;
+    color: var(--text);
+}
+.tagline {
+    margin: 12px 0 0;
+    max-width: 30ch;
+    font-size: clamp(0.72rem, 1.1vw, 0.86rem);
+    line-height: 1.6;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+}
+
+/* backend 徽章：跑起來是哪個後端 */
+.backend {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--panel-border);
+    color: var(--muted);
+    background: rgba(0, 0, 0, 0.3);
+}
+.backend.webgl { color: var(--glsl); border-color: rgba(255, 138, 61, 0.4); }
+.backend.webgpu { color: var(--wgsl); border-color: rgba(181, 123, 255, 0.4); }
+
+/* 語言切換 */
+/* 右上角那一疊：語言鈕，底下是時刻軸。時刻軸用 portal 掛進來（見 ui/SkyDial.tsx），
+ * 靠同一個 flex 容器排版就不必去猜語言鈕多寬。容器是 top/right 定位的，
+ * 所以時刻軸展開時往左長、不會把語言鈕推走，整疊也不會往下擠。 */
+#lang-slot {
+    position: fixed;
+    top: clamp(20px, 3.5vw, 40px);
+    right: clamp(20px, 3.5vw, 40px);
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; /* 右對齊，收起時圖示才會跟語言鈕的右緣切齊 */
+    gap: 10px;
+}
+
+/* ---- inspector：hover / 聚焦節點時出現 ---- */
+.inspector {
+    position: absolute;
+    right: clamp(20px, 3.5vw, 40px);
+    /* 底部留出手機瀏覽器工具列 / home indicator 的安全區，「進入」鈕才不會被蓋住 */
+    bottom: calc(clamp(20px, 3.5vw, 40px) + env(safe-area-inset-bottom, 0px));
+    width: min(360px, 78vw);
+    /* 內容再長也不溢出視窗——超過就在卡片內捲動，確保 desc/tags/進入 全看得到 */
+    max-height: calc(100dvh - 2 * clamp(20px, 3.5vw, 40px) - env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* 卡片本身不吃指標事件——hover 穿透回 canvas，節點才不會因為被卡片蓋住而 pointerout 閃爍。
+       只有「進入」鈕重新開啟點擊。 */
+    pointer-events: none;
+    padding: 20px 22px;
+    border-radius: 14px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    animation: inspIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.insp-glyph { font-family: var(--display); font-size: 1.4rem; font-weight: 700; }
+.inspector h2 {
+    margin: 6px 0 8px;
+    font-family: var(--display);
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--text);
+}
+.inspector p {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.62;
+    color: var(--muted);
+}
+.inspector p strong { color: var(--text); font-weight: 600; }
+.insp-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }
+.insp-tag {
+    font-size: 0.66rem;
+    letter-spacing: 0.03em;
+    padding: 3px 9px;
+    border-radius: 6px;
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--panel-border);
+}
+/* inspector 停在節點的對側，才不會蓋住被 hover 的節點 */
+.inspector.dock-left { left: clamp(20px, 3.5vw, 40px); right: auto; }
+.inspector.dock-right { right: clamp(20px, 3.5vw, 40px); left: auto; }
+
+/* 轉場中：overlay 淡出，跟 scene 的 zoom 一起收 */
+.overlay.entering { opacity: 0; transition: opacity 0.35s ease; pointer-events: none; }
+
+/* 鍵盤 / 螢幕報讀者導覽：視覺隱藏但可 Tab；聚焦時 canvas 會同步高亮 */
+.a11y-nav a {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0);
+    white-space: nowrap; border: 0;
+}
+.a11y-nav a:focus-visible {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: auto; height: auto;
+    clip: auto;
+    padding: 10px 18px;
+    border-radius: 10px;
+    background: var(--ink-2);
+    border: 1px solid var(--text);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    z-index: 6;
+    pointer-events: auto;
+}
+
+/* ---- 圖例：render graph 的 key ---- */
+.legend {
+    position: absolute;
+    left: clamp(20px, 3.5vw, 40px);
+    bottom: clamp(20px, 3.5vw, 40px);
+    font-size: 0.8rem;
+    color: var(--muted);
+    /* 整塊維持穿透，只有 toggle 自己收事件：展開的面板疊在 canvas 節點上時，
+     * 面板搶走 pointer 事件會讓節點 hover 閃爍（同 inspector 那個坑）。 */
+    pointer-events: none;
+}
+/* 標題列＝摺疊開關。小螢幕收起時，畫面左下就只剩這一顆。 */
+.legend-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+    pointer-events: auto;
+    color: inherit;
+}
+.legend-toggle:focus-visible { outline: 1px solid currentColor; outline-offset: 4px; border-radius: 4px; }
+.legend-title {
+    display: block;
+    font-size: 0.68rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    /* 原本寫死 #5c6070，那是照深色底挑的，白天會淡到看不見——跟著主題走 */
+    color: var(--muted);
+    opacity: 0.85;
+}
+/* chevron：內容在按鈕下方（整塊靠 bottom 錨定，展開時是按鈕被頂上去），
+ * 所以收起朝下＝可展開，展開朝上＝可收合。 */
+.legend-caret {
+    width: 6px;
+    height: 6px;
+    border-right: 1.4px solid currentColor;
+    border-bottom: 1.4px solid currentColor;
+    color: var(--muted);
+    opacity: 0.7;
+    transform: rotate(45deg);
+    transition: transform 260ms cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+.legend.open .legend-caret { transform: rotate(-135deg); }
+/* 0fr→1fr 的 grid 過渡：不必知道內容高度就能做出平滑的收合 */
+.legend-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition: grid-template-rows 280ms cubic-bezier(0.22, 0.8, 0.3, 1), opacity 200ms ease;
+}
+.legend.open .legend-body { grid-template-rows: 1fr; opacity: 1; }
+.legend-inner { overflow: hidden; min-height: 0; }
+.legend ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+/* 每組一行：左邊固定寬的組名，右邊技術項目。組名對齊才讀得出這是四組而不是一長串 */
+.legend li { display: flex; align-items: baseline; gap: 10px; letter-spacing: 0.02em; }
+.tech-label {
+    flex: none;
+    /* 8.6em 是照最長的 MEASUREMENT（含 0.14em 字距）量的——5.2em 裝不下，
+     * 英文版的組名會直接壓到右邊的技術項目上。 */
+    width: 8.6em;
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.8;
+}
+.tech-items { color: var(--muted); }
+.tech-sep { opacity: 0.4; }
+
+/* 線的附註。兩種線各佔一行——擠在同一行時，兩個樣本與兩段文字會讀成一句話，
+ * 分不出哪個樣本配哪段說明。 */
+.legend-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 10px;
+    font-size: 0.7rem;
+    /* 用 --text 而非繼承 --muted：這一行要在白天的亮水面上也讀得出來 */
+    color: var(--text);
+    opacity: 0.8;
+}
+.legend-lines > span { display: flex; align-items: center; gap: 8px; }
+.legend-lines .ln { display: inline-block; width: 24px; flex: none; }
+.legend-lines .ln.solid { height: 2px; background: currentColor; }
+/* 畫面上的 library 邊是把同一條曲線切段畫一半，所以樣本用等長的 dash（不是圓點） */
+.legend-lines .ln.dashed {
+    height: 6px;
+    background-image: linear-gradient(to right, currentColor 0 5px, transparent 5px 10px);
+    background-size: 10px 1.4px;
+    background-position: center;
+    background-repeat: repeat-x;
+}
+/* 沒有線可畫的那一項，文字要對齊上面三行的文字欄（樣本 24px + gap 8px） */
+.legend-lines .ln-note { padding-left: 32px; opacity: 0.85; }
+/* 畫面上的 meta 邊是一串**小圓點**（scene.ts 畫 22 個半徑 1 的 circle），不是 dash——
+ * 樣本畫成 dash 本來就對不上，怎麼加粗都不像。用 radial-gradient 排出等距圓點，
+ * 尺寸與間距照著畫面上那串走。 */
+.legend-lines .ln.dotted {
+    height: 6px;
+    background-image: radial-gradient(circle, currentColor 1.6px, transparent 1.8px);
+    background-size: 6px 6px;
+    background-position: center;
+    background-repeat: repeat-x;
+}
+
+.legend .hint { display: block; margin-top: 10px; font-size: 0.72rem; opacity: 0.78; }
+
+/* ---- 時刻軸：右上角、語言鈕左邊的那顆天體 ----
+ * 收起時只有一個圖示，把「這面水映的是現在幾點」講出來但不佔份量；
+ * hover 才向左長出軌道。軌道是從右往左展開的，所以圖示的位置不會跑掉。 */
+.sky-dial {
+    /* 位置交給 #lang-slot 那疊 flex——portal 是後掛的，DOM 順序本來就在語言鈕之後，
+     * 直接落在下方，不必調 order。 */
+    display: flex;
+    align-items: center;
+    /* 收起時連 gap 都收掉，整個元件才真的只剩一顆圖示的寬度 */
+    gap: 0;
+    /* 固定的 padding：展開時才填背景，但 padding 不隨狀態變——會變的話圖示位置會跳一下。
+     * 代價是收起時圖示比語言鈕右緣內縮 8px，圖示沒有可見邊框，看不太出來。 */
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    /* color 的過渡要自己寫：它 portal 到 .overlay 外面了，吃不到那邊的翻面 transition */
+    transition: gap 320ms cubic-bezier(0.22, 0.8, 0.3, 1), color 900ms ease,
+        background-color 240ms ease, border-color 240ms ease;
+    /* --text 而不是 --muted：夜色很暗、圖示又只有線條，用 muted 會沉進背景裡 */
+    color: var(--text);
+    pointer-events: auto;
+    z-index: 5;
+}
+.sky-dial:hover { color: var(--text); }
+/* 展開時給它自己的底。沒有底的話，軌道那條細線疊在節點或雲影上會糊在一起——
+ * 窄橫屏尤其明顯，軌道正好穿過節點。有了面板它就明確是一層控制項，而不是畫面的一部分。 */
+.sky-dial.open {
+    gap: 10px;
+    background: var(--panel);
+    border-color: var(--panel-border);
+    backdrop-filter: blur(8px);
+    color: var(--text);
+}
+
+.dial-track {
+    position: relative;
+    width: 0;
+    height: 22px;
+    opacity: 0;
+    /* 收起時寬度為 0，展開才長出來。cubic-bezier 收尾慢一點，像是浮出來而不是彈出來 */
+    transition: width 320ms cubic-bezier(0.22, 0.8, 0.3, 1), opacity 240ms ease;
+    cursor: ew-resize;
+    touch-action: none; /* 讓 pointermove 拖得動，不會被瀏覽器判成捲動手勢 */
+}
+.sky-dial.open .dial-track { width: clamp(120px, 17vw, 190px); opacity: 1; }
+/* 軌道本體畫成一條細線，用 ::before 才不會被 dial-fill 蓋住 */
+.dial-track::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: currentColor;
+    opacity: 0.32;
+}
+.dial-track:focus-visible { outline: 1px solid var(--text); outline-offset: 4px; border-radius: 4px; }
+
+.dial-fill {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    height: 1px;
+    background: currentColor;
+    opacity: 0.75;
+}
+/* 撥桿：軌道填滿處的一個小點 */
+.dial-fill::after {
+    content: '';
+    position: absolute;
+    right: -3px;
+    top: -2.5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+/* 真實時刻的刻度，撥走之後靠它找回來 */
+.dial-now {
+    position: absolute;
+    top: 50%;
+    width: 9px;
+    height: 9px;
+    margin: -4.5px 0 0 -4.5px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    background: transparent;
+    opacity: 0.55;
+    cursor: pointer;
+}
+.dial-now:hover { opacity: 1; }
+
+.dial-time {
+    font-family: var(--mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.06em;
+    opacity: 0;
+    /* max-width 而非只有 opacity：透明的文字仍會佔位，收起時整條就不是「只剩圖示」了 */
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity 240ms ease, max-width 320ms cubic-bezier(0.22, 0.8, 0.3, 1);
+    font-variant-numeric: tabular-nums; /* 撥的時候數字不要跳寬度 */
+}
+.sky-dial.open .dial-time { opacity: 0.85; max-width: 5em; }
+
+.dial-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 觸控目標：圖示才 18px，配上容器的 padding 湊到 40px 見方，手指點得到 */
+    min-width: 28px;
+    min-height: 28px;
+    /* 夜裡（--muted 是冷灰）疊在深藍水面上，0.65 幾乎看不到——這是唯一提示
+     * 「可以撥時間」的東西，不能讓它在凌晨消失 */
+    opacity: 0.9;
+    transition: opacity 240ms ease;
+    /* 它是 button（觸控靠點它展開），把瀏覽器預設的鈕外觀清掉 */
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+.sky-dial:hover .dial-icon, .sky-dial.open .dial-icon { opacity: 1; }
+.dial-icon:focus-visible { outline: 1px solid currentColor; outline-offset: 3px; border-radius: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .dial-track, .dial-time, .dial-icon { transition: none; }
+}
+/* 窄螢幕：軌道縮短一點，展開時少壓到節點；觸控靠點圖示展開（見 ui/SkyDial.tsx）。
+ * 這裡不再整條收掉——收掉等於手機完全撥不動時間。 */
+@media (max-width: 640px) {
+    .sky-dial.open .dial-track { width: clamp(96px, 30vw, 130px); }
+}
+/* 窄橫屏（手機轉橫）：擠的是**高度**不是寬度，寬度判斷抓不到它。
+ * 畫面被壓扁後 Shader Lab 節點（x .72 / y .31）正好頂在右上角，展開的軌道會蓋住它的上緣。
+ * 這個寬度是量出來的：整條面板要窄到左緣落在該節點的右緣之外，844×390 與 932×430 都留得住。 */
+@media (max-height: 500px) {
+    .sky-dial.open .dial-track { width: clamp(60px, 8vw, 76px); }
+}
+
+@keyframes inspIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .inspector { animation: none; }
+}
+
+/* 小螢幕的技術棧：不再整塊消失（那等於手機看不到「這個人會什麼」），
+ * 改成預設收起的一顆膠囊鈕——只佔一行、點了才長出來。膠囊那層底才讓它從水面上跳出來。 */
+.legend.compact .legend-toggle {
+    margin-bottom: 0;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    backdrop-filter: blur(6px);
+}
+.legend.compact.open .legend-toggle { margin-bottom: 8px; }
+/* 有面板當底就不需要反色暈了——halo 是給「直接壓在水面上的字」用的，
+ * 疊在面板上只會在字周圍留一團髒暈（白天特別明顯）。 */
+.legend.compact .legend-toggle, .legend.compact .legend-card,
+.legend.compact .legend-toggle *, .legend.compact .legend-card * { text-shadow: none; }
+/* 展開時給內容同一層底：手機上它必然疊在節點/水面上，沒有底就讀不動 */
+.legend.compact .legend-card {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    backdrop-filter: blur(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .legend-body, .legend-caret { transition: none; }
+}
+
+/* 窄直屏：改靠右下。zig-zag 版面把 RWD Showcase 排在左下角，
+ * 收起的膠囊放左邊就正好壓在它的標籤上；右下那塊是空的。 */
+@media (max-width: 640px) {
+    .legend.compact {
+        /* left 要留著：只給 right 的話寬度由內容決定，展開的卡片會從左邊溢出畫面 */
+        right: clamp(20px, 3.5vw, 40px);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+}
+
+/* 窄螢幕：inspector 收窄（完整 RWD 在 Phase 4） */
+@media (max-width: 640px) {
+    /* 手機：inspector 全寬，蓋過 dock-left/right 的左右定位 */
+    .inspector,
+    .inspector.dock-left,
+    .inspector.dock-right {
+        left: clamp(16px, 4vw, 20px);
+        right: clamp(16px, 4vw, 20px);
+        width: auto;
+    }
+    /* 下方節點：卡片改擺畫面上方（tagline 之下），不蓋住被 hover 的節點 */
+    .inspector.vdock-top {
+        top: clamp(140px, 24vh, 190px);
+        bottom: auto;
+        max-height: calc(100dvh - clamp(162px, 27vh, 212px));
+    }
+}
+
+/* 跨頁轉場的落地端：一層純色覆蓋，淡出＋微放大揭開頁面。 */
+.shell-reveal {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    pointer-events: none; /* 永遠不擋操作 */
+    opacity: 1;
+    will-change: opacity, transform;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.shell-reveal.out {
+    opacity: 0;
+    transform: scale(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .shell-reveal { display: none; }
+}
+

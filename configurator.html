@@ -19,8 +19,14 @@
         }
         .back-btn:hover { background: rgba(0,0,0,0.7); }
 
-        /* 頂部標題 */
-        .title-block { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10; text-align: center; pointer-events: none; }
+        /* 頂部標題。自帶膠囊底的理由跟 .back-btn 一樣：文字是固定的淺色，
+           但背景可以被使用者切成純白——沒有底的話白字會整段消失。 */
+        .title-block {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10;
+            text-align: center; pointer-events: none;
+            background: rgba(0,0,0,0.45); border: 1px solid var(--panel-border);
+            border-radius: 12px; padding: 8px 18px; backdrop-filter: blur(8px);
+        }
         .title-block h1 { margin: 0; font-size: 1.05rem; font-weight: 600; color: var(--text); letter-spacing: 0.5px; }
         .title-block p { margin: 2px 0 0; font-size: 0.72rem; color: var(--text-muted); }
 
@@ -28,20 +34,31 @@
         .side-panel {
             position: absolute; top: 50%; right: 22px; transform: translateY(-50%); z-index: 10;
             width: 268px; max-height: calc(100vh - 120px); max-height: calc(100dvh - 120px); overflow-y: auto;
-            display: flex; flex-direction: column; gap: 18px;
+            /* gap 收到 12（原本 18）：多了「機位」一段之後，18 會讓最後的「背景」在
+               800px 高的視窗掉出可視範圍，要捲一下才看得到最常用的白底切換。 */
+            display: flex; flex-direction: column; gap: 12px;
             background: var(--panel-bg); border: 1px solid var(--panel-border);
-            border-radius: 16px; padding: 20px 18px; backdrop-filter: blur(18px);
+            border-radius: 16px; padding: 16px 18px; backdrop-filter: blur(18px);
             box-shadow: 0 8px 40px rgba(0,0,0,0.45);
         }
         .side-panel::-webkit-scrollbar { width: 6px; }
         .side-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
 
-        .section { display: flex; flex-direction: column; gap: 9px; }
+        .section { display: flex; flex-direction: column; gap: 8px; }
         .section.hidden { display: none; }
         .section > .label {
             font-size: 0.63rem; color: var(--text-muted); text-transform: uppercase;
             letter-spacing: 1.2px; font-weight: 600;
         }
+        /* 可摺疊區塊的標題列：長得跟其他標題一模一樣，只多一個箭頭，
+           因為它仍然是標題——不希望它被讀成一顆按鈕而讓人以為會改到場景 */
+        .section > .label.fold {
+            display: flex; justify-content: space-between; align-items: center; width: 100%;
+            background: none; border: none; padding: 0; font-family: inherit; cursor: pointer;
+            text-align: left;
+        }
+        .section > .label.fold:hover { color: var(--text); }
+        .section > .label.fold em { font-style: normal; color: var(--accent); font-size: 0.7rem; }
 
         /* pill 群組（finish / lighting / background） */
         .pills { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -79,10 +96,19 @@
 
         .divider { height: 1px; background: var(--panel-border); margin: 2px 0; }
 
+        /* 表面細節的成本數字（下載量 / 準備耗時），排版比照滑桿的標籤列 */
+        .cost { display: flex; flex-direction: column; gap: 3px; font-size: 0.66rem; color: var(--text-muted); }
+        .cost > div { display: flex; justify-content: space-between; gap: 10px; }
+        .cost .val { color: var(--text); font-variant-numeric: tabular-nums; }
+
         /* 底部小工具列 */
         .bottom-bar {
-            position: absolute; bottom: max(26px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10;
-            display: flex; align-items: center; gap: 10px;
+            position: absolute; bottom: max(26px, env(safe-area-inset-bottom)); z-index: 10;
+            /* 置中用 left/right + margin auto，不用 left:50% + translateX：絕對定位元素的
+               寬度是「從 left 邊緣到容器右緣」算出來的，left:50% 等於只剩半個畫面可用，
+               四顆按鈕會被 wrap 成四行。給滿左右邊界再 fit-content 才量得到真正的可用寬。 */
+            left: 12px; right: 12px; width: fit-content; margin: 0 auto;
+            display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px;
             background: var(--panel-bg); border: 1px solid var(--panel-border);
             border-radius: 14px; padding: 10px 14px; backdrop-filter: blur(16px);
             box-shadow: 0 8px 40px rgba(0,0,0,0.4);
@@ -114,7 +140,9 @@
 
         @media (max-width: 720px) {
             .side-panel {
-                right: 12px; left: 12px; width: auto; top: auto; bottom: 86px; transform: none;
+                /* bottom 要讓開整條工具列：四顆按鈕在窄螢幕會 wrap 成兩行（約 100px 高），
+                   沿用原本 86px 的話面板會壓在工具列上，連 sheet 把手都點不到。 */
+                right: 12px; left: 12px; width: auto; top: auto; bottom: 122px; transform: none;
                 max-height: 46vh; max-height: 46dvh;
                 transition: max-height 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
             }
@@ -129,4 +157,4 @@
             .sheet-handle em { font-style: normal; color: var(--accent); transition: transform 0.3s; }
             .side-panel.collapsed .sheet-handle em { transform: rotate(180deg); }
             .title-block { display: none; }
-        }</style><script defer="defer" src="/demoMyself/configurator.bundle.js"></script></head><body><a href="./index.html" class="back-btn" data-i18n="nav.backHome">← Back to Home</a><div class="title-block"><h1 data-i18n="cfg.title">Product Configurator</h1><p data-i18n="cfg.subtitle">Babylon.js · PBR 即時材質 / 光照 · 自動依模型部件生成 UI</p></div><canvas id="renderCanvas"></canvas><aside class="side-panel" id="panel" style="display:none;"><button class="sheet-handle" id="sheet-toggle" type="button"><span>⚙ <span data-i18n="cfg.sheet.customize">Customize</span></span> <em>▼</em></button><div class="section hidden" id="sec-parts"><span class="label" data-i18n="cfg.section.part">Part</span><div class="pills" id="parts"></div></div><div class="section" id="sec-finish"><span class="label" data-i18n="cfg.section.finish">Finish</span><div class="pills" id="finishes"></div></div><div class="section" id="sec-color"><span class="label" data-i18n="cfg.section.color">Color</span><div class="swatches" id="tints"></div></div><div class="section hidden" id="sec-colorway"><span class="label" data-i18n="cfg.section.colorway">Colorway</span><div class="swatches" id="swatches"></div></div><div class="divider"></div><div class="section"><span class="label" data-i18n="cfg.section.lighting">Lighting</span><div class="pills" id="lighting-presets"></div><div class="slider-row"><div class="slabel"><span data-i18n="cfg.slider.envInt">環境光強度</span><span class="val" id="env-int-val">1.1</span></div><input type="range" id="env-intensity" min="0" max="3" step="0.05" value="1.1"></div><div class="slider-row"><div class="slabel"><span data-i18n="cfg.slider.envRot">環境旋轉</span><span class="val" id="env-rot-val">0°</span></div><input type="range" id="env-rotation" min="0" max="360" step="1" value="0"></div><div class="slider-row"><div class="slabel"><span data-i18n="cfg.slider.keyInt">主光強度</span><span class="val" id="key-int-val">2.2</span></div><input type="range" id="key-intensity" min="0" max="6" step="0.05" value="2.2"></div><div class="slider-row"><div class="slabel"><span data-i18n="cfg.slider.keyTemp">主光色溫</span><span class="val" id="key-temp-val">6500K</span></div><input type="range" id="key-temp" min="2700" max="9000" step="100" value="6500"></div></div><div class="section"><span class="label" data-i18n="cfg.section.background">Background</span><div class="pills" id="backgrounds"></div></div></aside><div class="bottom-bar" id="bottom-bar" style="display:none;"><button class="ctrl-btn on" id="autorotate" data-i18n="cfg.btn.autorotate">◐ Auto-rotate</button> <button class="ctrl-btn" id="reset" data-i18n="cfg.btn.reset">⟲ Reset View</button></div><div id="loading"><div class="spinner"></div><p data-i18n="cfg.loading">Loading 3D model…</p></div></body></html>
+        }</style><style>html.i18n-pending body{opacity:0}</style><script>(function(){var L;try{L=localStorage.getItem("site-lang")}catch(_){}if(L!=="en"&&L!=="zh"){L=/^zh/i.test(navigator.language||"")?"zh":"en"}if(L!=="zh")return;var h=document.documentElement;h.className+=" i18n-pending";setTimeout(function(){h.classList.remove("i18n-pending")},600)})();</script><script defer="defer" src="/demoMyself/configurator.bundle.js"></script><link href="/demoMyself/configurator.css" rel="stylesheet"></head><body><a href="./index.html" class="back-btn" data-i18n="nav.backHome">← Back to Home</a><div class="title-block"><h1 data-i18n="cfg.title">Product Configurator</h1><p data-i18n="cfg.subtitle">Babylon.js · PBR 即時材質 / 光照 · 自動依模型部件生成 UI</p></div><canvas id="renderCanvas"></canvas><div id="panel-root"></div><div id="loading"><div class="spinner"></div><p data-i18n="cfg.loading">Loading 3D model…</p></div><script>(function(){var L;try{L=localStorage.getItem("site-lang")}catch(_){}if(L!=="en"&&L!=="zh"){L=/^zh/i.test(navigator.language||"")?"zh":"en"}var h=document.documentElement;if(L!=="zh"){h.classList.remove("i18n-pending");return}var D={"title.configurator":"產品配置器","nav.backHome":"← 返回首頁","cfg.title":"產品配置器","cfg.subtitle":"Babylon.js · PBR 即時材質 / 光照 · 自動依模型部件生成 UI","cfg.loading":"載入 3D 模型…"},d=document;d.documentElement.lang="zh-TW";var q=d.querySelectorAll("[data-i18n],[data-i18n-html],[data-i18n-title]");for(var i=0;i<q.length;i++){var e=q[i],s=e.dataset;if(s.i18n&&D[s.i18n]!=null)e.textContent=D[s.i18n];if(s.i18nHtml&&D[s.i18nHtml]!=null)e.innerHTML=D[s.i18nHtml];if(s.i18nTitle&&D[s.i18nTitle]!=null)e.title=D[s.i18nTitle];}h.classList.remove("i18n-pending")})();</script></body></html>
