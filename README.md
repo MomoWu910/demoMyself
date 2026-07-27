@@ -1,6 +1,6 @@
 # Interactive 3D & Cross-Engine Frontend Demos
 
-> TypeScript 打造的高互動前端技術作品集——聚焦複雜前端最難的部分：**跨引擎渲染整合**、**即時 3D / PBR 渲染**、**手寫 shader（GLSL 與 WGSL 雙寫）**，以及**可重現的渲染效能分析**（量出來的，不是講出來的）。
+> TypeScript 打造的高互動前端技術作品集——聚焦前端比較複雜的部分：**跨引擎渲染整合**、**即時 3D / PBR 渲染**、**手寫 shader（GLSL 與 WGSL 雙寫）**，以及**可重現的渲染效能分析**。
 
 🔗 **線上 Demo**：https://momowu910.github.io/demoMyself/
 
@@ -12,23 +12,20 @@
 
 ## 關於這個作品集
 
-我有 6 年高互動前端（TypeScript + Canvas / WebGL）開發資歷。這個作品集把長年累積的**即時渲染、複雜狀態與效能**能力，延伸到 **3D 與引擎底層整合**領域，做成幾個聚焦的技術驗證——重點不在功能多寡，而在每個 demo 各自解掉一個前端較少人碰、但有難度的問題。
+我有 6 年高互動前端（TypeScript + Canvas / WebGL）開發資歷。這個作品集把長年累積的**即時渲染、複雜狀態與效能**能力，延伸到 **3D 與引擎底層整合**領域，做成幾個聚焦的技術驗證。
 
 ---
 
 ## 首頁：一張「活的 render graph」與動線 — `src/home/`
 
-首頁不是靜態選單，而是一張用 PixiJS 畫的**互動式 render graph**：把整個作品集當成一條 GPU 渲染管線來呈現——每個專案是一個 pass（節點），節點之間的連線代表它們**共用的技術**（WebGL Context、Pixi v8、`src/bench`、GLSL·WGSL；兩端都用到才連線）。這個入口本身就 dogfood 了作品集的技術棧。
+首頁不是靜態選單，而是一張用 PixiJS 畫的**互動式 render graph**：每個專案是一個 pass（節點），節點之間的連線代表它們**共用的技術**（WebGL Context、Pixi v8、`src/bench`、GLSL·WGSL；兩端都用到才連線）。
 
-- **視覺識別「同一件事做兩遍」**：GLSL + WGSL、Pixi + Three、WebGL + WebGPU、量測而非宣稱。雙色琥珀（GLSL / WebGL）↔ 紫（WGSL / WebGPU）貫穿全站。
-- **節點外框是「這個 pass 用什麼做的」**：每段顏色對應一項引擎或著色器語言，與左下角技術棧同一套映射、互為對照。上色的判準是**這項技術能不能區分節點**，不是它重不重要——TypeScript 每頁都用，畫上去只會讓每個圓多一段一模一樣的顏色，所以它沒有顏色；React 只有兩個 pass 用（另外三個刻意維持零框架或是靜態頁），所以它有。
+- **節點外框是「這個 pass 用什麼做的」**：每段顏色對應一項引擎或著色器語言，與左下角技術棧同一套映射、互為對照。
 - **架構分工**：**React 管 canvas 外的殼（標題 / inspector / 圖例），Pixi 管 canvas 內的世界（shader 光場 / 節點 / 資源流動）**，兩邊只透過一個 Zustand store 溝通，React 不參與 render loop。
 - **互動**：hover 節點高亮它與相連節點、旁邊長出細節卡；點擊時「往節點顏色 zoom」轉場，落地頁再從同色淡出揭開，整站像一個連續空間。鍵盤可 Tab 聚焦、尊重 `prefers-reduced-motion`。
 - **省電**：全螢幕 shader 光場以半解析度渲染、幀率上限 30fps、分頁切走即暫停，避免持續高 GPU 負載讓裝置發燙。
 
 ### 動線
-
-所有頁面串成一條清楚的主線：
 
 ```text
 首頁 render graph
@@ -42,8 +39,6 @@
          ├─ Super Shiba Mark          （pixi_stress2）
          └─ Optimization Lab          （pixi_optimization）
 ```
-
-返回採**階層式**（回到固定的父頁，不看 referrer——用 referrer 會在互相連結的頁面之間造成死循環）：首頁的各節點頁 → 返回首頁；三個壓測 → 返回「實驗結論」→ 再返回首頁。
 
 ---
 
@@ -115,7 +110,7 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 
 ![Rendering Findings：數據由站內 benchmark runner 產出，原始 JSON 原樣保存](docs/screenshots/findings.png)
 
-重點不是「我做了壓測」，而是「我量出了什麼」。站內 [`/findings.html`](https://momowu910.github.io/demoMyself/findings.html) 是一份**可重現**的技術報告：數據由站內的 benchmark runner 直接產出，原始 JSON 原樣存在 `src/findings/results/`，沒有手動修飾過任何一個數字。
+站內 [`/findings.html`](https://momowu910.github.io/demoMyself/findings.html) 是一份**可重現**的技術報告：數據由站內的 benchmark runner 直接產出，原始 JSON 原樣存在 `src/findings/results/`，沒有手動修飾過任何一個數字。
 
 **量測方法**（`src/bench/`）
 - **主指標是 CPU frame time 的中位數與 p95，不是 FPS**。vsync 會把 FPS 鎖在螢幕更新率上，輕負載時每個案例都回報 60fps——即使其中一個已經吃掉大半個 frame budget。
@@ -228,7 +223,7 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 
 ## 素材與授權
 
-程式碼以外的素材全部來自可自由使用的來源，出處列在這裡（CC BY 的部分是**授權要求的署名**，不是客套）：
+程式碼以外的素材全部來自可自由使用的來源，出處列在這裡：
 
 | 素材 | 來源 | 授權 |
 |---|---|---|
