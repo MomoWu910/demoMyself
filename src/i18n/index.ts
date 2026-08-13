@@ -559,6 +559,10 @@ export const DICT: Record<string, Entry> = {
     'arcade.offline': { en: 'offline', zh: '已斷線' },
     'arcade.error.insufficient_balance': { en: 'Insufficient balance', zh: '餘額不足' },
     'arcade.error.invalid_bet': { en: 'Invalid bet', zh: '押注金額無效' },
+    // 起轉演法：純表演，不影響結果。兩種轉法只差起轉前那 0.2 秒，講不清楚，要按過才知道
+    'arcade.spinStyle': { en: 'Spin-up', zh: '起轉' },
+    'arcade.style.direct': { en: 'Direct', zh: '直接' },
+    'arcade.style.windup': { en: 'Wind-up', zh: '蓄力' },
     // 這一頁最該讓人知道的一件事：輸贏不是前端算的。寫在面板上而不是藏在 README 裡，
     // 因為它同時解釋了「為什麼按下去要等一下」——那個延遲是刻意模擬的 RTT，不是卡頓。
     'arcade.serverNote': {

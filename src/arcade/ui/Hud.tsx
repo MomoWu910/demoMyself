@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BETS, useArcadeStore } from '../store';
+import { BETS, SPIN_STYLES, useArcadeStore } from '../store';
 import { useT } from '../../i18n/useT';
 import { wireGoBack } from '../../shell/goBack';
 
@@ -66,6 +66,37 @@ function BetPicker() {
     );
 }
 
+/**
+ * 起轉演法的切換。
+ *
+ * 放在面板上而不是寫死在程式裡，是因為手感這種東西**講不清楚，要當場按過才知道**——
+ * 兩種轉法之間差的只有起轉前那 0.2 秒，用文字描述遠不如按兩次來得直接。
+ * 它不影響輸贏（盤面照樣是 server 算的），所以轉動中也讓改，下一把生效。
+ */
+function SpinStylePicker() {
+    const t = useT();
+    const style = useArcadeStore((s) => s.spinStyle);
+    const setSpinStyle = useArcadeStore((s) => s.setSpinStyle);
+
+    return (
+        <div className="style">
+            <span className="cap">{t('arcade.spinStyle')}</span>
+            <div className="style-row">
+                {SPIN_STYLES.map((s) => (
+                    <button
+                        key={s}
+                        type="button"
+                        className={`chip${s === style ? ' on' : ''}`}
+                        onClick={() => setSpinStyle(s)}
+                    >
+                        {t(`arcade.style.${s}`)}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 export function Hud() {
     const t = useT();
     const balance = useArcadeStore((s) => s.balance);
@@ -122,6 +153,8 @@ export function Hud() {
                 <button type="button" className="spin" disabled={!canSpin} onClick={() => spinHandler?.()}>
                     {spinning ? t('arcade.spinning') : t('arcade.spin')}
                 </button>
+
+                <SpinStylePicker />
 
                 {/* 這一頁最該讓人知道的一件事，直接寫在面板上而不是藏在 README 裡 */}
                 <p className="note">{t('arcade.serverNote')}</p>

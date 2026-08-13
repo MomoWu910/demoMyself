@@ -24,8 +24,13 @@ const CELL_RATIO = 1.06;
 /** 轉軸之間的間距，相對格寬。 */
 const GAP_RATIO = 0.09;
 
-/** 相鄰兩根轉軸的停止時間差（秒）。逐根停才有節奏，一起停會像畫面卡住。 */
-const STOP_STAGGER = 0.16;
+/**
+ * 相鄰兩根轉軸的停止時間差（秒）。逐根停才有節奏，一起停會像畫面卡住。
+ *
+ * 一根軸從減速到停穩約要一秒（見 reel.ts），所以這個值不必接近那個長度——前一根還在
+ * 回彈時下一根就開始減速，看起來是連續的一串，而不是五段各自為政的動作。
+ */
+const STOP_STAGGER = 0.22;
 
 /** 贏超過押注幾倍算大獎，中獎演出會加碼。 */
 const BIG_WIN_MULT = 10;
@@ -124,8 +129,9 @@ export class SlotModule implements GameModule {
         st.setError(null);
 
         // 先起轉再送封包：真的機台就是這個順序，玩家按下去的當下轉軸就該動，
-        // 不是等網路回來才動——那會有一段莫名其妙的延遲
-        for (const r of this.reels) r.spin();
+        // 不是等網路回來才動——那會有一段莫名其妙的延遲。
+        // 起轉演法每把重讀，所以面板上切換完下一把就生效，不必重載玩法。
+        for (const r of this.reels) r.spin(st.spinStyle);
         this.socket?.send({ type: 'spin', bet: st.bet });
     }
 
@@ -154,7 +160,17 @@ export class SlotModule implements GameModule {
      * 玩家會先從數字知道結果，轉軸就白轉了。
      */
     private async playResult(grid: number[][], wins: WinLine[], totalWin: number, balance: number): Promise<void> {
-        const stops = this.reels.map((reel, i) => reel.stopAt(grid[i] as Sym[], i * STOP_STAGGER));
+        // ---- 暫時的診斷 log（查「停軸順序」用，確認後整段移除）----
+        const t0 = performance.now();
+        const stops = this.reels.map((reel, i) =>
+            reel.stopAt(grid[i] as Sym[], i * STOP_STAGGER).then(() => {
+                console.log(
+                    `[slot] 索引 ${i}｜畫面 x=${Math.round(reel.getGlobalPosition().x)}｜停穩 +${Math.round(
+                        performance.now() - t0
+                    )}ms`
+                );
+            })
+        );
         await Promise.all(stops);
 
         const st = arcadeState();

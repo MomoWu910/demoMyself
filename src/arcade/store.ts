@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { SpinStyle } from './games/slot/reel';
 import type { SocketState } from './net/fakeSocket';
 import type { WinLine } from './net/protocol';
 
@@ -27,6 +28,15 @@ export interface ArcadeState {
     error: string | null;
 
     /**
+     * 起轉的演法。**純粹是表演，不影響任何結果**——盤面照樣是 server 算的。
+     *
+     * 放在共享狀態而不是玩法內部，是因為它要能在面板上當場切換來對比手感。
+     * 型別直接沿用轉軸自己的定義（type-only import，不會產生執行期相依）：
+     * 這種選項最怕兩邊各寫一份字串常數，加第三種轉法時漏改一邊就會靜默失效。
+     */
+    spinStyle: SpinStyle;
+
+    /**
      * 目前掛載的玩法向 store 註冊的「請轉一把」入口。
      *
      * 用 handler 而不是用旗標，是因為 spin 是**動作**不是狀態：用旗標的話 React 設 true、
@@ -42,10 +52,14 @@ export interface ArcadeState {
     setResult: (win: number, wins: WinLine[]) => void;
     setError: (msg: string | null) => void;
     setSpinHandler: (fn: (() => void) | null) => void;
+    setSpinStyle: (s: SpinStyle) => void;
 }
 
 /** 可選的押注額。 */
 export const BETS = [50, 100, 250, 500, 1000];
+
+/** 面板上可選的起轉演法。加第三種轉法時只要動這裡與 reel.ts 的 SpinStyle。 */
+export const SPIN_STYLES: SpinStyle[] = ['direct', 'windup'];
 
 export const useArcadeStore = create<ArcadeState>((set) => ({
     connection: 'connecting',
@@ -56,6 +70,7 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
     lastWins: [],
     error: null,
     spinHandler: null,
+    spinStyle: 'windup',
 
     setConnection: (connection) => set({ connection }),
     setBalance: (balance) => set({ balance }),
@@ -64,6 +79,7 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
     setResult: (lastWin, lastWins) => set({ lastWin, lastWins }),
     setError: (error) => set({ error }),
     setSpinHandler: (spinHandler) => set({ spinHandler }),
+    setSpinStyle: (spinStyle) => set({ spinStyle }),
 }));
 
 /** 在 React 之外讀當下狀態（Pixi 那半邊用）。 */

@@ -16,12 +16,32 @@ import { Sym, SYMBOLS, WEIGHTS } from './rules';
  * 停在指定的三格？答案是**在停止前改寫帶子**——把即將滑進可視窗的那幾格直接寫成目標值。
  * 玩家看不出來，因為那幾格此刻還在窗外。這是老虎機的通行做法，不是取巧。
  *
+ * 停軸不是一個緩動就結束，而是**三段接力**：等速 → 減速滑行 → 對齊回彈。中間任何一刻
+ * 轉軸都在動，沒有靜止的空檔。這件事看起來瑣碎，但少了中間那段減速，停止會像被按了
+ * 暫停鍵；而如果錯開停軸的延遲是用「先停住、等一下再演」做的，玩家會看到後面幾根軸
+ * 站在原地排隊——那是最傷手感的一種寫法。
+ *
+ * 減速段是**距離驅動**而不是時間驅動：先算定落點，再讓速度隨「已走完的比例」線性衰減，
+ * 走完該走的距離自然交棒。好處是落點在減速開始的當下就已經確定，帶子可以趁那幾格還在
+ * 十格之外時就改寫完畢。
+ *
  * 另外兩件事值得看：
  *   - 帶子有幾十格，但**只用 ROWS+2 個 sprite**循環復用（改 texture 與 y），
  *     不是每格一個 sprite。轉軸再長，場景樹上的物件數都是固定的。
- *   - 停止用 back.out 的回彈：過頭一點再彈回來。少了這一下，停止會像被按了暫停鍵，
- *     手感整個垮掉——這是老虎機「重量感」的主要來源。
+ *   - 最後一格用 back.out 的回彈：過頭一點再彈回來。這是老虎機「重量感」的收尾。
  */
+
+/**
+ * 捲動方向：`-1` = 符號往下掉（真機幾乎都是這個方向），`+1` = 往上跑。
+ *
+ * 抽成常數而不是散在各處改正負號，是因為方向同時牽動三件事：sprite 往哪邊位移、
+ * 帶子索引往哪邊長、以及停止時該改寫帶子的哪幾格。散著改很容易只改到其中兩個，
+ * 症狀是「轉起來方向對了，但停下來差一格」——那種 bug 光看畫面找不出來。
+ *
+ * 實際做法是讓 `offset` 永遠是遞增的「已捲過的格數」，方向只在 `layout()` 換算成
+ * 有號的捲動位置。這樣停止落點的計算（取整、往前推幾格、緩動到定點）完全不必管方向。
+ */
+const DIR = -1;
 
 /** 帶子長度。夠長才不會在等速轉動時看出重複的規律。 */
 const STRIP_LEN = 32;
@@ -35,11 +55,41 @@ const SPIN_SPEED = 26;
 /** 加速到等速要多久（秒）。 */
 const SPIN_UP = 0.28;
 
-/** 停止時最少還要再轉幾格，避免「按下去馬上停」那種廉價感。 */
-const MIN_SETTLE_CELLS = 8;
+/** 減速滑行的距離（格）。這段也決定了「按下去不會馬上停」的最短轉動量。 */
+const COAST_CELLS = 10;
 
-/** 停止緩動時長（秒）。 */
-const SETTLE_TIME = 0.62;
+/** 滑行結束時的速度（格／秒）。要接近回彈段的初速，交棒才不會有頓點。 */
+const COAST_END_SPEED = 10;
+
+/** 回彈段走幾格。只走一格，因為此時已經慢到看得清符號了。 */
+const SNAP_CELLS = 1;
+
+/** 回彈段時長（秒）。 */
+const SNAP_TIME = 0.42;
+
+/**
+ * 起轉的兩種演法。玩法可以逐把切換（面板上的開關），轉軸本身不記得上一把用哪種。
+ *
+ *   - `direct`：按下去就往主方向加速。乾淨俐落。
+ *   - `windup`：先往**反方向**拉一小段再衝出去，像拉弓。多花約 0.2 秒換一個蓄力的預期感，
+ *     這是很多真機的起轉演法。
+ */
+export type SpinStyle = 'direct' | 'windup';
+
+/** 蓄力往回拉幾格。超過半格就會露出上一把的符號，看起來像轉軸打滑。 */
+const WINDUP_CELLS = 0.34;
+
+/** 蓄力的時長（秒）。 */
+const WINDUP_TIME = 0.2;
+
+/**
+ * 轉軸的狀態。
+ *
+ * `spinning` 與 `coasting` 由 `update()` 每幀推進，`winding` 與 `settling` 交給 gsap，
+ * `idle` 不動。用一個 enum 而不是幾個布林，是因為這些狀態互斥——布林組合會生出
+ * 「又在滑行又在回彈」這種不存在的狀態，然後在某一把出現對不上的落點。
+ */
+type Phase = 'idle' | 'winding' | 'spinning' | 'coasting' | 'settling';
 
 export interface ReelOptions {
     frames: Map<Sym, Texture>;
@@ -63,12 +113,25 @@ export class Reel extends Container {
     private windowMask: Graphics;
     private spinTween: gsap.core.Tween | null = null;
     private settleTween: gsap.core.Tween | null = null;
+    /** 錯開停軸用的排程。等待期間轉軸照常等速轉，不是停著等。 */
+    private stopDelay: gsap.core.Tween | null = null;
     private highlights: gsap.core.Tween[] = [];
 
-    /** 目前的捲動速度（格／秒）。加速與煞停都是改它，不是直接改 offset。 */
+    /** 目前的捲動速度（格／秒）。加速與滑行都是改它，不是直接改 offset。 */
     private speed = 0;
 
-    private spinning = false;
+    private phase: Phase = 'idle';
+
+    /** 減速滑行的起訖（offset 座標）與起始速度。 */
+    private coastFrom = 0;
+    private coastTo = 0;
+    private coastStartSpeed = SPIN_SPEED;
+
+    /** 最終落點（offset 座標，整數格）。減速開始的當下就算定。 */
+    private snapTarget = 0;
+
+    /** 停穩時要 resolve 的那個 Promise。跨越好幾幀，只能存起來。 */
+    private resolveStop: (() => void) | null = null;
 
     constructor(opts: ReelOptions) {
         super();
@@ -122,15 +185,40 @@ export class Reel extends Container {
         return { w: this.cellW, h: this.cellH };
     }
 
-    /** 目前是否還在轉（含煞停中）。 */
+    /** 目前是否還在轉（含滑行與回彈）。 */
     public isSpinning(): boolean {
-        return this.spinning;
+        return this.phase !== 'idle';
     }
 
-    /** 起轉。加速到等速後就一直轉，等 stopAt 給結果。 */
-    public spin(): void {
+    /**
+     * 起轉。加速到等速後就一直轉，等 stopAt 給結果。
+     *
+     * `windup` 會先往反方向拉一小段再衝。蓄力這段是**位置驅動**（直接 tween offset），
+     * 不是靠 speed——這段要走的距離不到半格，用速度去湊反而難控制它停在哪。
+     */
+    public spin(style: SpinStyle = 'direct'): void {
         this.killTweens();
-        this.spinning = true;
+        this.speed = 0;
+
+        if (style !== 'windup') {
+            this.accelerate();
+            return;
+        }
+
+        this.phase = 'winding';
+        // offset 是主方向的進度，所以「往回拉」就是讓它變小，不必管主方向朝上還朝下
+        this.spinTween = gsap.to(this, {
+            offset: this.offset - WINDUP_CELLS,
+            duration: WINDUP_TIME,
+            ease: 'power2.out',
+            onUpdate: () => this.layout(),
+            onComplete: () => this.accelerate(),
+        });
+    }
+
+    /** 加速到等速。蓄力結束後也走這裡。 */
+    private accelerate(): void {
+        this.phase = 'spinning';
         this.spinTween = gsap.to(this, { speed: SPIN_SPEED, duration: SPIN_UP, ease: 'power1.in' });
     }
 
@@ -138,50 +226,116 @@ export class Reel extends Container {
      * 收到結果，停到指定的三個符號上。回傳一個在完全停住時 resolve 的 Promise。
      *
      * `delay` 讓呼叫端把五根轉軸錯開停——一起停會像畫面卡住，逐根停才有節奏。
+     *
+     * 注意這個延遲**不能**用 gsap tween 自己的 `delay`：那只是延後緩動開始，等待期間
+     * 轉軸是不動的，玩家會看到後面幾根軸停住排隊。這裡改用 delayedCall 排程，等待期間
+     * 維持等速轉動，時間到了才切進減速段。
      */
     public stopAt(symbols: Sym[], delay = 0): Promise<void> {
         return new Promise((resolve) => {
-            this.killTweens();
+            this.resolveStop?.(); // 上一把若還懸著（理論上不會），先放掉免得呼叫端等不到
+            this.resolveStop = resolve;
 
-            /*
-             * 目標落點：從現在的位置往前推 MIN_SETTLE_CELLS 格，取下一個整數格。
-             * 取整是必要的——停在半格上，可視窗會卡在兩個符號中間。
-             */
-            const target = Math.ceil(this.offset + MIN_SETTLE_CELLS);
-
-            /*
-             * 改寫帶子：讓停下來時可視窗裡的三格正好是伺服器給的結果。
-             * 此刻這幾格還在窗外（至少 MIN_SETTLE_CELLS 格遠），改了看不出來。
-             */
-            for (let row = 0; row < ROWS; row++) {
-                this.strip[mod(target + row, STRIP_LEN)] = symbols[row];
+            if (delay > 0) {
+                this.stopDelay = gsap.delayedCall(delay, () => {
+                    this.stopDelay = null;
+                    this.beginCoast(symbols);
+                });
+            } else {
+                this.beginCoast(symbols);
             }
-
-            this.speed = 0; // 交給緩動接管，不再靠速度推進
-            this.settleTween = gsap.to(this, {
-                offset: target,
-                duration: SETTLE_TIME,
-                delay,
-                // back.out 會衝過頭一點再彈回：轉軸「壓下去又彈起來」的重量感全靠這個
-                ease: 'back.out(1.6)',
-                onUpdate: () => this.layout(),
-                onComplete: () => {
-                    this.offset = target;
-                    this.layout();
-                    this.spinning = false;
-                    resolve();
-                },
-            });
         });
     }
 
-    /** 每幀推進。等速段靠它走，煞停段由 gsap 接管（此時 speed 已歸零）。 */
+    /**
+     * 進入減速滑行段：算定落點、改寫帶子，之後交給 `update()` 一幀一幀推。
+     *
+     * 落點在這一刻就能算死，是因為滑行距離是固定的 `COAST_CELLS`——速度怎麼衰減只影響
+     * 花多久走完，不影響走多遠。這正好給了改寫帶子的安全窗口：目標那三格此刻還在十格
+     * 之外，等它們滑進可視窗時內容早就換好了。
+     */
+    private beginCoast(symbols: Sym[]): void {
+        // 加速中就收到結果的話，加速 tween 還在寫 speed，得先收掉
+        this.spinTween?.kill();
+        this.spinTween = null;
+
+        // 用當下速度接續，而不是假設已經到等速；下限擋住「才剛起轉就要停」的情況
+        this.coastStartSpeed = Math.max(this.speed, COAST_END_SPEED);
+
+        this.snapTarget = Math.ceil(this.offset + COAST_CELLS + SNAP_CELLS);
+        this.coastFrom = this.offset;
+        this.coastTo = this.snapTarget - SNAP_CELLS;
+
+        // 落點換算成帶子座標才知道要改寫哪幾格——方向朝下時索引是往回長的
+        const landing = Math.round(this.snapTarget * DIR);
+        for (let row = 0; row < ROWS; row++) {
+            this.strip[mod(landing + row, STRIP_LEN)] = symbols[row];
+        }
+
+        this.phase = 'coasting';
+    }
+
+    /**
+     * 最後一格：對齊落點並回彈。
+     *
+     * 取整數格是必要的——停在半格上，可視窗會卡在兩個符號中間。back.out 會衝過頭一點再
+     * 彈回來，轉軸「壓下去又彈起來」的重量感全靠這個。
+     */
+    private beginSnap(): void {
+        this.speed = 0; // 之後由緩動推進 offset，不再靠速度
+        this.phase = 'settling';
+        this.settleTween = gsap.to(this, {
+            offset: this.snapTarget,
+            duration: SNAP_TIME,
+            ease: 'back.out(1.6)',
+            onUpdate: () => this.layout(),
+            onComplete: () => {
+                this.offset = this.snapTarget;
+                this.layout();
+                this.phase = 'idle';
+                this.settleTween = null;
+                const done = this.resolveStop;
+                this.resolveStop = null;
+                done?.();
+            },
+        });
+    }
+
+    /** 每幀推進。等速段與滑行段靠它走，回彈段由 gsap 接管（此時 speed 已歸零）。 */
     public update(deltaSec: number): void {
-        if (this.speed <= 0) return;
-        this.offset += this.speed * deltaSec;
-        // offset 會一直長大，久了浮點精度會掉——繞回帶子長度的整數倍，視覺上完全等價
-        if (this.offset > STRIP_LEN * 1000) this.offset = mod(this.offset, STRIP_LEN);
-        this.layout();
+        switch (this.phase) {
+            case 'spinning': {
+                if (this.speed <= 0) return;
+                this.offset += this.speed * deltaSec;
+                // offset 會一直長大，久了浮點精度會掉——繞回帶子長度的整數倍，視覺上完全等價。
+                // 只能在這一段做：滑行與回彈的落點是絕對座標，中途繞回會讓它們對不上。
+                if (this.offset > STRIP_LEN * 1000) this.offset = mod(this.offset, STRIP_LEN);
+                this.layout();
+                return;
+            }
+
+            case 'coasting': {
+                /*
+                 * 距離驅動（做法同前公司 slotV2 的 playContinueReelRotation）：速度由「已走完
+                 * 的比例」決定，而不是由經過的時間決定。掉幀時每幀走得多一點、幀數少一點，
+                 * 走完的距離與落點完全不受影響——時間驅動就會在卡頓的機器上停歪。
+                 */
+                const span = this.coastTo - this.coastFrom;
+                const progress = span > 0 ? clamp01((this.offset - this.coastFrom) / span) : 1;
+                this.speed = this.coastStartSpeed + (COAST_END_SPEED - this.coastStartSpeed) * progress;
+
+                this.offset += this.speed * deltaSec;
+                if (this.offset >= this.coastTo) {
+                    this.offset = this.coastTo;
+                    this.beginSnap();
+                }
+                this.layout();
+                return;
+            }
+
+            default:
+                return; // settling 由 gsap 推進，idle 不用動
+        }
     }
 
     /**
@@ -193,7 +347,7 @@ export class Reel extends Container {
      * 符號會瞬間縮成 atlas 的原始大小。脈動必須以現值為基準做相對縮放。
      */
     public highlightCell(row: number): void {
-        if (this.spinning) return;
+        if (this.phase !== 'idle') return;
         const s = this.sprites[row];
         if (!s) return;
 
@@ -226,8 +380,10 @@ export class Reel extends Container {
 
     /** 把 sprite 池按目前 offset 重新對位。這是唯一改動場景樹的地方。 */
     private layout(): void {
-        const first = Math.floor(this.offset);
-        const frac = this.offset - first;
+        // 這是全檔唯一把「進度」換算成「方向」的地方（見 DIR 的說明）
+        const scroll = this.offset * DIR;
+        const first = Math.floor(scroll);
+        const frac = scroll - first;
 
         for (let i = 0; i < POOL; i++) {
             const s = this.sprites[i];
@@ -241,10 +397,17 @@ export class Reel extends Container {
     private killTweens(): void {
         this.spinTween?.kill();
         this.settleTween?.kill();
+        this.stopDelay?.kill();
         this.spinTween = null;
         this.settleTween = null;
+        this.stopDelay = null;
         for (const t of this.highlights) t.kill();
         this.highlights = [];
+
+        // 停軸被打斷時要放掉 Promise，否則呼叫端的 Promise.all 會永遠等下去
+        const pending = this.resolveStop;
+        this.resolveStop = null;
+        pending?.();
     }
 
     /**
@@ -256,6 +419,7 @@ export class Reel extends Container {
      */
     public override destroy(options?: Parameters<Container['destroy']>[0]): void {
         this.killTweens();
+        this.phase = 'idle';
         this.mask = null;
         super.destroy(options);
     }
@@ -276,4 +440,8 @@ function randomSymbol(): Sym {
 /** 永遠回非負的取餘。JS 的 % 對負數會回負值，帶子索引會直接爆掉。 */
 function mod(n: number, m: number): number {
     return ((n % m) + m) % m;
+}
+
+function clamp01(n: number): number {
+    return n < 0 ? 0 : n > 1 ? 1 : n;
 }
