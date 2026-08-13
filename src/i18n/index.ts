@@ -19,6 +19,7 @@ export const DICT: Record<string, Entry> = {
     'title.configurator': { en: 'Product Configurator', zh: '產品配置器' },
     'title.rwd': { en: 'RWD Showcase | Eric Wu', zh: 'RWD 響應式展示 | Eric Wu' },
     'title.shaderLab': { en: 'Shader Lab | Eric Wu', zh: 'Shader Lab | Eric Wu' },
+    'title.arcade': { en: 'Arcade | Eric Wu', zh: '遊樂場 | Eric Wu' },
 
     // ---- 導覽 ----
     'nav.back': { en: '← Back', zh: '← 返回' },
@@ -545,6 +546,24 @@ export const DICT: Record<string, Entry> = {
     'opt.spriteGraphics.optimized': {
         en: `<strong style="color:#00d2ff">🟢 Optimized (Texture)</strong><br>Bake the Graphics into a Texture up front.<br><span style="color:#aaa">• Only Scale / Transform updates (GPU)</span><br><span style="color:#aaa">• Near-zero CPU cost</span><br><span style="color:#aaa">• Ideal for particles / health bars</span>`,
         zh: `<strong style="color:#00d2ff">🟢 Optimized (Texture)</strong><br>預先將 Graphics 轉為 Texture。<br><span style="color:#aaa">• 僅更新 Scale/Transform (GPU 處理)</span><br><span style="color:#aaa">• CPU 負擔幾乎為零</span><br><span style="color:#aaa">• 適合粒子、血條等重複圖形</span>`,
+    },
+
+    // ---- 遊樂場 ----
+    'arcade.balance': { en: 'Balance', zh: '餘額' },
+    'arcade.bet': { en: 'Bet', zh: '押注' },
+    'arcade.win': { en: 'Last win', zh: '上一把' },
+    'arcade.spin': { en: 'SPIN', zh: 'SPIN' },
+    'arcade.spinning': { en: 'SPINNING…', zh: '轉動中…' },
+    'arcade.connecting': { en: 'connecting', zh: '連線中' },
+    'arcade.online': { en: 'online', zh: '已連線' },
+    'arcade.offline': { en: 'offline', zh: '已斷線' },
+    'arcade.error.insufficient_balance': { en: 'Insufficient balance', zh: '餘額不足' },
+    'arcade.error.invalid_bet': { en: 'Invalid bet', zh: '押注金額無效' },
+    // 這一頁最該讓人知道的一件事：輸贏不是前端算的。寫在面板上而不是藏在 README 裡，
+    // 因為它同時解釋了「為什麼按下去要等一下」——那個延遲是刻意模擬的 RTT，不是卡頓。
+    'arcade.serverNote': {
+        en: 'Outcomes come from a simulated server over a fake socket with real latency — the client only plays back a result it was given, never decides one.',
+        zh: '盤面與賠付由模擬伺服器決定，經過一層帶真實延遲的假 socket 送來——前端只負責把收到的結果演出來，不參與輸贏判定。',
     },
 };
 

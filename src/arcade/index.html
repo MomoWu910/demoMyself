@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="zh-TW" style="background-color: #120a1e;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="theme-color" content="#120a1e">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title data-i18n="title.arcade">Arcade | Eric Wu</title>
+    <%= i18nHead %>
+</head>
+<body class="arcade-page">
+    <!-- Pixi 的 canvas 掛進來這裡。玩法在同一個 Application 上換，不重建 context。 -->
+    <div id="stage" class="stage"></div>
+    <!-- React 面板：canvas 外的一切（餘額、押注、SPIN、連線狀態） -->
+    <div id="hud-root"></div>
+    <!-- 語言鈕由 i18n 掛進來，位置交給 CSS，不進 React 樹 -->
+    <span id="lang-slot"></span>
+    <%= i18nBoot %>
+</body>
+</html>

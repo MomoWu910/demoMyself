@@ -136,6 +136,7 @@ module.exports = {
         rwd_showcase: './src/rwdShowcase/index.ts',           // RWD 裝置模擬器
         findings: './src/findings/index.ts',                  // 渲染效能實測結論
         shader_lab: './src/shaderLab/index.tsx',              // 自訂 Shader Lab（GLSL + WGSL）＋ React/Zustand 面板
+        arcade: './src/arcade/index.tsx',                     // 博弈遊樂場：假 server + 玩法模組熱插拔
     },
     output: {
         filename: '[name].bundle.js',
@@ -241,6 +242,15 @@ module.exports = {
             chunks: ['shader_lab'],
             title: 'Shader Lab',
             templateParameters: { bootHead, i18nBoot: i18nBootFor('./src/shaderLab/index.html'), i18nHead: i18nHeadFor('./src/shaderLab/index.html') },
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'arcade.html',
+            template: './src/arcade/index.html',
+            chunks: ['arcade'],
+            title: 'Arcade',
+            // 不吃 bootHead：那套遮罩是為了首屏字體與天色而做的（見上面的說明），
+            // 這一頁沒有隨時間變的底色，套上去只會多壓一次 body 的淡入
+            templateParameters: { i18nBoot: i18nBootFor('./src/arcade/index.html'), i18nHead: i18nHeadFor('./src/arcade/index.html') },
         }),
         new CopyWebpackPlugin({
             patterns: [
