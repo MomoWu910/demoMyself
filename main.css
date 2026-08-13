@@ -150,7 +150,8 @@ html, body {
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     animation: inspIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.insp-glyph { font-family: var(--display); font-size: 1.4rem; font-weight: 700; }
+/* 葉子記號是 inline SVG（見 Shell.tsx 的 LeafMark），改成 block 才不會被行高頂出一條空隙 */
+.insp-leaf { display: block; }
 .inspector h2 {
     margin: 6px 0 8px;
     font-family: var(--display);
