@@ -7,7 +7,8 @@
     "start": "webpack serve --node-env development",
     "build": "webpack --mode production",
     "deploy": "npm run build && gh-pages -d dist",
-    "check:slot": "node src/arcade/server/rtp-check.mjs"
+    "check:slot": "node src/arcade/server/rtp-check.mjs",
+    "check:reel": "node src/arcade/games/slot/reel-check.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "8.2.0",
