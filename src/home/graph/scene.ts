@@ -2,6 +2,7 @@ import { Application, Container, Graphics, Sprite, Text, Texture, TextStyle } fr
 import { EDGES, NODES, nodeById, type ProjectNode, type Tone } from '../projects';
 import { useHomeStore, homeState, type Backend } from '../store';
 import { createFieldFilter } from './field';
+import { LEAF_LEN, leafEdgeByArc, leafMidribEnd, leafStem, leafVeins } from './leaf';
 import { applyTheme, currentHour, foregroundFor, onSkyChange, onThemeChange, refreshSky, skyAt } from './sky';
 import { enterProject, ENTER_MS } from '../enter';
 import { t, onLangChange } from '../../i18n';
@@ -30,8 +31,11 @@ const FLOAT_LIFT = 0.1; // 浮起 → 縮放
 interface NodeView {
     def: ProjectNode;
     container: Container;
-    ring: Graphics;
-    glyph: Text;
+    /**
+     * 葉子本身。它自己帶著 def.leafAngle 的 rotation，所以外層 container 的 rotation
+     * 可以純粹留給漂浮傾斜用——標籤是 container 的 child，才不會跟著葉子的朝向歪掉。
+     */
+    leaf: Graphics;
     label: Text;
     px: number;
     py: number;
@@ -147,18 +151,8 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         c.eventMode = 'static';
         c.cursor = 'pointer';
 
-        const ring = new Graphics();
-
-        const glyph = new Text({
-            text: def.glyph,
-            style: new TextStyle({
-                fontFamily: 'Archivo, ui-sans-serif, sans-serif',
-                fontSize: 26,
-                fontWeight: '700',
-                fill: FG.glyph,
-            }),
-        });
-        glyph.anchor.set(0.5);
+        const leaf = new Graphics();
+        leaf.rotation = (def.leafAngle * Math.PI) / 180;
 
         const label = new Text({
             text: t(`${def.i18nKey}.title`),
@@ -172,8 +166,39 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         });
         label.anchor.set(0.5, 0);
 
-        c.addChild(ring, glyph, label);
+        c.addChild(leaf, label);
         nodeLayer.addChild(c);
+
+        const view: NodeView = {
+            def,
+            container: c,
+            leaf,
+            label,
+            px: 0,
+            py: 0,
+            pr: 0,
+            ox: 0,
+            oy: 0,
+            active: false,
+        };
+        nodeViews.set(def.id, view);
+
+        /**
+         * 點擊區維持一個半徑 pr 的圓——**跟改成葉子之前一樣大**。
+         *
+         * 葉子的面積只有同半徑圓的四成左右，照葉形當點擊區的話節點會突然變得很難點，
+         * 手機上尤其明顯；而且葉子各朝一方，點擊區會跟著轉，同一個位置有時點得到有時點不到。
+         * 圓形跟朝向無關，行為因此是可預期的。第二段補上下方的標籤帶，是為了保住改造前
+         * 由 children bounds 帶來的「文字也可以點」。
+         */
+        c.hitArea = {
+            contains: (x: number, y: number): boolean => {
+                const r = view.pr;
+                if (r <= 0) return false;
+                if (x * x + y * y <= r * r) return true;
+                return Math.abs(x) <= r * 1.3 && y >= r && y <= r * 1.25 + 34;
+            },
+        };
 
         c.on('pointerover', () => {
             useHomeStore.getState().setActive(def.id);
@@ -194,20 +219,6 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
                 field.emit({ ...dropAt(v), strength: 2.6, speed: 5.0, freq: 0.45, source: def.id });
             }
             enterProject(def.id);
-        });
-
-        nodeViews.set(def.id, {
-            def,
-            container: c,
-            ring,
-            glyph,
-            label,
-            px: 0,
-            py: 0,
-            pr: 0,
-            ox: 0,
-            oy: 0,
-            active: false,
         });
     }
 
@@ -238,8 +249,9 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
             v.py = pos.y * H;
             v.pr = pos.r * short;
             v.container.position.set(v.px, v.py);
-            v.glyph.style.fontSize = Math.round(Math.max(18, v.pr * 0.42)); // glyph 隨節點大小縮放
-            v.label.position.set(0, v.pr + 12);
+            // 標籤讓到葉子的最遠端之外：葉子半長是 pr×LEAF_LEN，朝下的那幾片（findings 是
+            // 118°）葉尖會伸到 pr 以下，照舊的 pr+12 擺會被葉尖戳到
+            v.label.position.set(0, v.pr * 1.25 + 10);
             v.active = false;
             drawNode(v, false);
         }
@@ -253,36 +265,81 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         }
     };
 
-    const drawNode = (v: NodeView, active: boolean): void => {
-        const r = v.pr;
-        v.ring.clear();
+    /**
+     * 整片葉輪廓要幾個取樣點。葉緣是曲線不是弧，只能離散化成 polyline 餵給 Graphics。
+     * 取樣沿**弧長**均分（leafEdgeByArc），所以這個數直接就是「每格多長」——
+     * 節點最大 130px 左右，周長約 340px，64 格 ≈ 5px 一格，曲線看不出是折線。
+     */
+    const OUTLINE_STEPS = 64;
 
-        // 節點核心：一片玻璃。夜裡是深色、白天翻成淺色，才一直襯得住上面的 glyph
-        v.ring.circle(0, 0, r).fill({ color: FG.core, alpha: 0.92 });
+    const drawNode = (v: NodeView, active: boolean): void => {
+        const L = v.pr * LEAF_LEN;
+        const g = v.leaf;
+        g.clear();
+
+        // ---- 葉面：一片玻璃。夜裡是深色、白天翻成淺色，才一直襯得住上面的葉脈 ----
+        const p0 = leafEdgeByArc(0, L);
+        g.moveTo(p0.x, p0.y);
+        for (let i = 1; i < OUTLINE_STEPS; i++) {
+            const p = leafEdgeByArc(i / OUTLINE_STEPS, L);
+            g.lineTo(p.x, p.y);
+        }
+        g.closePath();
+        g.fill({ color: FG.core, alpha: 0.92 });
 
         /**
-         * 邊環＝這個 pass 用到的技術，一段一色（見 projects.ts 的 stack）。
-         * 外框因此不只是識別，而是「這東西用什麼做的」——跟左下角技術棧同一套顏色映射。
+         * ---- 葉脈 ----
+         * 用這個 pass 的主色，跟葉緣同一套語彙但壓得很淡：葉脈是**質地**，不是資訊。
+         * 資訊全在葉緣那幾段顏色上，葉脈要是也搶眼，兩者就會打架。
+         * 中脈與葉柄比側脈粗一級——真葉子就是這樣，也讓葉子的長軸方向一眼可讀。
+         */
+        const vein = TONE[v.def.tone];
+        const stem = leafStem(L);
+        const midrib = leafMidribEnd(L);
+        g.moveTo(stem.to.x, stem.to.y).lineTo(midrib.x, midrib.y);
+        g.stroke({ color: vein, width: active ? 1.6 : 1.3, alpha: active ? 0.7 : 0.45 });
+
+        for (const s of leafVeins(L)) {
+            g.moveTo(s.from.x, s.from.y).quadraticCurveTo(s.c.x, s.c.y, s.to.x, s.to.y);
+        }
+        g.stroke({ color: vein, width: 1, alpha: active ? 0.45 : 0.26 });
+
+        /**
+         * ---- 葉緣＝這個 pass 用到的技術，一段一色（見 projects.ts 的 stack）----
+         * 輪廓因此不只是識別，而是「這東西用什麼做的」——跟左下角技術棧同一套顏色映射。
+         * 原本是沿圓周均分角度，改葉子之後改成沿**弧長**均分（見 leaf.ts 的 leafEdgeByArc）。
+         * 資訊完全一樣，只是切在葉緣上；用弧長而不是參數，三段才會真的一樣長。
          */
         const segs = v.def.stack ?? [v.def.tone];
-        const ringW = active ? 3 : 2;
+        const width = active ? 3 : 2;
         const alpha = active ? 1 : segs.length > 1 ? 0.85 : 0.7;
 
         if (segs.length === 1) {
-            v.ring.circle(0, 0, r).stroke({ color: TONE[segs[0]], width: ringW, alpha });
+            g.moveTo(p0.x, p0.y);
+            for (let i = 1; i < OUTLINE_STEPS; i++) {
+                const p = leafEdgeByArc(i / OUTLINE_STEPS, L);
+                g.lineTo(p.x, p.y);
+            }
+            g.closePath();
+            g.stroke({ color: TONE[segs[0]], width, alpha });
             return;
         }
 
-        // 從正上方開始均分。段之間留一點縫，否則兩色相接處會糊成漸層、數不出有幾段。
-        const step = (Math.PI * 2) / segs.length;
-        const gap = 0.08;
+        // 從葉柄開始均分（見 leaf.ts 的 leafEdge：起點放葉柄，縫才不會切在葉尖上）。
+        // 段之間留一點縫，否則兩色相接處會糊成漸層、數不出有幾段。
+        const step = 1 / segs.length;
+        const gap = 0.02;
+        const segSteps = Math.max(8, Math.round(OUTLINE_STEPS / segs.length));
         for (let i = 0; i < segs.length; i++) {
-            const a0 = -Math.PI / 2 + i * step + gap / 2;
-            const a1 = a0 + step - gap;
-            // 先 moveTo 到弧的起點，否則 arc() 會從路徑預設起點 (0,0) 拉一條線到弧起點——
-            // 那就是節點中央到圓周那條多餘的直線。
-            v.ring.moveTo(Math.cos(a0) * r, Math.sin(a0) * r);
-            v.ring.arc(0, 0, r, a0, a1).stroke({ color: TONE[segs[i]], width: ringW, alpha });
+            const t0 = i * step + gap / 2;
+            const t1 = t0 + step - gap;
+            const a = leafEdgeByArc(t0, L);
+            g.moveTo(a.x, a.y);
+            for (let k = 1; k <= segSteps; k++) {
+                const p = leafEdgeByArc(t0 + (t1 - t0) * (k / segSteps), L);
+                g.lineTo(p.x, p.y);
+            }
+            g.stroke({ color: TONE[segs[i]], width, alpha });
         }
     };
 
@@ -320,7 +377,6 @@ export async function mountGraph(container: HTMLElement): Promise<void> {
         FG = foregroundFor(light);
         TONE = FG.tone;
         for (const v of nodeViews.values()) {
-            v.glyph.style.fill = FG.glyph;
             v.label.style.fill = FG.label;
             v.label.style.dropShadow = halo();
             drawNode(v, v.active);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useHomeStore } from '../store';
-import { NODES, nodeById, TECH_STACK, type Tone } from '../projects';
+import { NODES, nodeById, TECH_STACK, type ProjectNode, type Tone } from '../projects';
+import { leafSvgPaths } from '../graph/leaf';
 import { enterProject } from '../enter';
 import { useT } from './useT';
 import { SkyDial } from './SkyDial';
@@ -23,6 +24,35 @@ function StatusBadge() {
     );
 }
 
+/** inspector 卡片左上那片迷你葉的尺寸（px）。SVG 的 viewBox 也是這個數。 */
+const MARK_SIZE = 30;
+
+/**
+ * inspector 上的葉子記號。跟 canvas 上的節點**共用 leaf.ts 那組公式**，
+ * 連朝向都照該節點的 leafAngle——所以卡片一冒出來，它跟你正指著的那片葉子是同一片。
+ *
+ * 這裡只描邊、不填 core 色：卡片本身已經是半透明玻璃，再填一層底會糊成一塊。
+ */
+function LeafMark({ node }: { node: ProjectNode }) {
+    const { outline, veins } = leafSvgPaths(MARK_SIZE);
+    const half = MARK_SIZE / 2;
+    const color = TONE_CSS[node.tone];
+    return (
+        <svg
+            className="insp-leaf"
+            width={MARK_SIZE}
+            height={MARK_SIZE}
+            viewBox={`${-half} ${-half} ${MARK_SIZE} ${MARK_SIZE}`}
+            aria-hidden="true"
+        >
+            <g transform={`rotate(${node.leafAngle})`} fill="none" stroke={color}>
+                <path d={outline} fill={color} fillOpacity={0.16} strokeWidth={1.5} strokeLinejoin="round" />
+                <path d={veins} strokeWidth={0.9} strokeOpacity={0.55} strokeLinecap="round" />
+            </g>
+        </svg>
+    );
+}
+
 /** 右側 inspector：hover / 聚焦節點時長出那個 pass 的細節。 */
 function Inspector() {
     const t = useT();
@@ -36,9 +66,7 @@ function Inspector() {
 
     return (
         <aside className={`inspector ${dock} ${vdock}`} role="status">
-            <span className="insp-glyph" style={{ color: TONE_CSS[node.tone] }}>
-                {node.glyph}
-            </span>
+            <LeafMark node={node} />
             <h2>{t(`${node.i18nKey}.title`)}</h2>
             <p dangerouslySetInnerHTML={{ __html: t(`${node.i18nKey}.desc`) }} />
             <div className="insp-tags">

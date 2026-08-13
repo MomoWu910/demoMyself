@@ -58,8 +58,17 @@ export interface ProjectNode {
     href: string;
     /** i18n key 前綴：沿用現有 home.* 文案（{i18nKey}.title / .desc） */
     i18nKey: string;
-    /** 節點上的一個字元符號（不是 emoji 的裝飾，是 pass 的識別記號） */
-    glyph: string;
+    /**
+     * 葉尖朝向（度，0 = 指向右方，順時針為正）。
+     *
+     * 每片葉子各朝一方，是為了讓它們讀起來像**散落在水面上**而不是排好的圖示。
+     * 取值不是隨機的：一律讓葉尖大致背對畫面中心，葉子才不會全部指進來、
+     * 把視線鎖死在中央那塊什麼都沒有的水面上。
+     *
+     * 這個角度只轉葉子本身——漂浮造成的傾斜疊在外層 container 上，兩者互不干擾，
+     * 節點下方的文字標籤也因此永遠是正的（見 scene.ts 的 leafGfx）。
+     */
+    leafAngle: number;
     /** 面板與節點上顯示的技術標籤 */
     tags: string[];
     /**
@@ -116,7 +125,7 @@ export const NODES: ProjectNode[] = [
         id: 'crossEngine',
         href: './pixi_x_three.html',
         i18nKey: 'home.crossEngine',
-        glyph: '⊕',
+        leafAngle: 202, // 左上角的節點，葉尖朝左上
         tags: ['PixiJS v8', 'Three.js', 'WebGL Context'],
         // 同一個 WebGL context 上跑 Pixi 與 Three——外框就是這三者
         stack: ['pixi', 'three', 'glsl'],
@@ -130,7 +139,7 @@ export const NODES: ProjectNode[] = [
         id: 'shaderLab',
         href: './shader_lab.html',
         i18nKey: 'home.shader',
-        glyph: '⇄',
+        leafAngle: -28, // 右上角，葉尖朝右上
         tags: ['GLSL', 'WGSL', 'React + Zustand'],
         // 雙寫 GLSL/WGSL：琥珀↔紫，正是這個作品集的識別；面板是 React + Zustand
         stack: ['glsl', 'wgsl', 'react'],
@@ -144,7 +153,7 @@ export const NODES: ProjectNode[] = [
         id: 'findings',
         href: './findings.html',
         i18nKey: 'home.lab',
-        glyph: '∿',
+        leafAngle: 118, // 圖的下緣中段，葉尖朝下偏左
         tags: ['CPU Frame Time', 'Draw Calls', 'bench'],
         // 量測的對象是 Pixi，也橫跨兩個後端
         stack: ['pixi', 'glsl', 'wgsl'],
@@ -158,7 +167,7 @@ export const NODES: ProjectNode[] = [
         id: 'configurator',
         href: './configurator.html',
         i18nKey: 'home.configurator',
-        glyph: '◈',
+        leafAngle: 42, // 右下角，葉尖朝右下
         tags: ['Babylon.js', 'PBR / IBL', 'glTF'],
         // 自成一島的 Babylon——技術上不與其他 pass 共用渲染底層，這件事本身就是資訊。
         // 唯一的例外是那圈檸檬綠：面板跟 Shader Lab 一樣是 React 管的。
@@ -175,7 +184,7 @@ export const NODES: ProjectNode[] = [
         id: 'rwd',
         href: './rwd_showcase.html',
         i18nKey: 'home.rwd',
-        glyph: '▤',
+        leafAngle: 158, // 左下角，葉尖朝左下
         tags: ['Responsive', 'Device Simulator'],
         tone: 'neutral',
         x: 0.16,

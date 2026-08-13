@@ -254,10 +254,8 @@ const DARK_VARS: Record<string, string> = {
 
 /** Pixi 端要用的前景色。canvas 裡的東西吃不到 CSS 變數，只能另外給一份。 */
 export interface ForegroundColors {
-    /** 節點核心的玻璃底 */
+    /** 葉面的玻璃底 */
     core: number;
-    /** 節點中央的 glyph */
-    glyph: number;
     /** 節點下方的標籤 */
     label: number;
     /**
@@ -279,7 +277,7 @@ export interface ForegroundColors {
 
 const LIGHT_FG: ForegroundColors = {
     core: 0xf6fafd,
-    glyph: 0x0e131c,
+
     label: 0x1e2733,
     halo: 0xffffff,
     haloBlur: 9,
@@ -288,7 +286,7 @@ const LIGHT_FG: ForegroundColors = {
 
 const DARK_FG: ForegroundColors = {
     core: 0x11141c,
-    glyph: 0xf2f4fa,
+
     label: 0xc9cede,
     halo: 0x05070c,
     haloBlur: 5,
