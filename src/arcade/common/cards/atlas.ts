@@ -17,6 +17,9 @@ import { Application, Container, Graphics, Rectangle, Text, TextStyle, Texture }
 export const CARD_W = 96;
 export const CARD_H = 134;
 
+/** 高寬比。排版時要換算牌佔多高（橫放的牌就換成佔多寬），別在各處自己乘。 */
+export const CARD_ASPECT = CARD_H / CARD_W;
+
 export const SUITS = ['spade', 'heart', 'club', 'diamond'] as const;
 export type Suit = (typeof SUITS)[number];
 

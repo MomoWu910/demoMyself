@@ -1,6 +1,6 @@
 import gsap from 'gsap';
 import { Container, Text, TextStyle } from 'pixi.js';
-import { bakeCardAtlas, type CardAtlas } from '../../common/cards/atlas';
+import { bakeCardAtlas, CARD_ASPECT, type CardAtlas } from '../../common/cards/atlas';
 import { CardView } from '../../common/cards/CardView';
 import { bakeChipAtlas, type ChipAtlas } from '../../common/chips/atlas';
 import { BetSpotView } from '../../common/chips/BetSpotView';
@@ -26,15 +26,24 @@ import { BET_SPOTS, PAYOUTS, type BetSpot, type Card, type Round } from './rules
  * 牌怎麼發、四張路怎麼從歷史推出來。第三款玩法（龍虎、骰寶）會再一次證明這件事。
  */
 
-/** 路圖區佔畫面高度的比例。上限是為了在很高的視窗裡不讓路圖胖到喧賓奪主。 */
-const ROAD_RATIO = 0.3;
-const ROAD_MAX = 210;
+/**
+ * 路圖區佔畫面高度的比例與上限。
+ *
+ * 這兩個數字是量出來的：在 1512×716 的視窗裡，原本的 0.3／210 會讓路圖吃掉 29% 的高度，
+ * 牌區只剩 18%，牌被壓到 42px 寬——點數根本看不清。路圖是**參考資訊**，牌才是主角，
+ * 所以讓路圖先讓步。
+ */
+const ROAD_RATIO = 0.26;
+const ROAD_MAX = 172;
 
 /** 結算後停留多久才回到下注階段。夠看清楚牌與賠付，又不會讓人等到不耐煩。 */
 const RESULT_HOLD = 2.6;
 
 /** 發牌的間隔。太快看不出是一張一張發的，太慢會拖 */
 const DEAL_GAP = 0.16;
+
+/** 牌下方那行點數要留多高。字級固定，所以這是常數而不是比例（見 layout） */
+const TOTAL_LABEL_H = 34;
 
 const SPOT_COLOR: Record<BetSpot, number> = {
     player: 0x4cc9f0,
@@ -129,6 +138,15 @@ export class BaccaratModule implements GameModule {
         // 兩條路徑各自更新畫面就會有一條遲早忘了更新
         const unsub = useBaccaratStore.subscribe((s) => this.syncBets(s.bets));
         ctx.onDispose(unsub);
+
+        // ---- 面板高度變了就重排 ----
+        // 換語言、換玩法都可能讓面板長高或變矮，canvas 這側得跟著讓位（見 store 的 dockHeight）
+        const unsubDock = useArcadeStore.subscribe((s, prev) => {
+            if (s.dockHeight !== prev.dockHeight && !this.dead) {
+                this.layout(ctx.screen.width, ctx.screen.height);
+            }
+        });
+        ctx.onDispose(unsubDock);
 
         // ---- 語言切換時重畫珠盤路上的字 ----
         onLangChange(() => {
@@ -349,6 +367,8 @@ export class BaccaratModule implements GameModule {
             gsap.to(view, {
                 x: target.x,
                 y: target.y,
+                // 補牌在飛行途中就轉成橫的，落定才轉會多出一個沒必要的動作
+                rotation: target.rotation,
                 duration: 0.26,
                 ease: 'power2.out',
                 onComplete: () => resolve(),
@@ -469,10 +489,11 @@ export class BaccaratModule implements GameModule {
         const gap = 8;
         const smallH = narrow ? 46 : 54;
         const bigH = narrow ? 60 : 72;
-        // 讓開畫面下緣的操作面板。這個數字是**量出來的**（見 style.css 的 .dock：
-        // 讀數列 + 籌碼列 + 動作列 + 說明，加上安全區的邊距），窄畫面時面板會堆疊得更高。
-        // 沒讓夠的話莊閒兩個大注區會被面板蓋住一半，而它們正是最常被點的兩區
-        const betBottom = h - (narrow ? 268 : 202);
+        // 讓開畫面下緣的操作面板。高度是 HUD 那側**實測**回報的（見 store 的 dockHeight）——
+        // 面板高度會隨語言、玩法、視窗寬度變，寫死的話總有一種組合會讓莊閒兩個大注區
+        // 被蓋掉一半，而它們正是最常被點的兩區。store 還沒回報時退回一個保守值
+        const dock = arcadeState().dockHeight || (narrow ? 250 : 180);
+        const betBottom = h - dock - 10;
         const bigY = betBottom - bigH;
         const smallY = bigY - smallH - gap;
 
@@ -489,9 +510,16 @@ export class BaccaratModule implements GameModule {
         // 夾在路圖與下注區之間，牌的大小跟著剩下的空間走
         const cardTop = roadY + roadH + 14;
         const cardSpace = smallY - cardTop - 14;
-        this.cardW = Math.max(44, Math.min(76, cardSpace / 2.1, w * 0.11));
+        // 垂直要塞得下三段：上方的橫放補牌（1.1 倍牌寬）、原牌本身（1.4 倍牌寬）、
+        // 底下的點數。點數的字級是固定的，所以先扣掉再除——按比例算的話，
+        // 牌一小就會替一行固定高度的字保留過多空間，牌又更小
+        this.cardW = Math.max(40, Math.min(76, (cardSpace - TOTAL_LABEL_H) / 2.5, w * 0.12));
 
-        const centreY = cardTop + cardSpace / 2;
+        // 牌組（補牌 + 原牌）總高 2.5 倍牌寬，剩下的空間上下平分；
+        // 牌的中心在補牌那段之下 1.8 倍處。不能直接取牌區正中間——
+        // 上方要放補牌、下方只放一行點數，兩邊需求不對稱
+        const slack = Math.max(0, cardSpace - TOTAL_LABEL_H - this.cardW * 2.5);
+        const centreY = cardTop + slack / 2 + this.cardW * 1.8;
         this.sideAt = {
             player: { x: w / 2 - this.cardW * 1.85, y: centreY },
             banker: { x: w / 2 + this.cardW * 1.85, y: centreY },
@@ -520,14 +548,29 @@ export class BaccaratModule implements GameModule {
         view.setBoxSize(w, h);
     }
 
-    /** 某一邊第 index 張牌該在哪。第三張稍微錯開並壓在前兩張上，是真實桌台的擺法 */
-    private cardSlot(side: 'player' | 'banker', index: number): { x: number; y: number } {
+    /**
+     * 某一邊第 index 張牌該在哪。
+     *
+     * 前兩張並排**不重疊**——牌面本來就要一眼讀得出點數，疊著就得靠腦補。
+     * 第三張（補牌）**橫放在上方**，這是真實桌台的擺法：橫著就一眼看得出「這是補的」，
+     * 不必數牌有幾張。
+     */
+    private cardSlot(side: 'player' | 'banker', index: number): { x: number; y: number; rotation: number } {
         const base = this.sideAt[side];
+
         if (index < 2) {
-            const offset = (index - 0.5) * this.cardW * 0.62;
-            return { x: base.x + offset, y: base.y };
+            // 1.12 倍牌寬 = 兩張之間留一條窄縫，既不重疊也不會散開像兩堆
+            const offset = (index - 0.5) * this.cardW * 1.12;
+            return { x: base.x + offset, y: base.y, rotation: 0 };
         }
-        return { x: base.x, y: base.y + this.cardW * 0.34 };
+
+        // 橫放：轉 90 度之後它佔的高度是「牌寬」，所以往上讓開自己的一半加原牌的一半
+        const upright = this.cardW * CARD_ASPECT;
+        return {
+            x: base.x,
+            y: base.y - upright / 2 - this.cardW / 2 - this.cardW * 0.1,
+            rotation: Math.PI / 2,
+        };
     }
 
     private settleCard(card: CardView | undefined, side: 'player' | 'banker', index: number): void {
@@ -536,6 +579,7 @@ export class BaccaratModule implements GameModule {
         // resize 期間不做動畫：視窗正在被拖動時，每一幀都補一個 tween 會打架
         gsap.killTweensOf(card);
         card.position.set(slot.x, slot.y);
+        card.rotation = slot.rotation;
         card.resize(this.cardW);
     }
 }

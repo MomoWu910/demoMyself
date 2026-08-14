@@ -59,6 +59,17 @@ export interface ArcadeState {
     /** 切換場景的入口，由 stage 註冊。HUD 的「回大廳」與大廳的機台卡片都走它。 */
     enter: ((id: ModuleId) => void) | null;
 
+    /**
+     * 底部操作面板實際佔多高（畫面像素，含它自己的下邊距）。0 = 沒有面板。
+     *
+     * canvas 內的版面要讓開它，而**面板高度不是常數**：中英文的行數不同、玩法的
+     * 控制項數量不同、窄畫面還會整個堆疊起來。寫死一個數字的話，總有一種組合會讓
+     * 下注區被蓋掉一半。所以由 HUD 那側實測後寫進來（見 ui/Hud.tsx 的 DockMeasure）。
+     *
+     * 這也是這一頁 canvas 與 DOM 兩層分工的必要代價：分開畫就得有人負責對齊。
+     */
+    dockHeight: number;
+
     setConnection: (s: SocketState) => void;
     setBalance: (n: number) => void;
     setError: (msg: string | null) => void;
@@ -66,6 +77,7 @@ export interface ArcadeState {
     /** 記一次卸載的結果，並把該場景的對照值更新成這次的數字。 */
     recordDispose: (scene: ModuleId, report: DisposeReport) => void;
     setEnter: (fn: ((id: ModuleId) => void) | null) => void;
+    setDockHeight: (n: number) => void;
 }
 
 export const useArcadeStore = create<ArcadeState>((set) => ({
@@ -78,6 +90,7 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
     lastTextureByScene: {},
     previousTexture: null,
     enter: null,
+    dockHeight: 0,
 
     setConnection: (connection) => set({ connection }),
     setBalance: (balance) => set({ balance }),
@@ -91,6 +104,7 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
             lastTextureByScene: { ...s.lastTextureByScene, [scene]: report.textureSources },
         })),
     setEnter: (enter) => set({ enter }),
+    setDockHeight: (dockHeight) => set({ dockHeight }),
 }));
 
 /** 在 React 之外讀當下狀態（Pixi 那半邊用）。 */

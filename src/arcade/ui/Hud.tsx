@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useArcadeStore } from '../store';
 import { SlotControls, SlotReadouts } from './SlotPanel';
 import { BaccaratControls, BaccaratReadouts } from './BaccaratPanel';
@@ -122,6 +122,46 @@ function ResourceMeter() {
     );
 }
 
+/**
+ * 量底部面板實際佔多高，寫進 store 給 canvas 那側讓位。
+ *
+ * 為什麼不寫死一個數字：面板高度**會變**——中英文的行數不同、每款玩法的控制項數量
+ * 不同、窄畫面還會整個堆疊起來。寫死的話總有一種組合會讓下注區被蓋掉一半，
+ * 而那是最常被點的地方。
+ *
+ * 連同下邊距一起回報（面板不是貼著畫面底），canvas 那側才不必知道 CSS 怎麼定位它。
+ */
+function useDockMeasure(active: boolean): React.RefObject<HTMLElement | null> {
+    const ref = useRef<HTMLElement>(null);
+    const setDockHeight = useArcadeStore((s) => s.setDockHeight);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!active || !el) {
+            setDockHeight(0);
+            return;
+        }
+
+        const measure = (): void => {
+            const rect = el.getBoundingClientRect();
+            // 從畫面底算起：面板本身 + 它底下留的邊距
+            setDockHeight(window.innerHeight - rect.top);
+        };
+        measure();
+
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        window.addEventListener('resize', measure);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener('resize', measure);
+            setDockHeight(0);
+        };
+    }, [active, setDockHeight]);
+
+    return ref;
+}
+
 /** 返回鍵。在玩法裡是回大廳，在大廳才是離開這一頁。 */
 function BackLink() {
     const t = useT();
@@ -149,6 +189,7 @@ export function Hud() {
 
     // 大廳不需要底部面板——那裡沒有東西可以操作，留著只會擋住機台卡片
     const inGame = scene !== null && scene !== 'lobby';
+    const dockRef = useDockMeasure(inGame);
 
     return (
         <div className="hud">
@@ -163,7 +204,7 @@ export function Hud() {
             <ErrorToast />
 
             {inGame && (
-                <footer className="dock">
+                <footer className="dock" ref={dockRef as React.RefObject<HTMLElement>}>
                     <div className="readouts">
                         <Balance />
                         <GameReadouts />
