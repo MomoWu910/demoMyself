@@ -73,6 +73,35 @@ canvas { display: block; touch-action: none; }
     transition: color 0.18s, border-color 0.18s;
 }
 .back:hover { color: var(--gold); border-color: rgba(255, 217, 61, 0.4); }
+/* 返回鍵在玩法裡是 <button>（回大廳），在大廳是 <a>（離開這一頁）。
+   兩者長得一樣，所以要把 button 的預設外觀抹掉 */
+button.back { cursor: pointer; font-weight: inherit; }
+
+/* 頂列右側可能同時放核對數字與連線狀態 */
+.top-right { display: flex; align-items: center; gap: 10px; }
+
+/* ---- 資源核對 ----
+   這一頁在架構上想證明的事就是這一行數字（見 core/module.ts），所以它一直掛在畫面上，
+   而不是藏在 console。等寬字讓數字跳動時不會整行左右晃。 */
+.meter {
+    font-family: var(--mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.03em;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    white-space: nowrap;
+    cursor: help;
+}
+.meter.ok { color: var(--good); border-color: rgba(79, 209, 139, 0.35); }
+.meter.warn { color: var(--hot); border-color: rgba(255, 77, 109, 0.45); }
+
+/* 窄畫面藏起來：頂列塞不下，而它是給人細看的資訊不是即時回饋 */
+@media (max-width: 560px) {
+    .meter { display: none; }
+}
 
 /* 語言鈕：i18n 掛進 #lang-slot，位置在這裡定。頂列右側留給連線狀態，所以往下錯開一列 */
 #lang-slot {

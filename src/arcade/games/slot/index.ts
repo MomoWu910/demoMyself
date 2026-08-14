@@ -62,8 +62,9 @@ export class SlotModule implements GameModule {
         // ---- 符號 atlas：進玩法時烘一次，之後只取 frame ----
         const atlas = bakeSymbolAtlas(ctx.app);
         // 底層那張圖要登記，卸載才會把 GPU 記憶體還回去；切出來的 frame 共用同一個 source，
-        // 各自 destroy 反而會重複釋放，所以只 track source 這一個
-        ctx.track(atlas.source);
+        // 各自 destroy 反而會重複釋放，所以只 track source 這一個。
+        // 第二個參數是關鍵：Texture.destroy() 預設**不會**釋放底層的 TextureSource
+        ctx.track(atlas.source, true);
 
         ctx.root.addChild(this.board);
         this.board.addChild(this.lineLayer);

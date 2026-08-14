@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useArcadeStore } from '../store';
 import { SlotControls, SlotReadouts } from './SlotPanel';
+import { BaccaratControls, BaccaratReadouts } from './BaccaratPanel';
 import { useT } from '../../i18n/useT';
 import { wireGoBack } from '../../shell/goBack';
 
@@ -64,54 +65,116 @@ function Balance() {
  * 手動點進去玩的時候才會發現。
  */
 function GameReadouts() {
-    const game = useArcadeStore((s) => s.game);
-    switch (game) {
+    const scene = useArcadeStore((s) => s.scene);
+    switch (scene) {
         case 'slot':
             return <SlotReadouts />;
         case 'baccarat':
+            return <BaccaratReadouts />;
+        case 'lobby':
         case null:
             return null;
     }
 }
 
 function GameControls() {
-    const game = useArcadeStore((s) => s.game);
-    switch (game) {
+    const scene = useArcadeStore((s) => s.scene);
+    switch (scene) {
         case 'slot':
             return <SlotControls />;
         case 'baccarat':
+            return <BaccaratControls />;
+        case 'lobby':
         case null:
             return null;
     }
 }
 
+/**
+ * 資源核對：**這一頁在架構上想證明的事，就是這一行數字**。
+ *
+ * 顯示的是上一次卸載時登記了幾個資源、漏了幾個，以及 renderer 現在握著幾個 texture
+ * source 對照剛開站時的基線。切個幾輪玩法再回大廳，基線那個數字應該回到原點——
+ * 那才是「玩法之間不互相汙染」的證據，而不是嘴上說說（見 core/module.ts）。
+ */
+function ResourceMeter() {
+    const t = useT();
+    const report = useArcadeStore((s) => s.lastDispose);
+    const scene = useArcadeStore((s) => s.lastDisposedScene);
+    const previous = useArcadeStore((s) => s.previousTexture);
+
+    if (!report || !scene) return null;
+
+    // 跟**同一個場景上一次**的數字比（見 store 的 lastTextureByScene）。
+    // 第一次卸載某個場景時沒得比，那時只顯示絕對值。
+    const drift = previous === null ? 0 : report.textureSources - previous;
+    const clean = report.leaked === 0 && drift <= 0;
+
+    return (
+        <span className={`meter${clean ? ' ok' : ' warn'}`} title={t('arcade.meter.hint')}>
+            {t('arcade.meter.label')} {report.tracked}
+            {' · '}
+            {t('arcade.meter.leaked')} {report.leaked}
+            {' · '}
+            tex {report.textureSources}
+            {previous === null ? '' : drift === 0 ? ' ±0' : ` ${drift > 0 ? '+' : ''}${drift}`}
+        </span>
+    );
+}
+
+/** 返回鍵。在玩法裡是回大廳，在大廳才是離開這一頁。 */
+function BackLink() {
+    const t = useT();
+    const scene = useArcadeStore((s) => s.scene);
+    const enter = useArcadeStore((s) => s.enter);
+
+    if (scene !== null && scene !== 'lobby') {
+        return (
+            <button type="button" className="back" onClick={() => enter?.('lobby')}>
+                {t('arcade.backLobby')}
+            </button>
+        );
+    }
+
+    return (
+        <a className="back" href="./index.html" ref={wireGoBack}>
+            {t('nav.backHome')}
+        </a>
+    );
+}
+
 export function Hud() {
     const t = useT();
+    const scene = useArcadeStore((s) => s.scene);
+
+    // 大廳不需要底部面板——那裡沒有東西可以操作，留著只會擋住機台卡片
+    const inGame = scene !== null && scene !== 'lobby';
 
     return (
         <div className="hud">
             <header className="top">
-                <a className="back" href="./index.html" ref={wireGoBack}>
-                    {t('nav.backHome')}
-                </a>
+                <BackLink />
                 <div className="top-right">
-                    <ConnectionBadge />
+                    <ResourceMeter />
+                    {inGame && <ConnectionBadge />}
                 </div>
             </header>
 
             <ErrorToast />
 
-            <footer className="dock">
-                <div className="readouts">
-                    <Balance />
-                    <GameReadouts />
-                </div>
+            {inGame && (
+                <footer className="dock">
+                    <div className="readouts">
+                        <Balance />
+                        <GameReadouts />
+                    </div>
 
-                <GameControls />
+                    <GameControls />
 
-                {/* 這一頁最該讓人知道的一件事，直接寫在面板上而不是藏在 README 裡 */}
-                <p className="note">{t('arcade.serverNote')}</p>
-            </footer>
+                    {/* 這一頁最該讓人知道的一件事，直接寫在面板上而不是藏在 README 裡 */}
+                    <p className="note">{t('arcade.serverNote')}</p>
+                </footer>
+            )}
         </div>
     );
 }

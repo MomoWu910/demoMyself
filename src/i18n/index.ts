@@ -574,6 +574,44 @@ export const DICT: Record<string, Entry> = {
         en: 'Outcomes come from a simulated server over a fake socket with real latency — the client only plays back a result it was given, never decides one.',
         zh: '盤面與賠付由模擬伺服器決定，經過一層帶真實延遲的假 socket 送來——前端只負責把收到的結果演出來，不參與輸贏判定。',
     },
+
+    // ---- 百家樂 ----
+    // 注區名稱。中文用單字是桌台慣例（桌面上位置有限，也讓路圖上的字跟注區對得起來）
+    'arcade.bac.player': { en: 'Player', zh: '閒' },
+    'arcade.bac.banker': { en: 'Banker', zh: '莊' },
+    'arcade.bac.tie': { en: 'Tie', zh: '和' },
+    'arcade.bac.playerPair': { en: 'P Pair', zh: '閒對' },
+    'arcade.bac.bankerPair': { en: 'B Pair', zh: '莊對' },
+    // 珠盤路格子裡的字。英文用單字母是國際牌桌的通用寫法
+    'arcade.bac.short.player': { en: 'P', zh: '閒' },
+    'arcade.bac.short.banker': { en: 'B', zh: '莊' },
+    'arcade.bac.short.tie': { en: 'T', zh: '和' },
+    'arcade.bac.chip': { en: 'Chip', zh: '籌碼' },
+    'arcade.bac.deal': { en: 'DEAL', zh: '發牌' },
+    'arcade.bac.dealing': { en: 'DEALING…', zh: '發牌中…' },
+    'arcade.bac.settling': { en: 'SETTLING…', zh: '結算中…' },
+    'arcade.bac.actions': { en: 'Table', zh: '桌面' },
+    'arcade.bac.clear': { en: 'Clear', zh: '清除' },
+    'arcade.bac.repeat': { en: 'Repeat', zh: '重複' },
+    'arcade.bac.totalBet': { en: 'This hand', zh: '本局押注' },
+    'arcade.bac.net': { en: 'Last hand', zh: '上一局' },
+    'arcade.bac.shoe': { en: 'Shoe', zh: '牌靴' },
+    'arcade.error.no_bet': { en: 'Place a bet first', zh: '請先下注' },
+
+    // ---- 大廳與資源核對 ----
+    'arcade.lobby.title': { en: 'ARCADE', zh: 'ARCADE' },
+    'arcade.lobby.slot': { en: 'Slot', zh: '老虎機' },
+    'arcade.lobby.slotDesc': { en: '5×3 reels · server-driven stops', zh: '五軸三列 · 停軸由伺服器決定' },
+    'arcade.lobby.baccarat': { en: 'Baccarat', zh: '百家樂' },
+    'arcade.lobby.baccaratDesc': { en: 'Four roadmaps · 8-deck shoe', zh: '四張路圖 · 八副牌靴' },
+    'arcade.backLobby': { en: '← Lobby', zh: '← 大廳' },
+    // 資源核對：這一頁在架構上想證明的事就是這一行數字，所以它一直掛在畫面上
+    'arcade.meter.label': { en: 'tracked', zh: '登記' },
+    'arcade.meter.leaked': { en: 'leaked', zh: '未回收' },
+    'arcade.meter.hint': {
+        en: 'Resources the last module registered, how many were still alive after unmount, and the renderer’s texture-source count compared with the previous time that same scene was unloaded. A one-off increase is the shared font atlas, which is global on purpose; a leak would climb on every single visit.',
+        zh: '上一個模組登記了幾個資源、卸載後還有幾個沒回收，以及 renderer 的 texture source 數對照「同一個場景上一次」的值。一次性的增加是共用的字體 atlas（那是刻意全域的）；真的漏會每進出一次就漲一階。',
+    },
 };
 
 const STORAGE_KEY = 'site-lang';

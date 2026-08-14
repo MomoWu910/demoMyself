@@ -1,6 +1,8 @@
 import { Application, Container, FillGradient, Graphics } from 'pixi.js';
-import { ModuleHost, type GameModule } from './module';
+import { ModuleHost, type GameModule, type ModuleId } from './module';
 import { SlotModule } from '../games/slot';
+import { BaccaratModule } from '../games/baccarat';
+import { LobbyModule } from '../lobby';
 import { useArcadeStore } from '../store';
 
 /**
@@ -17,8 +19,8 @@ const BG = 0x120a1e;
 export interface ArcadeStage {
     app: Application;
     host: ModuleHost;
-    /** 換玩法。會先把目前這款卸乾淨並核對資源，再掛下一款。 */
-    enter: (module: GameModule) => Promise<void>;
+    /** 換場景。會先把目前這個卸乾淨並核對資源，再掛下一個。 */
+    enter: (id: ModuleId) => Promise<void>;
     /** 拆掉整個舞台。回上一頁時不必呼叫（整頁導覽會連 context 一起丟），提供給熱重載用。 */
     destroy: () => void;
 }
@@ -96,24 +98,50 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
     document.addEventListener('visibilitychange', onVisibility);
 
     /**
-     * 進一款玩法。
+     * 建一個場景。
      *
-     * 這是 store 的 `game` 唯一的寫入點——**掛載完成才寫**，不是按下去就寫。
+     * 用 switch 而不是查表，是為了讓 `ModuleId` 加一個而這裡忘了補時**編譯就失敗**——
+     * 查表可以寫成 `map[id]?.()`，漏了一個會靜默地什麼都沒發生。
+     */
+    const create = (id: ModuleId): GameModule => {
+        switch (id) {
+            case 'lobby':
+                return new LobbyModule((game) => void enter(game));
+            case 'slot':
+                return new SlotModule();
+            case 'baccarat':
+                return new BaccaratModule();
+        }
+    };
+
+    /**
+     * 換場景。
+     *
+     * 這是 store 的 `scene` 唯一的寫入點——**掛載完成才寫**，不是按下去就寫。
      * 提早寫的話，HUD 會在新玩法還沒把 handler 註冊好之前就把它的面板畫出來，
      * 玩家看得到一顆按下去沒反應的按鈕。
      *
-     * 卸載的核對結果也一併送進 store，讓它出現在畫面上而不是只留在 console。
+     * 卸載的核對結果也一併送進 store，讓它出現在畫面上而不是只留在 console——
+     * 這一頁在架構上想證明的事，藏在 console 裡等於沒做。
      */
-    const enter = async (module: GameModule): Promise<void> => {
-        await host.switchTo(module);
+    const enter = async (id: ModuleId): Promise<void> => {
+        // 卸載的是「目前這個」，所以要在切換前記下它是誰——核對結果要掛在它頭上，
+        // 而不是掛在即將進場的那個（見 store 的 textureBaselines）
+        const leaving = host.getCurrent()?.id ?? null;
+
+        await host.switchTo(create(id));
+
         const store = useArcadeStore.getState();
-        store.setLastDispose(host.getLastReport());
-        store.setGame(module.id);
+        const report = host.getLastReport();
+        if (leaving && report) store.recordDispose(leaving, report);
+        store.setScene(id);
     };
 
-    await enter(new SlotModule());
+    useArcadeStore.getState().setEnter((id) => void enter(id));
 
-    return {
+    await enter('lobby');
+
+    const stage: ArcadeStage = {
         app,
         host,
         enter,
@@ -121,8 +149,17 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
             ro.disconnect();
             document.removeEventListener('visibilitychange', onVisibility);
             host.disposeCurrent();
-            useArcadeStore.getState().setGame(null);
+            const store = useArcadeStore.getState();
+            store.setScene(null);
+            store.setEnter(null);
             app.destroy(true, { children: true });
         },
     };
+
+    // 除錯用的入口，跟上面的 __PIXI_APP__ 同一個用途：讓人（或驗證腳本）能在
+    // console 裡直接切場景與讀 texture 數，不必真的去點畫面。
+    // 驗「進出玩法幾次之後有沒有回到基線」時特別需要——那件事沒辦法用眼睛看。
+    (globalThis as unknown as { __ARCADE__: ArcadeStage }).__ARCADE__ = stage;
+
+    return stage;
 }

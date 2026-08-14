@@ -24,6 +24,19 @@ export interface Disposable {
     readonly destroyed?: boolean;
 }
 
+/**
+ * `destroy()` 要帶什麼參數。
+ *
+ * 這個看似多餘的參數是實測逼出來的：**Pixi 的 `Texture.destroy()` 預設只丟掉 Texture
+ * 這層包裝，不釋放底層的 TextureSource**，也就是真正佔著 GPU 記憶體的那塊。玩法自己
+ * 烘出來的 atlas 若照預設回收，`leaked` 會漂亮地回報 0，而 renderer 握著的
+ * texture source 數量每進出一次就往上疊一階——那才是實際在漏的東西。
+ *
+ * 所以烘出來的貼圖要寫 `ctx.track(atlas.source, true)`，那個 `true` 就是
+ * 「連同底層一起還」。
+ */
+export type DestroyOptions = boolean | Record<string, boolean>;
+
 export interface ModuleContext {
     /** 這個模組的根容器。卸載時整棵連同子節點一起 destroy。 */
     readonly root: Container;
@@ -36,15 +49,28 @@ export interface ModuleContext {
     frame(fn: (ticker: Ticker) => void): void;
     /** 註冊 resize 回呼。卸載時自動移除；註冊當下不會立刻呼叫。 */
     onResize(fn: (w: number, h: number) => void): void;
-    /** 登記一個需要主動釋放的資源（texture、filter、自己 new 的 container…）。回傳原物件方便串接。 */
-    track<T extends Disposable>(obj: T): T;
+    /**
+     * 登記一個需要主動釋放的資源（texture、filter、自己 new 的 container…）。回傳原物件方便串接。
+     *
+     * 自己烘出來的貼圖要傳 `true`（見 DestroyOptions）——不傳的話 GPU 記憶體不會還。
+     */
+    track<T extends Disposable>(obj: T, destroyOptions?: DestroyOptions): T;
     /** 登記一個任意的收尾動作（清 timer、關 socket、kill tween）。 */
     onDispose(fn: () => void): void;
 }
 
+/**
+ * 舞台上可以掛的東西：玩法，加上大廳。
+ *
+ * 大廳跟玩法走**同一套契約**是刻意的。它可以只是 canvas 外的一層選單，但那樣
+ * 「回到空舞台」這個狀態就永遠不會發生，資源核對也就少了最乾淨的那個對照點——
+ * 大廳自己也守規矩的話，「大廳 → 玩法 → 回大廳」每一步都真的走過一次卸載。
+ */
+export type ModuleId = GameId | 'lobby';
+
 export interface GameModule {
-    /** 用 GameId 而不是 string：這個 id 會被 HUD 拿去決定掛哪一組面板，打錯字就靜默失效 */
-    readonly id: GameId;
+    /** 用 ModuleId 而不是 string：這個 id 會被 HUD 拿去決定掛哪一組面板，打錯字就靜默失效 */
+    readonly id: ModuleId;
     /** 建場。ctx 只在這個模組活著的期間有效，不要存到模組外面。 */
     mount(ctx: ModuleContext): void | Promise<void>;
 }
@@ -107,6 +133,11 @@ export class ModuleHost {
     public resize(w: number, h: number): void {
         this.ctx?.emitResize(w, h);
     }
+
+    /** renderer 目前握著幾個 texture source。開站時量一次當基線，見 countTextureSources。 */
+    public countTextures(): number {
+        return countTextureSources(this.app);
+    }
 }
 
 /** ModuleContext 的實作。只有 host 造得出來，模組拿到的是唯讀的那一面。 */
@@ -117,7 +148,7 @@ class InternalContext implements ModuleContext {
 
     private frames: Array<(t: Ticker) => void> = [];
     private resizes: Array<(w: number, h: number) => void> = [];
-    private tracked: Disposable[] = [];
+    private tracked: Array<{ obj: Disposable; options?: DestroyOptions }> = [];
     private disposers: Array<() => void> = [];
     private disposed = false;
 
@@ -137,8 +168,8 @@ class InternalContext implements ModuleContext {
         this.resizes.push(fn);
     }
 
-    public track<T extends Disposable>(obj: T): T {
-        if (!this.disposed) this.tracked.push(obj);
+    public track<T extends Disposable>(obj: T, options?: DestroyOptions): T {
+        if (!this.disposed) this.tracked.push({ obj, options });
         return obj;
     }
 
@@ -178,14 +209,19 @@ class InternalContext implements ModuleContext {
         this.disposers = [];
 
         this.root.removeFromParent();
-        // children: true 才會連同子節點一起拆；texture 不在這裡處理，交給下面的 tracked
-        this.root.destroy({ children: true });
+        // 三個選項都要開：
+        //   children      連同子節點一起拆
+        //   texture       Sprite／Text 身上那層 Texture
+        //   textureSource **真正佔著 GPU 記憶體的那塊**
+        // 少了最後一個，Text 每次都會留下自己的那張圖——一個模組進出五次就疊五份，
+        // 而 leaked 會一路回報 0，因為 destroy 確實被呼叫了，只是沒叫到底
+        this.root.destroy({ children: true, texture: true, textureSource: true });
 
         let leaked = 0;
-        for (const obj of this.tracked) {
+        for (const { obj, options } of this.tracked) {
             if (obj.destroyed) continue; // 已經隨場景樹一起走了
             try {
-                obj.destroy();
+                obj.destroy(options);
             } catch (err) {
                 console.error('[arcade] 資源回收失敗', err);
                 leaked++;
