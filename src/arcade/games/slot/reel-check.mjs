@@ -30,9 +30,8 @@ const out = buildSync({
     stdin: {
         contents: `
             export { Reel } from './games/slot/reel';
-            export { SYMBOLS } from './games/slot/rules';
+            export { SYMBOLS, REELS, ROWS } from './games/slot/rules';
             export { STOP_ORDERS, stopRanks } from './games/slot/stopOrder';
-            export { REELS, ROWS } from './net/protocol';
             export { clock } from './dev/stub-gsap.mjs';
             export { Texture } from './dev/stub-pixi.mjs';
         `,

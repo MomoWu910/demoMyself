@@ -1,5 +1,7 @@
-import { REELS, ROWS, type WinLine } from '../net/protocol';
-import { canSubstitute, LINE_COUNT, PAYLINES, PAYOUTS, Sym, SYMBOLS, WEIGHTS } from '../games/slot/rules';
+import type { SlotC2S, SlotS2C, WinLine } from '../net/games/slot';
+import type { GameServer } from './gameServer';
+import { Wallet } from './wallet';
+import { canSubstitute, LINE_COUNT, PAYLINES, PAYOUTS, REELS, ROWS, Sym, SYMBOLS, WEIGHTS } from '../games/slot/rules';
 
 /**
  * 「伺服器」端的老虎機邏輯：抽盤面、算賠付、記餘額。
@@ -11,16 +13,22 @@ import { canSubstitute, LINE_COUNT, PAYLINES, PAYOUTS, Sym, SYMBOLS, WEIGHTS } f
  * 隔著 socket，前端就只剩一條路可走：**等封包、照著演**。
  */
 
-/** 開場餘額。純 demo 數字。 */
-const START_BALANCE = 10000;
+export class SlotServer implements GameServer<SlotC2S, SlotS2C> {
+    public readonly id = 'slot' as const;
 
-export class SlotServer {
-    private balance = START_BALANCE;
+    /**
+     * 錢包不是自己生的，是外面給的（見 server/wallet.ts）——餘額屬於帳號不屬於這張桌。
+     *
+     * 預設值 `new Wallet()` 是給驗證腳本用的：rtp-check.mjs 會開好幾個 server 實例
+     * 各自試餘額邊界，共用錢包的話那些案例會互相汙染。正式流程由 fakeSocket 傳入共用的那一個。
+     */
+    private readonly wallet: Wallet;
 
     /** 權重表攤平成一支抽籤陣列，抽一次是 O(1)，不必每次累加權重 */
     private readonly bag: Sym[];
 
-    constructor() {
+    constructor(wallet: Wallet = new Wallet()) {
+        this.wallet = wallet;
         this.bag = [];
         for (const s of SYMBOLS) {
             for (let i = 0; i < WEIGHTS[s]; i++) this.bag.push(s);
@@ -28,7 +36,16 @@ export class SlotServer {
     }
 
     public getBalance(): number {
-        return this.balance;
+        return this.wallet.get();
+    }
+
+    /** 封包入口。握手由 fakeSocket 處理，這裡只認得老虎機自己的指令。 */
+    public handle(packet: SlotC2S): SlotS2C | null {
+        if (packet.type !== 'spin') return null;
+
+        const res = this.spin(packet.bet);
+        if ('error' in res) return { type: 'error', reason: res.error };
+        return { type: 'spinResult', ...res };
     }
 
     /**
@@ -39,16 +56,16 @@ export class SlotServer {
      */
     public spin(bet: number): { grid: number[][]; wins: WinLine[]; totalWin: number; balance: number } | { error: string } {
         if (!Number.isFinite(bet) || bet <= 0) return { error: 'invalid_bet' };
-        if (bet > this.balance) return { error: 'insufficient_balance' };
-
-        this.balance -= bet;
+        // 請款與餘額檢查是同一個動作（見 Wallet.debit）——分成「先問夠不夠再扣」的兩步，
+        // 中間就有一個窗口能讓另一筆請款插進來，兩把都通過檢查然後把餘額扣成負的
+        if (!this.wallet.debit(bet)) return { error: 'insufficient_balance' };
 
         const grid = this.rollGrid();
         const wins = this.evaluate(grid, bet / LINE_COUNT);
         const totalWin = wins.reduce((sum, w) => sum + w.amount, 0);
 
-        this.balance += totalWin;
-        return { grid, wins, totalWin, balance: this.balance };
+        this.wallet.credit(totalWin);
+        return { grid, wins, totalWin, balance: this.wallet.get() };
     }
 
     /** 每一格獨立抽。真的機台是每軸一條環狀帶，這裡簡化成獨立抽樣，期望值的形狀一樣。 */

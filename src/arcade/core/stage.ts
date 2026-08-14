@@ -1,5 +1,5 @@
 import { Application, Container, FillGradient, Graphics } from 'pixi.js';
-import { ModuleHost } from './module';
+import { ModuleHost, type GameModule } from './module';
 import { SlotModule } from '../games/slot';
 import { useArcadeStore } from '../store';
 
@@ -17,6 +17,8 @@ const BG = 0x120a1e;
 export interface ArcadeStage {
     app: Application;
     host: ModuleHost;
+    /** 換玩法。會先把目前這款卸乾淨並核對資源，再掛下一款。 */
+    enter: (module: GameModule) => Promise<void>;
     /** 拆掉整個舞台。回上一頁時不必呼叫（整頁導覽會連 context 一起丟），提供給熱重載用。 */
     destroy: () => void;
 }
@@ -93,16 +95,33 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
     };
     document.addEventListener('visibilitychange', onVisibility);
 
-    await host.switchTo(new SlotModule());
+    /**
+     * 進一款玩法。
+     *
+     * 這是 store 的 `game` 唯一的寫入點——**掛載完成才寫**，不是按下去就寫。
+     * 提早寫的話，HUD 會在新玩法還沒把 handler 註冊好之前就把它的面板畫出來，
+     * 玩家看得到一顆按下去沒反應的按鈕。
+     *
+     * 卸載的核對結果也一併送進 store，讓它出現在畫面上而不是只留在 console。
+     */
+    const enter = async (module: GameModule): Promise<void> => {
+        await host.switchTo(module);
+        const store = useArcadeStore.getState();
+        store.setLastDispose(host.getLastReport());
+        store.setGame(module.id);
+    };
+
+    await enter(new SlotModule());
 
     return {
         app,
         host,
+        enter,
         destroy: () => {
             ro.disconnect();
             document.removeEventListener('visibilitychange', onVisibility);
             host.disposeCurrent();
-            useArcadeStore.getState().setSpinHandler(null);
+            useArcadeStore.getState().setGame(null);
             app.destroy(true, { children: true });
         },
     };

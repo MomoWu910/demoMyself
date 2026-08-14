@@ -1,6 +1,6 @@
 import gsap from 'gsap';
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
-import { ROWS } from '../../net/protocol';
+import { ROWS } from './rules';
 import { Sym, SYMBOLS, WEIGHTS } from './rules';
 
 /**

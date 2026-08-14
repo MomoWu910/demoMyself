@@ -1,4 +1,5 @@
 import { Container, type Application, type Ticker } from 'pixi.js';
+import type { GameId } from '../net/protocol';
 
 /**
  * 玩法模組的契約——這一頁在架構上真正要證明的東西。
@@ -42,7 +43,8 @@ export interface ModuleContext {
 }
 
 export interface GameModule {
-    readonly id: string;
+    /** 用 GameId 而不是 string：這個 id 會被 HUD 拿去決定掛哪一組面板，打錯字就靜默失效 */
+    readonly id: GameId;
     /** 建場。ctx 只在這個模組活著的期間有效，不要存到模組外面。 */
     mount(ctx: ModuleContext): void | Promise<void>;
 }

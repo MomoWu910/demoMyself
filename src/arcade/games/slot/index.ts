@@ -2,10 +2,11 @@ import gsap from 'gsap';
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
-import { REELS, ROWS, type S2C, type WinLine } from '../../net/protocol';
+import type { SlotS2C, WinLine } from '../../net/games/slot';
 import { arcadeState, useArcadeStore } from '../../store';
 import { Reel } from './reel';
-import { PAYLINES, type Sym } from './rules';
+import { PAYLINES, REELS, ROWS, type Sym } from './rules';
+import { slotState, useSlotStore } from './store';
 import { stopRanks } from './stopOrder';
 import { bakeSymbolAtlas } from './symbols';
 
@@ -45,7 +46,7 @@ export class SlotModule implements GameModule {
     private board = new Container();
     private lineLayer = new Graphics();
     private winText: Text | null = null;
-    private socket: FakeSocket | null = null;
+    private socket: FakeSocket<'slot'> | null = null;
     private ctx: ModuleContext | null = null;
 
     /** 目前的格子尺寸。中獎線照它算座標——不能用 Container 的 bounds，那會被遮罩影響。 */
@@ -88,7 +89,8 @@ export class SlotModule implements GameModule {
         this.board.addChild(this.winText);
 
         // ---- 連線 ----
-        const socket = new FakeSocket({
+        // 一條連線對一張桌：這裡開，卸載時關（見 net/fakeSocket.ts）
+        const socket = new FakeSocket('slot', {
             onMessage: (p) => this.onPacket(p),
             onStateChange: (s) => useArcadeStore.getState().setConnection(s),
         });
@@ -96,8 +98,10 @@ export class SlotModule implements GameModule {
         ctx.onDispose(() => socket.close());
 
         // ---- 接上 React 的 SPIN 按鈕 ----
-        useArcadeStore.getState().setSpinHandler(() => this.requestSpin());
-        ctx.onDispose(() => useArcadeStore.getState().setSpinHandler(null));
+        useSlotStore.getState().setSpinHandler(() => this.requestSpin());
+        // 離桌時把這張桌的狀態整份清掉（押注、轉動中、上一把的贏分），
+        // 下次進來才不會看到上一輪的殘影
+        ctx.onDispose(() => useSlotStore.getState().reset());
 
         // ---- 每幀推進轉軸 ----
         ctx.frame((ticker) => {
@@ -114,12 +118,13 @@ export class SlotModule implements GameModule {
 
     /** 送出 spin。按鈕已經在 React 那側上鎖，這裡再擋一次是為了鍵盤等其他觸發路徑。 */
     private requestSpin(): void {
-        const st = arcadeState();
-        if (st.spinning || st.connection !== 'open') return;
+        const shell = arcadeState();
+        const slot = slotState();
+        if (slot.spinning || shell.connection !== 'open') return;
         // 本地先擋一次餘額不足，省掉一趟 RTT。**這不是在替代 server 的檢查**——
         // server 那邊仍會擋（見 slotServer.spin），這裡只是讓回饋即時。
-        if (st.bet > st.balance) {
-            st.setError('insufficient_balance');
+        if (slot.bet > shell.balance) {
+            shell.setError('insufficient_balance');
             return;
         }
 
@@ -127,22 +132,22 @@ export class SlotModule implements GameModule {
         this.lineLayer.clear();
         if (this.winText) this.winText.alpha = 0;
 
-        st.setSpinning(true);
-        st.setResult(0, []);
-        st.setError(null);
+        slot.setSpinning(true);
+        slot.setResult(0, []);
+        shell.setError(null);
 
         // 先起轉再送封包：真的機台就是這個順序，玩家按下去的當下轉軸就該動，
         // 不是等網路回來才動——那會有一段莫名其妙的延遲。
         // 起轉演法每把重讀，所以面板上切換完下一把就生效，不必重載玩法。
-        for (const r of this.reels) r.spin(st.spinStyle);
-        this.socket?.send({ type: 'spin', bet: st.bet });
+        for (const r of this.reels) r.spin(slot.spinStyle);
+        this.socket?.send({ type: 'spin', bet: slot.bet });
     }
 
-    private onPacket(p: S2C): void {
-        const st = arcadeState();
+    private onPacket(p: SlotS2C): void {
         switch (p.type) {
             case 'welcome':
-                st.setBalance(p.balance);
+            case 'balance':
+                arcadeState().setBalance(p.balance);
                 break;
 
             case 'spinResult':
@@ -150,8 +155,8 @@ export class SlotModule implements GameModule {
                 break;
 
             case 'error':
-                st.setError(p.reason);
-                st.setSpinning(false);
+                arcadeState().setError(p.reason);
+                slotState().setSpinning(false);
                 break;
         }
     }
@@ -164,15 +169,15 @@ export class SlotModule implements GameModule {
      */
     private async playResult(grid: number[][], wins: WinLine[], totalWin: number, balance: number): Promise<void> {
         // 順序演法每把重讀，跟起轉演法一樣，面板上切換完下一把就生效
-        const ranks = stopRanks(arcadeState().stopOrder, this.reels.length);
+        const ranks = stopRanks(slotState().stopOrder, this.reels.length);
         await Promise.all(this.reels.map((reel, i) => reel.stopAt(grid[i] as Sym[], ranks[i] * STOP_STAGGER)));
 
-        const st = arcadeState();
-        st.setBalance(balance);
-        st.setResult(totalWin, wins);
-        st.setSpinning(false);
+        const slot = slotState();
+        arcadeState().setBalance(balance);
+        slot.setResult(totalWin, wins);
+        slot.setSpinning(false);
 
-        if (wins.length > 0) this.showWins(wins, totalWin, st.bet);
+        if (wins.length > 0) this.showWins(wins, totalWin, slot.bet);
     }
 
     /** 畫中獎線、讓中獎的格子脈動、跳出贏分數字。 */

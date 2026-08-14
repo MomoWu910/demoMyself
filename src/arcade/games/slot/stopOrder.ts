@@ -1,4 +1,4 @@
-import { REELS } from '../../net/protocol';
+import { REELS } from './rules';
 
 /**
  * 停軸的順序演法。

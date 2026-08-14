@@ -1,8 +1,8 @@
 /**
- * 遊樂場的通訊協定。
+ * 遊樂場的**共用**通訊協定：不管玩哪一款都會用到的那幾種封包。
  *
  * 這頁沒有真的後端，但**協定這一層是照真的做的**，因為博弈前端有一條鐵律：
- * **輸贏不能由 client 決定**。轉軸要停在哪、賠多少，全部是伺服器算完告訴你的，
+ * **輸贏不能由 client 決定**。轉軸要停在哪、牌怎麼發、賠多少，全部是伺服器算完告訴你的，
  * client 只負責把已經確定的結果演得好看。
  *
  * 這條規則不只是合規要求，它會**倒過來決定前端怎麼寫**：
@@ -10,45 +10,32 @@
  * 兩者的實作差很多（見 games/slot/reel.ts 的 stopAt）。把假 server 做出來，
  * 就是為了讓這一頁的資料流跟真的一樣，而不是寫一個看起來像但骨子裡是本地亂數的東西。
  *
+ * **玩法專屬的封包不放這裡**，各自住在 net/games/<玩法>.ts。這個切法的理由是
+ * 加第二款玩法時最容易犯的錯：把所有封包塞進同一個 union，於是老虎機的程式碼看得到
+ * 百家樂的欄位、`switch` 少寫一個 case 也不會被型別擋下來。分開之後，每款玩法的
+ * socket 只認得自己那一組封包加上這裡的共用部分。
+ *
  * C2S = client to server，S2C = server to client。
  */
 
-/** 客戶端送出的指令 */
-export type C2S =
-    | { type: 'hello' }
-    | { type: 'spin'; bet: number };
+/** 遊樂場裡有哪些玩法。大廳的清單、socket 的路由、store 的目前玩法都認這個。 */
+export type GameId = 'slot' | 'baccarat';
 
-/** 一條中獎線的結算明細 */
-export interface WinLine {
-    /** 中的是第幾條賠付線（索引到 PAYLINES） */
-    line: number;
-    /** 中的符號 id */
-    symbol: number;
-    /** 從最左邊算起連了幾格 */
-    count: number;
-    /** 這條線賠多少 */
-    amount: number;
-}
+/** 每款玩法都會送的指令 */
+export type CommonC2S = { type: 'hello' };
 
-/** 伺服器送回的封包 */
-export type S2C =
+/** 每款玩法都可能收到的封包 */
+export type CommonS2C =
+    /** 握手完成，順便把餘額帶回來 */
     | { type: 'welcome'; balance: number }
-    | {
-          type: 'spinResult';
-          /**
-           * 盤面：`grid[reel][row]` = 符號 id。
-           *
-           * **這是轉軸唯一的真相來源**——client 收到它才知道要停在哪，
-           * 不是轉完了才回頭問結果。
-           */
-          grid: number[][];
-          wins: WinLine[];
-          totalWin: number;
-          /** 結算後的餘額。不讓 client 自己加減，避免兩邊算出不同的數 */
-          balance: number;
-      }
+    /**
+     * 餘額變動。
+     *
+     * 跟各玩法自己的結算封包（例如 slot 的 spinResult 裡也有 balance）並存不是重複——
+     * 結算封包裡的餘額是「這一把算完的結果」，這一則是「錢包現在是多少」。真實系統裡
+     * 錢包會被玩法以外的事件動到（儲值、活動贈點、另一個裝置在玩），所以它得有自己的
+     * 通知管道，而不是只能靠玩家再玩一把才知道自己有多少錢。
+     */
+    | { type: 'balance'; balance: number }
+    /** 錯誤代碼（不是給人看的句子——翻譯在 UI 那側才發生，見 ui/Hud.tsx） */
     | { type: 'error'; reason: string };
-
-/** 盤面尺寸。5×3 是最經典的配置，賠付線的設計也跟著它走。 */
-export const REELS = 5;
-export const ROWS = 3;

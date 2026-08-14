@@ -1,14 +1,19 @@
 import { useEffect } from 'react';
-import { BETS, SPIN_STYLES, STOP_ORDERS, useArcadeStore } from '../store';
+import { useArcadeStore } from '../store';
+import { SlotControls, SlotReadouts } from './SlotPanel';
 import { useT } from '../../i18n/useT';
 import { wireGoBack } from '../../shell/goBack';
 
 /**
- * canvas 外的操作面板。
+ * canvas 外的**外殼**：每一款玩法都在的那一圈。
  *
- * 分工跟 Shader Lab 一樣：**React 管 canvas 外，Pixi 管 canvas 內**，中間只透過 store 溝通
- * （見 ../store.ts）。這樣寫的實際好處是這一支完全不需要知道玩法是誰、有沒有掛載——
- * SPIN 鈕呼叫的是 store 裡的 handler，玩法卸載時 handler 變 null，按鈕自動失效。
+ * 分工跟 Shader Lab 一樣：**React 管 canvas 外，Pixi 管 canvas 內**，中間只透過 store
+ * 溝通（見 ../store.ts）。這一頁多一層——canvas 裡的玩法會整批換掉，所以殼也得跟著分：
+ * 返回鍵、連線徽章、餘額、錯誤提示不管玩什麼都在，換玩法時**不該重新掛載**；
+ * 押注額、SPIN 鍵這種只有轉軸才有的東西住在玩法自己的面板（見 SlotPanel.tsx）。
+ *
+ * 底部面板留了兩個插槽——讀數與控制——由目前玩法填。殼不知道那些插槽裡是什麼，
+ * 玩法也不知道自己被放在哪，兩邊只認 store 裡的 `game`。
  */
 
 function ConnectionBadge() {
@@ -39,131 +44,49 @@ function ErrorToast() {
     return <div className="toast" role="alert">{t(`arcade.error.${error}`)}</div>;
 }
 
-function BetPicker() {
+/** 餘額。跨玩法延續，所以它屬於殼而不屬於任何一張桌（見 server/wallet.ts）。 */
+function Balance() {
     const t = useT();
-    const bet = useArcadeStore((s) => s.bet);
-    const setBet = useArcadeStore((s) => s.setBet);
-    const spinning = useArcadeStore((s) => s.spinning);
-
+    const balance = useArcadeStore((s) => s.balance);
     return (
-        <div className="bet">
-            <span className="cap">{t('arcade.bet')}</span>
-            <div className="bet-row">
-                {BETS.map((b) => (
-                    <button
-                        key={b}
-                        type="button"
-                        className={`chip${b === bet ? ' on' : ''}`}
-                        // 轉動中不讓改押注：這一把的押注已經送出去了，改了畫面會跟伺服器結算的不一致
-                        disabled={spinning}
-                        onClick={() => setBet(b)}
-                    >
-                        {b}
-                    </button>
-                ))}
-            </div>
+        <div className="stat">
+            <span className="cap">{t('arcade.balance')}</span>
+            <strong className="val">{balance.toLocaleString()}</strong>
         </div>
     );
 }
 
 /**
- * 表演選項的切換（起轉演法、停軸順序）。
+ * 目前玩法的讀數與控制。
  *
- * 放在面板上而不是寫死在程式裡，是因為手感這種東西**講不清楚，要當場按過才知道**——
- * 兩種起轉之間差的只有那 0.2 秒的蓄力，用文字描述遠不如按兩次來得直接。
- * 這些選項都不影響輸贏（盤面照樣是 server 算的），所以轉動中也讓改，下一把生效。
+ * 用 switch 而不是查表，是為了讓 `GameId` 加一款而這裡忘了補時**編譯就失敗**——
+ * 查表可以寫成 `map[game] ?? null`，漏了一款會靜默地顯示空面板，那種錯只有在
+ * 手動點進去玩的時候才會發現。
  */
-function StylePicker<T extends string>({
-    area,
-    label,
-    options,
-    value,
-    onPick,
-    tKey,
-}: {
-    /** 這一組在面板格線上佔哪一列（見 style.css 的 .dock） */
-    area: 'spin-style' | 'stop-order';
-    label: string;
-    options: readonly T[];
-    value: T;
-    onPick: (v: T) => void;
-    /** 選項的翻譯字首，跟選項值接起來就是字典的 key */
-    tKey: string;
-}) {
-    const t = useT();
-
-    return (
-        <div className={`style ${area}`}>
-            <span className="cap">{t(label)}</span>
-            <div className="style-row">
-                {options.map((o) => (
-                    <button
-                        key={o}
-                        type="button"
-                        className={`chip${o === value ? ' on' : ''}`}
-                        onClick={() => onPick(o)}
-                    >
-                        {t(`${tKey}.${o}`)}
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
+function GameReadouts() {
+    const game = useArcadeStore((s) => s.game);
+    switch (game) {
+        case 'slot':
+            return <SlotReadouts />;
+        case 'baccarat':
+        case null:
+            return null;
+    }
 }
 
-function SpinStylePicker() {
-    const value = useArcadeStore((s) => s.spinStyle);
-    const onPick = useArcadeStore((s) => s.setSpinStyle);
-    return (
-        <StylePicker
-            area="spin-style"
-            label="arcade.spinStyle"
-            options={SPIN_STYLES}
-            value={value}
-            onPick={onPick}
-            tKey="arcade.style"
-        />
-    );
-}
-
-function StopOrderPicker() {
-    const value = useArcadeStore((s) => s.stopOrder);
-    const onPick = useArcadeStore((s) => s.setStopOrder);
-    return (
-        <StylePicker
-            area="stop-order"
-            label="arcade.stopOrder"
-            options={STOP_ORDERS}
-            value={value}
-            onPick={onPick}
-            tKey="arcade.order"
-        />
-    );
+function GameControls() {
+    const game = useArcadeStore((s) => s.game);
+    switch (game) {
+        case 'slot':
+            return <SlotControls />;
+        case 'baccarat':
+        case null:
+            return null;
+    }
 }
 
 export function Hud() {
     const t = useT();
-    const balance = useArcadeStore((s) => s.balance);
-    const lastWin = useArcadeStore((s) => s.lastWin);
-    const spinning = useArcadeStore((s) => s.spinning);
-    const connection = useArcadeStore((s) => s.connection);
-    const spinHandler = useArcadeStore((s) => s.spinHandler);
-
-    const canSpin = !!spinHandler && !spinning && connection === 'open';
-
-    // 空白鍵也能轉——長時間玩的人不會一直去點按鈕
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => {
-            if (e.code !== 'Space' || e.repeat) return;
-            const el = document.activeElement;
-            // 焦點在按鈕上時讓瀏覽器原生行為處理，否則會觸發兩次
-            if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement) return;
-            e.preventDefault();
-            if (canSpin) spinHandler?.();
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [canSpin, spinHandler]);
 
     return (
         <div className="hud">
@@ -180,26 +103,11 @@ export function Hud() {
 
             <footer className="dock">
                 <div className="readouts">
-                    <div className="stat">
-                        <span className="cap">{t('arcade.balance')}</span>
-                        <strong className="val">{balance.toLocaleString()}</strong>
-                    </div>
-                    <div className="stat">
-                        <span className="cap">{t('arcade.win')}</span>
-                        <strong className={`val${lastWin > 0 ? ' hit' : ''}`}>
-                            {lastWin > 0 ? `+${lastWin.toLocaleString()}` : '—'}
-                        </strong>
-                    </div>
+                    <Balance />
+                    <GameReadouts />
                 </div>
 
-                <BetPicker />
-
-                <button type="button" className="spin" disabled={!canSpin} onClick={() => spinHandler?.()}>
-                    {spinning ? t('arcade.spinning') : t('arcade.spin')}
-                </button>
-
-                <SpinStylePicker />
-                <StopOrderPicker />
+                <GameControls />
 
                 {/* 這一頁最該讓人知道的一件事，直接寫在面板上而不是藏在 README 裡 */}
                 <p className="note">{t('arcade.serverNote')}</p>

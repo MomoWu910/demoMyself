@@ -1,8 +1,11 @@
-import type { C2S, S2C } from './protocol';
+import type { CommonC2S, CommonS2C, GameId } from './protocol';
+import type { SlotC2S, SlotS2C } from './games/slot';
+import type { GameServer } from '../server/gameServer';
 import { SlotServer } from '../server/slotServer';
+import { sessionWallet } from '../server/wallet';
 
 /**
- * 假的遊戲連線：把 server/slotServer.ts 藏在一層仿 WebSocket 的介面後面。
+ * 假的遊戲連線：把玩法 server 藏在一層仿 WebSocket 的介面後面。
  *
  * **為什麼要繞這一圈**，而不是讓前端直接呼叫 `slotServer.spin()`：
  *
@@ -12,6 +15,10 @@ import { SlotServer } from '../server/slotServer';
  *    明確狀態：按鈕鎖住、轉軸先空轉、不能連按兩次。把延遲做進來，前端就被迫處理這些，
  *    而不是寫成同步呼叫、上線才發現整套互動要重做。
  * 3. **失敗是常態**。餘額不足、封包錯誤都走同一條 error 路徑回來，前端只有一個地方要處理。
+ *
+ * **一條連線對一張桌**：玩法掛載時開，卸載時關（見 core/module.ts 的資源契約）。
+ * 這跟真的大廳一樣——進桌開一條 game 連線，離桌就斷。跨桌延續的只有錢包，而錢包
+ * 活在連線之外（server/wallet.ts），所以從老虎機贏的錢走到百家樂桌還在。
  *
  * 沒有做的是重連與封包佇列——那是真專案的事，這裡做了只會讓 demo 的重點模糊掉。
  */
@@ -25,16 +32,67 @@ const RTT_MAX = 320;
 /** 連線握手要多久。比一般封包久一點，開場才看得到「連線中」這個狀態。 */
 const CONNECT_MS = 420;
 
-export interface FakeSocketHandlers {
+export interface FakeSocketHandlers<Out> {
     onOpen?: () => void;
-    onMessage: (packet: S2C) => void;
+    onMessage: (packet: Out) => void;
     onStateChange?: (state: SocketState) => void;
 }
 
-export class FakeSocket {
+/**
+ * 玩法 id → 那款玩法的封包型別。
+ *
+ * 有了這張表，玩法端只要寫 `new FakeSocket('slot', …)`，收發的封包型別就自己推出來了，
+ * 不必手動帶兩個型別參數（帶錯了還是會編譯過，那種錯最難查）。加一款玩法時這裡補一列，
+ * 忘了補就會在 `createServer` 的 switch 上編譯失敗。
+ */
+export interface GameProtocols {
+    slot: { c2s: SlotC2S; s2c: SlotS2C };
+    // 百家樂的封包還沒定，先掛共用的那組佔位；做 baccaratServer 時
+    // 補一支 net/games/baccarat.ts 換掉這一列
+    baccarat: { c2s: CommonC2S; s2c: CommonS2C };
+}
+
+export type C2SOf<G extends GameId> = GameProtocols[G]['c2s'];
+export type S2COf<G extends GameId> = GameProtocols[G]['s2c'];
+
+/**
+ * 握手回覆。每款玩法的 `S2COf<G>` 都含 CommonS2C，所以這個封包對每一款都成立，
+ * 但 TS 沒辦法從泛型參數推導出這件事，只能在這裡宣告一次。
+ */
+function welcome<G extends GameId>(): S2COf<G> {
+    return { type: 'welcome', balance: sessionWallet.get() } as S2COf<G>;
+}
+
+/**
+ * 開哪一款玩法就接哪一個 server。
+ *
+ * 共用的那個錢包在這裡才被傳進去——玩法 server 自己不知道要去哪裡拿錢包，
+ * 也就不可能繞過它私自加減餘額。
+ *
+ * 回傳值需要一次 cast：`game` 的值是**執行期**才知道的，而回傳型別由**編譯期**的 `G`
+ * 決定，這個接縫沒辦法讓 TS 自己對上。整支檔案就只有這裡一處，換來的是外面所有
+ * 玩法程式碼都拿得到精確型別。
+ */
+function createServer<G extends GameId>(game: G): GameServer<C2SOf<G>, S2COf<G>> {
+    switch (game) {
+        case 'slot':
+            return new SlotServer(sessionWallet) as unknown as GameServer<C2SOf<G>, S2COf<G>>;
+        case 'baccarat':
+            throw new Error('[arcade] 百家樂 server 還沒做');
+        default:
+            throw new Error(`[arcade] 未知的玩法：${String(game)}`);
+    }
+}
+
+/**
+ * 一條連線＝一張桌。型別參數是**玩法 id**，收發的封包型別由 GameProtocols 查出來——
+ * 老虎機的 `onMessage` 若 switch 到百家樂才有的封包型別，會當場編譯失敗，
+ * 而不是等到執行期靜默地什麼都不做。
+ */
+export class FakeSocket<G extends GameId> {
     private state: SocketState = 'connecting';
-    private server = new SlotServer();
-    private handlers: FakeSocketHandlers;
+    private server: GameServer<C2SOf<G>, S2COf<G>>;
+    private handlers: FakeSocketHandlers<S2COf<G>>;
 
     /**
      * 所有排程中的 timer。close() 要能把它們全部清掉——
@@ -43,12 +101,13 @@ export class FakeSocket {
      */
     private timers = new Set<number>();
 
-    constructor(handlers: FakeSocketHandlers) {
+    constructor(game: G, handlers: FakeSocketHandlers<S2COf<G>>) {
+        this.server = createServer(game);
         this.handlers = handlers;
         this.later(() => {
             this.setState('open');
             this.handlers.onOpen?.();
-            this.emit({ type: 'welcome', balance: this.server.getBalance() });
+            this.emit(welcome());
         }, CONNECT_MS);
     }
 
@@ -56,7 +115,7 @@ export class FakeSocket {
         return this.state;
     }
 
-    public send(packet: C2S): void {
+    public send(packet: C2SOf<G>): void {
         if (this.state !== 'open') return;
 
         // 送出與回應各算一半 RTT，讓「送出去」與「收回來」都真的花時間
@@ -70,23 +129,25 @@ export class FakeSocket {
         this.timers.clear();
     }
 
-    private handle(packet: C2S): void {
+    /**
+     * 握手在這裡就地回覆，其餘轉給玩法 server。
+     *
+     * 這樣切是為了讓「加一款玩法」的成本只剩玩法本身：hello/welcome 是每款都一樣的樣板，
+     * 抄第二遍就會有第二個地方可以寫錯。
+     */
+    private handle(packet: C2SOf<G>): void {
         if (this.state !== 'open') return;
 
-        switch (packet.type) {
-            case 'hello':
-                this.emit({ type: 'welcome', balance: this.server.getBalance() });
-                break;
-            case 'spin': {
-                const res = this.server.spin(packet.bet);
-                if ('error' in res) this.emit({ type: 'error', reason: res.error });
-                else this.emit({ type: 'spinResult', ...res });
-                break;
-            }
+        if ((packet as CommonC2S).type === 'hello') {
+            this.emit(welcome());
+            return;
         }
+
+        const reply = this.server.handle(packet);
+        if (reply) this.emit(reply);
     }
 
-    private emit(packet: S2C): void {
+    private emit(packet: S2COf<G>): void {
         if (this.state !== 'open') return;
         this.handlers.onMessage(packet);
     }
