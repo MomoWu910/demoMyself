@@ -4,7 +4,8 @@ import { bakeCardAtlas, CARD_ASPECT, type CardAtlas } from '../../common/cards/a
 import { CardView } from '../../common/cards/CardView';
 import { bakeChipAtlas, type ChipAtlas } from '../../common/chips/atlas';
 import { BetSpotView } from '../../common/chips/BetSpotView';
-import { RoadGrid } from '../../common/roadmap/RoadGrid';
+import { ScrollableRoad } from '../../common/roadmap/ScrollableRoad';
+import { TOP_BAR } from '../../core/layout';
 import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import type { BaccaratS2C } from '../../net/games/baccarat';
@@ -35,6 +36,22 @@ import { BET_SPOTS, PAYOUTS, type BetSpot, type Card, type Round } from './rules
  */
 const ROAD_RATIO = 0.26;
 const ROAD_MAX = 172;
+
+/**
+ * 路圖讓步的底線。
+ *
+ * 六列的格子在這個高度大約 6px 見方——還看得出紅藍與拖尾的走向。再低就只剩一片網格，
+ * 那時它已經不是資訊了，留著只是在佔位置。
+ */
+const ROAD_MIN = 64;
+
+/**
+ * 牌「看得清點數」的寬度，也是路圖讓步的目標。
+ *
+ * 不是隨手抓的：牌角的點數字級跟著牌寬縮放，低於這個寬度時在手機上要湊近才讀得出來。
+ * 排版反過來從它推算路圖能佔多高（見 layout 的 roadForComfort）。
+ */
+const CARD_COMFORT_W = 64;
 
 /** 結算後停留多久才回到下注階段。夠看清楚牌與賠付，又不會讓人等到不耐煩。 */
 const RESULT_HOLD = 2.6;
@@ -67,11 +84,11 @@ export class BaccaratModule implements GameModule {
     private readonly cardLayer = new Container();
 
     private readonly roads = {
-        bead: new RoadGrid({ rows: ROAD_ROWS }),
-        big: new RoadGrid({ rows: ROAD_ROWS }),
-        bigEye: new RoadGrid({ rows: ROAD_ROWS }),
-        small: new RoadGrid({ rows: ROAD_ROWS }),
-        cockroach: new RoadGrid({ rows: ROAD_ROWS }),
+        bead: new ScrollableRoad({ rows: ROAD_ROWS }),
+        big: new ScrollableRoad({ rows: ROAD_ROWS }),
+        bigEye: new ScrollableRoad({ rows: ROAD_ROWS }),
+        small: new ScrollableRoad({ rows: ROAD_ROWS }),
+        cockroach: new ScrollableRoad({ rows: ROAD_ROWS }),
     };
 
     private spots = new Map<BetSpot, BetSpotView>();
@@ -142,7 +159,7 @@ export class BaccaratModule implements GameModule {
         // ---- 面板高度變了就重排 ----
         // 換語言、換玩法都可能讓面板長高或變矮，canvas 這側得跟著讓位（見 store 的 dockHeight）
         const unsubDock = useArcadeStore.subscribe((s, prev) => {
-            if (s.dockHeight !== prev.dockHeight && !this.dead) {
+            if (s.dockInset !== prev.dockInset && !this.dead) {
                 this.layout(ctx.screen.width, ctx.screen.height);
             }
         });
@@ -433,100 +450,215 @@ export class BaccaratModule implements GameModule {
             tie: t('arcade.bac.short.tie'),
         };
 
-        this.roads.bead.setMarks(beadMarks(history, this.roadCols.bead, labels));
-        this.roads.big.setMarks(bigRoadMarks(road, this.roadCols.big));
-        this.roads.bigEye.setMarks(derivedMarks(road, 'bigEye', this.roadCols.derived));
-        this.roads.small.setMarks(derivedMarks(road, 'small', this.roadCols.derived));
-        this.roads.cockroach.setMarks(derivedMarks(road, 'cockroach', this.roadCols.derived));
+        // 餵的是**整靴的完整資料**，不再按可用寬度裁切——看得到幾欄由捲動視窗決定
+        // （見 common/roadmap/ScrollableRoad 與 roadView 開頭的說明）
+        this.roads.bead.setMarks(beadMarks(history, labels));
+        this.roads.big.setMarks(bigRoadMarks(road));
+        this.roads.bigEye.setMarks(derivedMarks(road, 'bigEye'));
+        this.roads.small.setMarks(derivedMarks(road, 'small'));
+        this.roads.cockroach.setMarks(derivedMarks(road, 'cockroach'));
     }
-
-    /** 每張路目前畫得下幾欄。排版時算好，推路圖時用來裁切 */
-    private roadCols = { bead: 12, big: 24, derived: 12 };
 
     // ---- 排版 ----
 
+    /**
+     * 兩套版面，依畫面形狀分派。
+     *
+     * 手機橫放（矮且寬）**不能只是把直式的比例調小**：那裡扣掉頂列與一條橫躺的操作面板
+     * 只剩 173px，要塞牌、五個注區、五張路單，三段疊著放在數學上就是不夠。
+     * 所以那個尺寸整個換一套——面板直立到右側（見 style.css 的橫版區塊），
+     * 路單橫躺到最底，中間留給注區，上方整片留給發牌。
+     *
+     * 判準跟 CSS 與 ui/useIsCompact.ts 的 LANDSCAPE_DOCK_QUERY 是同一組數字。
+     * 用畫面比例判斷而不是等面板回報 inset，第一次排版就會走對分支。
+     */
     private layout(w: number, h: number): void {
+        if (h <= 560 && w >= h) this.layoutLandscape(w, h);
+        else this.layoutStacked(w, h);
+    }
+
+    /**
+     * 直式與桌面：路圖在上、牌在中、注區在下、操作面板貼底。
+     */
+    private layoutStacked(w: number, h: number): void {
+        // 「窄」與「矮」是**兩件不同的事**，各自要縮的東西也不同：窄要縮字與注區寬度，
+        // 矮要縮注區高度。原本只有一個 `narrow` 同時管兩者，於是手機直式（窄但一點都不矮）
+        // 被套上了為橫放設計的矮版注區，白白把垂直空間讓掉
         const narrow = w < 760;
-
-        // ---- 路圖區 ----
-        const roadH = Math.min(h * ROAD_RATIO, ROAD_MAX);
-        const roadW = Math.min(w - 24, 900);
-        const roadX = (w - roadW) / 2;
-        const roadY = 12;
-
-        // 上排（珠盤路 + 大路）拿六成高度，下排三張衍生路分剩下的
-        const topH = roadH * 0.58;
-        const botH = roadH - topH - 6;
-        const topCell = topH / ROAD_ROWS;
-        const botCell = botH / ROAD_ROWS;
-
-        const beadW = Math.min(roadW * 0.3, topCell * 12);
-        const beadCols = Math.max(4, Math.floor(beadW / topCell));
-        const bigCols = Math.max(6, Math.floor((roadW - beadCols * topCell - 8) / topCell));
-        const derivedCols = Math.max(4, Math.floor((roadW / 3 - 6) / botCell));
-
-        this.roadCols = { bead: beadCols, big: bigCols, derived: derivedCols };
-
-        this.roads.bead.setLayout(topCell, beadCols);
-        this.roads.bead.position.set(roadX, roadY);
-        this.roads.big.setLayout(topCell, bigCols);
-        this.roads.big.position.set(roadX + beadCols * topCell + 8, roadY);
-
-        const derivedW = derivedCols * botCell;
-        const derivedY = roadY + topH + 6;
-        this.roads.bigEye.setLayout(botCell, derivedCols);
-        this.roads.bigEye.position.set(roadX, derivedY);
-        this.roads.small.setLayout(botCell, derivedCols);
-        this.roads.small.position.set(roadX + derivedW + 6, derivedY);
-        this.roads.cockroach.setLayout(botCell, derivedCols);
-        this.roads.cockroach.position.set(roadX + (derivedW + 6) * 2, derivedY);
-
-        this.updateRoads();
+        const short = h < 560;
+        const portrait = h > w * 1.15;
 
         // ---- 下注區 ----
+        // **先算它**，因為它是唯一位置固定的一段：從畫面底往上長，只跟操作面板的高度有關，
+        // 不受上面兩段影響。有了它的上緣，才知道路圖與牌區總共能分多少（見下面的 roadH）
         const betW = Math.min(w * 0.94, 720);
         const betX = (w - betW) / 2;
         const gap = 8;
-        const smallH = narrow ? 46 : 54;
-        const bigH = narrow ? 60 : 72;
+        // 縮高度看的是**矮**不是窄：手機直式再窄，垂直方向也有的是空間，
+        // 把注區壓矮只會讓最常被點的兩區變得難點
+        const smallH = short ? 44 : 54;
+        const bigH = short ? 58 : 72;
         // 讓開畫面下緣的操作面板。高度是 HUD 那側**實測**回報的（見 store 的 dockHeight）——
         // 面板高度會隨語言、玩法、視窗寬度變，寫死的話總有一種組合會讓莊閒兩個大注區
         // 被蓋掉一半，而它們正是最常被點的兩區。store 還沒回報時退回一個保守值
-        const dock = arcadeState().dockHeight || (narrow ? 250 : 180);
+        const dock = arcadeState().dockInset.bottom || (narrow ? 250 : 180);
         const betBottom = h - dock - 10;
         const bigY = betBottom - bigH;
         const smallY = bigY - smallH - gap;
 
-        const third = (betW - gap * 2) / 3;
-        this.place('playerPair', betX, smallY, third, smallH);
-        this.place('tie', betX + third + gap, smallY, third, smallH);
-        this.place('bankerPair', betX + (third + gap) * 2, smallY, third, smallH);
+        this.placeBets(betX, betW, smallY, bigY, smallH, bigH, gap);
 
-        const half = (betW - gap) / 2;
-        this.place('player', betX, bigY, half, bigH);
-        this.place('banker', betX + half + gap, bigY, half, bigH);
+        // ---- 路圖區 ----
+        // 豎屏時右上角有語言鈕，路圖得整個往下讓——不讓的話被壓住的正好是最右邊那幾欄，
+        // 而那是最新的幾局，也就是最常被看的部分
+        const roadY = portrait ? TOP_BAR + 24 : 12;
+
+        // 「路圖是參考資訊，牌才是主角，所以路圖先讓步」——這句話原本只寫在 ROAD_RATIO 的
+        // 註解裡，實際的程式卻是路圖照比例吃滿、牌撿剩下的。豎屏就是這個落差爆出來的地方：
+        // 垂直空間要分給三段，路圖照橫屏的比例吃完，牌只剩 47px，點數根本讀不出來。
+        //
+        // 所以改成**先問牌**：算出「要讓牌長到看得清點數，路圖最多能佔多高」，路圖就縮到那裡。
+        // 空間本來就夠的時候（桌機、iPad 直式）這個上限比 ROAD_MAX 大，等於沒有作用——
+        // 路圖只在真的會壓到牌的時候才讓步，不是一律縮小。
+        const roadIdeal = Math.min((h - roadY) * ROAD_RATIO, ROAD_MAX);
+        // 由牌區的高度公式反解（見下面 cardW 的第 2 條）：
+        // cardW * 2.5 = smallY - (roadY + roadH + 14) - 14 - TOTAL_LABEL_H
+        const roadForComfort = smallY - roadY - 28 - TOTAL_LABEL_H - CARD_COMFORT_W * 2.5;
+        // 讓步有底線：格子小到看不出顏色與拖尾，路圖就不再是資訊而只是一片網格
+        const roadH = Math.max(ROAD_MIN, Math.min(roadIdeal, roadForComfort));
+        const roadW = Math.min(w - 24, 900);
+        const roadX = (w - roadW) / 2;
+
+        // 上排（珠盤路 + 大路）拿六成高度，下排三張衍生路分剩下的
+        const topH = roadH * 0.58;
+        const botH = roadH - topH - 6;
+        const beadW = Math.min(roadW * 0.3, (topH / ROAD_ROWS) * 12);
+
+        this.roads.bead.setViewport(topH / ROAD_ROWS, beadW, topH);
+        this.roads.bead.position.set(roadX, roadY);
+        this.roads.big.setViewport(topH / ROAD_ROWS, roadW - beadW - 8, topH);
+        this.roads.big.position.set(roadX + beadW + 8, roadY);
+
+        const derivedW = (roadW - 12) / 3;
+        const derivedY = roadY + topH + 6;
+        this.roads.bigEye.setViewport(botH / ROAD_ROWS, derivedW, botH);
+        this.roads.bigEye.position.set(roadX, derivedY);
+        this.roads.small.setViewport(botH / ROAD_ROWS, derivedW, botH);
+        this.roads.small.position.set(roadX + derivedW + 6, derivedY);
+        this.roads.cockroach.setViewport(botH / ROAD_ROWS, derivedW, botH);
+        this.roads.cockroach.position.set(roadX + (derivedW + 6) * 2, derivedY);
+
+        this.updateRoads();
 
         // ---- 牌區 ----
         // 夾在路圖與下注區之間，牌的大小跟著剩下的空間走
         const cardTop = roadY + roadH + 14;
-        const cardSpace = smallY - cardTop - 14;
-        // 垂直要塞得下三段：上方的橫放補牌（1.1 倍牌寬）、原牌本身（1.4 倍牌寬）、
-        // 底下的點數。點數的字級是固定的，所以先扣掉再除——按比例算的話，
-        // 牌一小就會替一行固定高度的字保留過多空間，牌又更小
-        this.cardW = Math.max(40, Math.min(76, (cardSpace - TOTAL_LABEL_H) / 2.5, w * 0.12));
+        this.placeCards(cardTop, smallY - cardTop - 14, w);
+    }
+
+    /**
+     * 手機橫放：面板直立在右側，所以底部整條空了出來給路單。
+     *
+     * 由下往上疊：路單 → 注區 → 牌。牌拿到最上面那一整塊，因為它是這一局唯一會動、
+     * 也最需要被看清楚的東西；路單與注區各自壓到還能用的最小高度。
+     */
+    private layoutLandscape(w: number, h: number): void {
+        const availW = w - arcadeState().dockInset.right;
+        // 橫版的頂列只有一列——核對數字在這個尺寸下藏起來、語言鈕移到左上（見 style.css），
+        // 所以不必像直式那樣讓開兩列
+        const top = 50;
+        const bottom = h - 12;
+
+        // ---- 路單：貼底橫躺，五張並列 ----
+        // 高度給到能讓格子有 12px 上下就夠——它現在可以往旁邊捲，不必靠變寬來裝下整靴
+        const roadH = Math.max(ROAD_MIN, Math.min(76, (bottom - top) * 0.24));
+        const roadY = bottom - roadH;
+        this.placeRoadStrip(availW, roadY, roadH);
+        this.updateRoads();
+
+        // ---- 注區 ----
+        // 比直式的矮版再矮一階：這裡連「矮版」都還是太高。40px 仍然點得到，
+        // 而每省 10px 牌就大 4px
+        const gap = 6;
+        const smallH = 30;
+        const bigH = 40;
+        const betW = Math.min(availW * 0.96, 720);
+        const betX = (availW - betW) / 2;
+        const bigY = roadY - 10 - bigH;
+        const smallY = bigY - smallH - gap;
+        this.placeBets(betX, betW, smallY, bigY, smallH, bigH, gap);
+
+        // ---- 牌區：頂列到注區之間整片 ----
+        this.placeCards(top, smallY - top - 10, availW);
+    }
+
+    /** 五張路並排成一條，各自是一個獨立的捲動視窗。 */
+    private placeRoadStrip(availW: number, y: number, roadH: number): void {
+        const cell = roadH / ROAD_ROWS;
+        const gapX = 6;
+        const pad = 6;
+        // 珠盤與衍生路給固定的可視欄數，剩下的寬度全給大路——它是看的人最常盯著的那張，
+        // 也是唯一會長到幾十欄的。看不到的部分往旁邊捲
+        const beadW = 6 * cell;
+        const derivedW = 7 * cell;
+        // 兩側的留白要**先扣掉再分**。只在定位時用 `max(pad, …)` 補左邊距的話，
+        // 這一排的總寬仍然是整個 availW，右緣就會頂出去壓到面板
+        const bigW = Math.max(8 * cell, availW - pad * 2 - beadW - derivedW * 3 - gapX * 4);
+
+        let x = Math.max(pad, (availW - (beadW + bigW + derivedW * 3 + gapX * 4)) / 2);
+        const put = (road: ScrollableRoad, width: number): void => {
+            road.setViewport(cell, width, roadH);
+            road.position.set(x, y);
+            x += width + gapX;
+        };
+        put(this.roads.bead, beadW);
+        put(this.roads.big, bigW);
+        put(this.roads.bigEye, derivedW);
+        put(this.roads.small, derivedW);
+        put(this.roads.cockroach, derivedW);
+    }
+
+    /** 五個注區：三個小的一排、莊閒兩個大的一排。兩套版面共用。 */
+    private placeBets(x: number, betW: number, smallY: number, bigY: number, smallH: number, bigH: number, gap: number): void {
+        const third = (betW - gap * 2) / 3;
+        this.place('playerPair', x, smallY, third, smallH);
+        this.place('tie', x + third + gap, smallY, third, smallH);
+        this.place('bankerPair', x + (third + gap) * 2, smallY, third, smallH);
+
+        const half = (betW - gap) / 2;
+        this.place('player', x, bigY, half, bigH);
+        this.place('banker', x + half + gap, bigY, half, bigH);
+    }
+
+    /**
+     * 牌區：算牌多大、莊閒兩堆擺哪、點數標在哪。兩套版面共用。
+     *
+     * `space` 是這塊區域的高度，`availW` 是扣掉右側面板之後的可用寬度。
+     */
+    private placeCards(top: number, space: number, availW: number): void {
+        // 牌寬取三個上限裡最小的：
+        //
+        // 1. 76 —— 牌面是烘出來的貼圖，再放大只會糊。
+        // 2. 垂直：要塞得下三段——上方的橫放補牌（1.1 倍牌寬）、原牌本身（1.4 倍牌寬）、
+        //    底下的點數。點數的字級是固定的，所以先扣掉再除；按比例算的話，牌一小就會
+        //    替一行固定高度的字保留過多空間，牌又更小。
+        // 3. 橫向：莊閒兩堆各偏離中線 1.85 倍牌寬，一堆本身寬 1.12 倍，合計 4.82 倍，
+        //    留一成的邊 → 約 availW * 0.19。**這裡原本寫的是 w * 0.12**，是憑感覺抓的保守值，
+        //    豎屏時它會搶在垂直限制之前生效，把牌壓到 47px——那個尺寸點數根本讀不出來。
+        this.cardW = Math.max(40, Math.min(76, (space - TOTAL_LABEL_H) / 2.5, availW * 0.19));
 
         // 牌組（補牌 + 原牌）總高 2.5 倍牌寬，剩下的空間上下平分；
         // 牌的中心在補牌那段之下 1.8 倍處。不能直接取牌區正中間——
         // 上方要放補牌、下方只放一行點數，兩邊需求不對稱
-        const slack = Math.max(0, cardSpace - TOTAL_LABEL_H - this.cardW * 2.5);
-        const centreY = cardTop + slack / 2 + this.cardW * 1.8;
+        const slack = Math.max(0, space - TOTAL_LABEL_H - this.cardW * 2.5);
+        const centreY = top + slack / 2 + this.cardW * 1.8;
         this.sideAt = {
-            player: { x: w / 2 - this.cardW * 1.85, y: centreY },
-            banker: { x: w / 2 + this.cardW * 1.85, y: centreY },
+            player: { x: availW / 2 - this.cardW * 1.85, y: centreY },
+            banker: { x: availW / 2 + this.cardW * 1.85, y: centreY },
         };
 
         // 牌靴在右上角，牌從那裡發出來
-        this.shoeAt = { x: w - 40, y: cardTop + 10 };
+        this.shoeAt = { x: availW - 40, y: top + 10 };
 
         if (this.playerTotal) this.playerTotal.position.set(this.sideAt.player.x, centreY + this.cardW * 0.95);
         if (this.bankerTotal) this.bankerTotal.position.set(this.sideAt.banker.x, centreY + this.cardW * 0.95);

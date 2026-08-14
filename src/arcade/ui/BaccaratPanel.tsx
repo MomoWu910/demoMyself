@@ -13,11 +13,25 @@ import { useT } from '../../i18n/useT';
  * 跟 SlotPanel 一樣拆成讀數與控制兩塊，填進殼留好的兩個插槽。
  */
 
-function ChipPicker() {
+/**
+ * 籌碼面額與清除／重複。
+ *
+ * 三者合成**一個區塊**而不是各佔面板一列：它們是同一件事的三個動作——決定這一局要押多少。
+ * 分成兩列時，窄畫面下「清除／重複」會被推到跟 SPIN 同高的位置，看起來像另一組主操作，
+ * 但它們其實是下注的附屬動作。合起來也讓面板在豎屏少掉一整列的高度。
+ */
+function BetControls() {
     const t = useT();
     const chip = useBaccaratStore((s) => s.chip);
     const setChip = useBaccaratStore((s) => s.setChip);
     const phase = useBaccaratStore((s) => s.phase);
+    const totalBet = useBaccaratStore((s) => s.totalBet);
+    const lastBets = useBaccaratStore((s) => s.lastBets);
+    const clearBets = useBaccaratStore((s) => s.clearBets);
+    const repeatBets = useBaccaratStore((s) => s.repeatBets);
+
+    const betting = phase === 'betting';
+    const hasLast = Object.keys(lastBets).length > 0;
 
     return (
         <div className="bet">
@@ -36,29 +50,12 @@ function ChipPicker() {
                     </button>
                 ))}
             </div>
-        </div>
-    );
-}
-
-function TableActions() {
-    const t = useT();
-    const phase = useBaccaratStore((s) => s.phase);
-    const totalBet = useBaccaratStore((s) => s.totalBet);
-    const lastBets = useBaccaratStore((s) => s.lastBets);
-    const clearBets = useBaccaratStore((s) => s.clearBets);
-    const repeatBets = useBaccaratStore((s) => s.repeatBets);
-
-    const betting = phase === 'betting';
-    const hasLast = Object.keys(lastBets).length > 0;
-
-    return (
-        <div className="style spin-style">
-            <span className="cap">{t('arcade.bac.actions')}</span>
-            <div className="style-row">
-                <button type="button" className="chip" disabled={!betting || totalBet === 0} onClick={clearBets}>
+            {/* 沒有可見標籤——按鈕文字已經自明，省下的那行給牌區。標籤改掛在群組上給讀螢幕的人 */}
+            <div className="bet-row" role="group" aria-label={t('arcade.bac.actions')}>
+                <button type="button" className="chip ghost" disabled={!betting || totalBet === 0} onClick={clearBets}>
                     {t('arcade.bac.clear')}
                 </button>
-                <button type="button" className="chip" disabled={!betting || !hasLast} onClick={repeatBets}>
+                <button type="button" className="chip ghost" disabled={!betting || !hasLast} onClick={repeatBets}>
                     {t('arcade.bac.repeat')}
                 </button>
             </div>
@@ -95,6 +92,16 @@ export function BaccaratReadouts() {
     );
 }
 
+/**
+ * 選項插槽：百家樂沒有純表演的切換可調，所以是空的。
+ *
+ * 回 null 而不是不匯出這個函式，是為了讓殼那側的 switch 保持窮盡——加第三款玩法時
+ * 忘了處理會**編譯就失敗**，而不是靜默地少一塊面板（見 Hud.tsx 的 GameOptions）。
+ */
+export function BaccaratOptions(): null {
+    return null;
+}
+
 /** 控制插槽：籌碼面額、清除／重複、發牌。 */
 export function BaccaratControls() {
     const t = useT();
@@ -108,13 +115,11 @@ export function BaccaratControls() {
 
     return (
         <>
-            <ChipPicker />
+            <BetControls />
 
             <button type="button" className="spin" disabled={!canDeal} onClick={() => dealHandler?.()}>
                 {label}
             </button>
-
-            <TableActions />
         </>
     );
 }

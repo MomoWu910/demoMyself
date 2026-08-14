@@ -571,6 +571,9 @@ export const DICT: Record<string, Entry> = {
     'arcade.style.windup': { en: 'Wind-up', zh: '蓄力' },
     // 停軸順序：一樣是純表演。換順序不會換掉盤面，五格內容在收到封包當下就定了
     'arcade.stopOrder': { en: 'Stop order', zh: '停軸順序' },
+    // 窄畫面把表演選項與說明收進抽屜的那一行（見 arcade/ui/Hud.tsx 的 OptionsDrawer）。
+    // 用「更多」而不是「設定」：抽屜裡沒有任何會改變輸贏或會被記住的東西
+    'arcade.moreOptions': { en: 'More', zh: '更多' },
     'arcade.order.left': { en: 'Left to right', zh: '由左到右' },
     'arcade.order.center': { en: 'Centre out', zh: '中間先停' },
     'arcade.order.random': { en: 'Random', zh: '隨機' },

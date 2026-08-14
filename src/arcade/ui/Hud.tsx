@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useArcadeStore } from '../store';
-import { SlotControls, SlotReadouts } from './SlotPanel';
-import { BaccaratControls, BaccaratReadouts } from './BaccaratPanel';
+import { SlotControls, SlotOptions, SlotReadouts } from './SlotPanel';
+import { BaccaratControls, BaccaratOptions, BaccaratReadouts } from './BaccaratPanel';
+import { useDockSide, useIsCompact } from './useIsCompact';
 import { useT } from '../../i18n/useT';
 import { wireGoBack } from '../../shell/goBack';
 
@@ -90,6 +91,20 @@ function GameControls() {
     }
 }
 
+/** 玩法的次要選項——窄畫面會被整組收進抽屜（見 OptionsDrawer）。 */
+function GameOptions() {
+    const scene = useArcadeStore((s) => s.scene);
+    switch (scene) {
+        case 'slot':
+            return <SlotOptions />;
+        case 'baccarat':
+            return <BaccaratOptions />;
+        case 'lobby':
+        case null:
+            return null;
+    }
+}
+
 /**
  * 資源核對：**這一頁在架構上想證明的事，就是這一行數字**。
  *
@@ -123,6 +138,39 @@ function ResourceMeter() {
 }
 
 /**
+ * 窄畫面用的抽屜：把次要選項與說明收起來，預設不展開。
+ *
+ * 為什麼非做不可：豎屏把面板堆成單欄時，標籤與 chip 各自換行，老虎機的面板**實測長到
+ * 576px**——在 390×844 的手機上等於 68% 的畫面，轉軸整個被蓋在後面看不到。收起來之後
+ * 只剩「餘額 → 押注 → SPIN」這條每一把都要走的路徑留在外面。
+ *
+ * 它排在 SPIN **上方**，所以展開時面板往上長、SPIN 仍貼著畫面底部不動——拇指最順的
+ * 位置不該因為打開一個抽屜就跑掉。代價是 tab 順序（bet → spin → 抽屜）跟視覺順序
+ * 差一格，這是 grid 重排的既有取捨，比讓主按鈕跳位划算。
+ */
+function OptionsDrawer({ children }: { children: ReactNode }) {
+    const t = useT();
+    const [open, setOpen] = useState(false);
+
+    return (
+        <div className={`drawer${open ? ' open' : ''}`}>
+            <button
+                type="button"
+                className="drawer-toggle"
+                aria-expanded={open}
+                onClick={() => setOpen((v) => !v)}
+            >
+                {t('arcade.moreOptions')}
+                <span className="caret" aria-hidden="true" />
+            </button>
+            {/* 收起時整個不渲染而不是 display:none——面板高度是被 ResizeObserver 量出來
+                回報給 canvas 的（見 useDockMeasure），留在 DOM 裡會讓那個數字量到展開後的高度 */}
+            {open && <div className="drawer-body">{children}</div>}
+        </div>
+    );
+}
+
+/**
  * 量底部面板實際佔多高，寫進 store 給 canvas 那側讓位。
  *
  * 為什麼不寫死一個數字：面板高度**會變**——中英文的行數不同、每款玩法的控制項數量
@@ -131,21 +179,23 @@ function ResourceMeter() {
  *
  * 連同下邊距一起回報（面板不是貼著畫面底），canvas 那側才不必知道 CSS 怎麼定位它。
  */
-function useDockMeasure(active: boolean): React.RefObject<HTMLElement | null> {
+function useDockMeasure(active: boolean, side: 'bottom' | 'right'): React.RefObject<HTMLElement | null> {
     const ref = useRef<HTMLElement>(null);
-    const setDockHeight = useArcadeStore((s) => s.setDockHeight);
+    const setDockInset = useArcadeStore((s) => s.setDockInset);
 
     useEffect(() => {
         const el = ref.current;
         if (!active || !el) {
-            setDockHeight(0);
+            setDockInset(0, 0);
             return;
         }
 
         const measure = (): void => {
             const rect = el.getBoundingClientRect();
-            // 從畫面底算起：面板本身 + 它底下留的邊距
-            setDockHeight(window.innerHeight - rect.top);
+            // 從面板貼的那一側算起，含它自己留的外邊距——canvas 那側因此不必知道
+            // CSS 是用 bottom 還是 right 把它定位的，只要知道「這一側被吃掉多少」
+            if (side === 'right') setDockInset(0, Math.round(window.innerWidth - rect.left));
+            else setDockInset(Math.round(window.innerHeight - rect.top), 0);
         };
         measure();
 
@@ -155,9 +205,9 @@ function useDockMeasure(active: boolean): React.RefObject<HTMLElement | null> {
         return () => {
             ro.disconnect();
             window.removeEventListener('resize', measure);
-            setDockHeight(0);
+            setDockInset(0, 0);
         };
-    }, [active, setDockHeight]);
+    }, [active, side, setDockInset]);
 
     return ref;
 }
@@ -186,10 +236,17 @@ function BackLink() {
 export function Hud() {
     const t = useT();
     const scene = useArcadeStore((s) => s.scene);
+    const compact = useIsCompact();
+    const side = useDockSide();
 
-    // 大廳不需要底部面板——那裡沒有東西可以操作，留著只會擋住機台卡片
+    // 大廳不需要操作面板——那裡沒有東西可以操作，留著只會擋住機台卡片
     const inGame = scene !== null && scene !== 'lobby';
-    const dockRef = useDockMeasure(inGame);
+    const dockRef = useDockMeasure(inGame, side);
+
+    // 這一頁最該讓人知道的一件事，直接寫在面板上而不是藏在 README 裡。
+    // 窄畫面它會跟著選項一起進抽屜——不是刪掉，是換個位置：那段話在 390 寬會換成九行，
+    // 留在外面等於用 210px 的畫面去講一件玩家隨時可以展開來看的事
+    const note = <p className="note">{t('arcade.serverNote')}</p>;
 
     return (
         <div className="hud">
@@ -212,8 +269,19 @@ export function Hud() {
 
                     <GameControls />
 
-                    {/* 這一頁最該讓人知道的一件事，直接寫在面板上而不是藏在 README 裡 */}
-                    <p className="note">{t('arcade.serverNote')}</p>
+                    {compact ? (
+                        <OptionsDrawer>
+                            <GameOptions />
+                            {note}
+                        </OptionsDrawer>
+                    ) : (
+                        <>
+                            <div className="options">
+                                <GameOptions />
+                            </div>
+                            {note}
+                        </>
+                    )}
                 </footer>
             )}
         </div>

@@ -60,15 +60,17 @@ export interface ArcadeState {
     enter: ((id: ModuleId) => void) | null;
 
     /**
-     * 底部操作面板實際佔多高（畫面像素，含它自己的下邊距）。0 = 沒有面板。
+     * 操作面板實際佔掉畫面哪一側、佔多少（像素，含它自己的外邊距）。兩個都是 0 = 沒有面板。
      *
-     * canvas 內的版面要讓開它，而**面板高度不是常數**：中英文的行數不同、玩法的
-     * 控制項數量不同、窄畫面還會整個堆疊起來。寫死一個數字的話，總有一種組合會讓
-     * 下注區被蓋掉一半。所以由 HUD 那側實測後寫進來（見 ui/Hud.tsx 的 DockMeasure）。
+     * 為什麼是**兩個方向**而不是單一高度：手機橫放時面板會整個移到畫面右側直排
+     * （見 style.css 的橫版區塊）。那個尺寸下垂直空間是最稀缺的，面板橫躺在底下會把
+     * 牌、注區、路單三段全部擠掉；移到右側之後，稀缺的高度就整段還給了玩法。
      *
-     * 這也是這一頁 canvas 與 DOM 兩層分工的必要代價：分開畫就得有人負責對齊。
+     * 面板尺寸**不是常數**：中英文的行數不同、玩法的控制項數量不同、窄畫面還會堆疊起來。
+     * 寫死的話總有一種組合會讓下注區被蓋掉一半。所以由 HUD 那側實測後寫進來
+     * （見 ui/Hud.tsx 的 useDockMeasure）。這是 canvas 與 DOM 分兩層畫的必要代價。
      */
-    dockHeight: number;
+    dockInset: { bottom: number; right: number };
 
     setConnection: (s: SocketState) => void;
     setBalance: (n: number) => void;
@@ -77,7 +79,7 @@ export interface ArcadeState {
     /** 記一次卸載的結果，並把該場景的對照值更新成這次的數字。 */
     recordDispose: (scene: ModuleId, report: DisposeReport) => void;
     setEnter: (fn: ((id: ModuleId) => void) | null) => void;
-    setDockHeight: (n: number) => void;
+    setDockInset: (bottom: number, right: number) => void;
 }
 
 export const useArcadeStore = create<ArcadeState>((set) => ({
@@ -90,7 +92,7 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
     lastTextureByScene: {},
     previousTexture: null,
     enter: null,
-    dockHeight: 0,
+    dockInset: { bottom: 0, right: 0 },
 
     setConnection: (connection) => set({ connection }),
     setBalance: (balance) => set({ balance }),
@@ -104,7 +106,11 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
             lastTextureByScene: { ...s.lastTextureByScene, [scene]: report.textureSources },
         })),
     setEnter: (enter) => set({ enter }),
-    setDockHeight: (dockHeight) => set({ dockHeight }),
+    // 值沒變就**回傳原本的 state**，物件參考才不會每次量測都換一個新的。
+    // 訂閱端是靠比較參考來決定要不要重排的（見 games/*/index.ts），
+    // 每次都給新物件的話，ResizeObserver 每觸發一次就會白排一次版
+    setDockInset: (bottom, right) =>
+        set((s) => (s.dockInset.bottom === bottom && s.dockInset.right === right ? s : { dockInset: { bottom, right } })),
 }));
 
 /** 在 React 之外讀當下狀態（Pixi 那半邊用）。 */

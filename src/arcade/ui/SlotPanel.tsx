@@ -10,9 +10,10 @@ import { useT } from '../../i18n/useT';
  * 所以留在殼；押注額、SPIN 鍵、起轉演法只有轉軸有意義，所以在這裡。百家樂的面板
  * 會是另一支檔案，兩邊互不知道對方存在。
  *
- * 匯出的是**兩塊**而不是一整片：殼的底部面板有「讀數」與「控制」兩個位置（見 style.css
- * 的 .dock 格線），玩法各自填。切成兩塊是為了讓餘額與玩法自己的讀數能排在同一行——
- * 若玩法只給一整塊，那一行就得由玩法自己重畫一次餘額，兩款玩法就有兩份會走樣的複本。
+ * 匯出的是**三塊**而不是一整片：殼的底部面板有「讀數」「控制」「選項」三個位置
+ * （見 style.css 的 .dock 格線），玩法各自填。讀數之所以獨立，是為了讓餘額與玩法
+ * 自己的讀數能排在同一行——若玩法只給一整塊，那一行就得由玩法自己重畫一次餘額，
+ * 兩款玩法就有兩份會走樣的複本。選項之所以獨立，是因為窄畫面要把它整組收進抽屜。
  *
  * 這一支完全不需要知道 Pixi 那側是誰、有沒有掛載——SPIN 鍵呼叫的是 store 裡的 handler，
  * 玩法卸載時 handler 變 null，按鈕自動失效。
@@ -53,15 +54,12 @@ function BetPicker() {
  * 這些選項都不影響輸贏（盤面照樣是 server 算的），所以轉動中也讓改，下一把生效。
  */
 function StylePicker<T extends string>({
-    area,
     label,
     options,
     value,
     onPick,
     tKey,
 }: {
-    /** 這一組在面板格線上佔哪一列（見 style.css 的 .dock） */
-    area: 'spin-style' | 'stop-order';
     label: string;
     options: readonly T[];
     value: T;
@@ -72,7 +70,7 @@ function StylePicker<T extends string>({
     const t = useT();
 
     return (
-        <div className={`style ${area}`}>
+        <div className="style">
             <span className="cap">{t(label)}</span>
             <div className="style-row">
                 {options.map((o) => (
@@ -95,7 +93,6 @@ function SpinStylePicker() {
     const onPick = useSlotStore((s) => s.setSpinStyle);
     return (
         <StylePicker
-            area="spin-style"
             label="arcade.spinStyle"
             options={SPIN_STYLES}
             value={value}
@@ -110,7 +107,6 @@ function StopOrderPicker() {
     const onPick = useSlotStore((s) => s.setStopOrder);
     return (
         <StylePicker
-            area="stop-order"
             label="arcade.stopOrder"
             options={STOP_ORDERS}
             value={value}
@@ -135,7 +131,23 @@ export function SlotReadouts() {
     );
 }
 
-/** 控制插槽：押注、SPIN、表演選項。 */
+/**
+ * 選項插槽：兩組純表演的切換。
+ *
+ * 跟 SlotControls 分開，是因為它們在窄畫面**會被收進抽屜**（見 Hud.tsx）——
+ * 押注與 SPIN 是每一把都要碰的，這兩組是玩過幾次之後才會想去調的。
+ * 殼不知道抽屜裡是什麼，玩法也不知道自己被收起來了，兩邊只約定「有沒有東西可放」。
+ */
+export function SlotOptions() {
+    return (
+        <>
+            <SpinStylePicker />
+            <StopOrderPicker />
+        </>
+    );
+}
+
+/** 控制插槽：押注與 SPIN——每一把都要碰的那些。 */
 export function SlotControls() {
     const t = useT();
     const connection = useArcadeStore((s) => s.connection);
@@ -165,9 +177,6 @@ export function SlotControls() {
             <button type="button" className="spin" disabled={!canSpin} onClick={() => spinHandler?.()}>
                 {spinning ? t('arcade.spinning') : t('arcade.spin')}
             </button>
-
-            <SpinStylePicker />
-            <StopOrderPicker />
         </>
     );
 }

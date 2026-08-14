@@ -1,5 +1,6 @@
 import gsap from 'gsap';
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { TOP_BAR } from '../../core/layout';
 import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import type { SlotS2C, WinLine } from '../../net/games/slot';
@@ -38,6 +39,15 @@ const STOP_STAGGER = 0.22;
 
 /** 贏超過押注幾倍算大獎，中獎演出會加碼。 */
 const BIG_WIN_MULT = 10;
+
+/**
+ * 贏分數字佔的位置：中心離盤面底幾格，以及字本身要留多高（半個字高，因為它是置中錨點）。
+ *
+ * 拆成「幾格」與「幾 px」兩個量而不是一個比例，是因為它們的行為不同——間距要跟著格子縮放，
+ * 字高不會（字級是固定的）。混成一個比例的話，格子一大字就被推出畫面，格子一小又留太多白。
+ */
+const WIN_TEXT_GAP = 0.42;
+const WIN_TEXT_H = 30;
 
 export class SlotModule implements GameModule {
     public readonly id = 'slot';
@@ -109,6 +119,15 @@ export class SlotModule implements GameModule {
             const dt = ticker.deltaMS / 1000;
             for (const r of this.reels) r.update(dt);
         });
+
+        // ---- 面板高度變了就重排 ----
+        // 換語言、展開面板上的抽屜都會讓它長高或變矮，盤面得跟著讓位（見 store 的 dockHeight）。
+        // 這個訂閱由 ctx 收掉，所以不必像百家樂那樣自備旗標——那裡的旗標是為了擋
+        // i18n 那個取消不掉的訂閱，跟這裡不是同一件事
+        const unsubDock = useArcadeStore.subscribe((s, prev) => {
+            if (s.dockInset !== prev.dockInset) this.layout(ctx.screen.width, ctx.screen.height);
+        });
+        ctx.onDispose(unsubDock);
 
         ctx.onResize((w, h) => this.layout(w, h));
         this.layout(ctx.screen.width, ctx.screen.height);
@@ -226,12 +245,32 @@ export class SlotModule implements GameModule {
         for (const reel of this.reels) reel.clearHighlights();
     }
 
-    /** 盤面置中，格子大小跟著畫布縮放。 */
+    /**
+     * 盤面置中，格子大小跟著畫布縮放。
+     *
+     * 置中的基準是**扣掉頂列與底部面板之後剩下的那塊**，不是整個畫面。用整個畫面算的話，
+     * 豎屏時面板佔掉下半部，盤面正好落在它後面——實測 390×844 完全看不到轉軸。
+     * 面板高度是 HUD 那側量出來回報的（見 store 的 dockHeight），因為它會隨語言、
+     * 玩法、視窗寬度變；store 還沒回報時退回一個保守的比例。
+     */
     private layout(w: number, h: number): void {
+        // 面板可能貼在底部，也可能貼在右側（手機橫放，見 store 的 dockInset）。
+        // 對盤面來說兩者是同一件事——某一側被吃掉一塊，盤面在剩下的矩形裡置中
+        const inset = arcadeState().dockInset;
+        const measured = inset.bottom > 0 || inset.right > 0;
+        const availW = w - inset.right;
+        const availH = Math.max(140, h - TOP_BAR - (measured ? inset.bottom : h * 0.26) - 12);
+
         // 盤面寬 = 5 格 + 4 個間距；高 = 3 格。取兩軸各自能容納的較小值，並留邊。
-        const byW = (w * 0.86) / (REELS + (REELS - 1) * GAP_RATIO);
-        const byH = (h * 0.62) / (ROWS * CELL_RATIO);
-        const cellW = Math.max(48, Math.min(byW, byH));
+        // 窄畫面吃得比寬畫面兇一點：橫向本來就是那裡最稀缺的東西，留太多邊會讓格子
+        // 小到看不出符號畫的是什麼
+        const narrow = availW < 620;
+        const byW = (availW * (narrow ? 0.94 : 0.86)) / (REELS + (REELS - 1) * GAP_RATIO);
+        // 垂直要塞得下的不只盤面——底下還有贏分數字，中心在盤面下方 0.42 格處。
+        // 用固定比例（原本是 0.62）保留空間會在寬螢幕失準：那裡格子大，0.42 格就是五十幾 px，
+        // 比留下來的邊還多，數字會探進底部面板裡
+        const byH = (availH - WIN_TEXT_H) / (CELL_RATIO * (ROWS + WIN_TEXT_GAP));
+        const cellW = Math.max(40, Math.min(byW, byH));
         const cellH = cellW * CELL_RATIO;
         const gap = cellW * GAP_RATIO;
         const pitch = cellW + gap;
@@ -248,9 +287,12 @@ export class SlotModule implements GameModule {
 
         const boardW = REELS * cellW + (REELS - 1) * gap;
         const boardH = ROWS * cellH;
-        this.board.position.set((w - boardW) / 2, (h - boardH) / 2 - h * 0.04);
+        // 置中的是「盤面加贏分數字」這一整組，不是盤面自己——只把盤面置中的話，
+        // 下方剩的空間會不夠放數字，它就會壓在底部面板上
+        const groupH = boardH + cellH * WIN_TEXT_GAP + WIN_TEXT_H;
+        this.board.position.set((availW - boardW) / 2, TOP_BAR + Math.max(0, (availH - groupH) / 2));
 
-        if (this.winText) this.winText.position.set(boardW / 2, boardH + cellH * 0.42);
+        if (this.winText) this.winText.position.set(boardW / 2, boardH + cellH * WIN_TEXT_GAP);
     }
 }
 
