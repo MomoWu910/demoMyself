@@ -34,6 +34,7 @@ const PAGES: Page[] = [
     { id: 'opt', key: 'rwd.page.opt', url: './pixi_optimization.html' },
     { id: 'find', key: 'rwd.page.find', url: './findings.html' },
     { id: 'shader', key: 'rwd.page.shader', url: './shader_lab.html' },
+    { id: 'arcade', key: 'rwd.page.arcade', url: './arcade.html' },
 ];
 
 const MIN_W = 240, MIN_H = 320, MAX_W = 3840, MAX_H = 2160;

@@ -32,6 +32,10 @@
 ├─ Cross-Engine Rendering（PixiJS × Three.js）
 ├─ 3D Product Configurator（Babylon.js）
 ├─ Shader Lab（GLSL + WGSL）
+├─ Arcade 遊樂場（假 socket + 玩法模組熱插拔）
+│     └─ 頁內切換的兩款玩法：
+│        ├─ 老虎機（五軸三列）
+│        └─ 百家樂（四張路圖 / 八副牌靴）
 ├─ RWD Showcase（裝置模擬器）
 └─ Rendering Findings（實驗結論）
       └─ 底下的三個壓測實驗：
@@ -191,7 +195,41 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 
 控制面板是 **React 19 + Zustand**，Pixi 跑自己的 render loop，兩邊唯一的接點是一個 store——面板寫參數，舞台每幀讀。React 完全不參與 render loop（60fps 的東西不該經過 virtual DOM）。這是這類產品的真實架構，而不是把引擎硬塞進 component 生命週期。加一個新 shader = 新增一個 `EffectDef` 檔案並註冊，頁面、參數控制項、原始碼檢視都會自動長出來。
 
-### 5. RWD Showcase：站內建裝置模擬器 — `src/rwdShowcase/`
+### 5. 遊樂場：頁內熱插拔的玩法模組 — `src/arcade/`
+
+![遊樂場的老虎機：符號是程序生成的，右上角那排 tracked / leaked / tex 是切換玩法後的資源核對](docs/screenshots/arcade.png)
+
+站內 [`/arcade.html`](https://momowu910.github.io/demoMyself/arcade.html)。大廳與兩款玩法（老虎機、百家樂）跑在**同一個 `Application`、同一個 ticker、同一份 GPU 記憶體**上。細節見 [`src/arcade/README.md`](src/arcade/README.md)。
+
+**這一頁在架構上要證明的事**：站內跨頁切換是整頁導覽，瀏覽器會把 document、JS heap、WebGL context 一起丟掉，隔離是免費的；**頁內切換沒有這道保險**。所以資源不是靠「記得在 unmount 清掉」來管——玩法模組拿不到裸的 `app`，要每幀邏輯得走 `ctx.frame()`、要長期持有物件得走 `ctx.track()`，全部登記在案，卸載時由 host 統一收回並核對，數字直接顯示在 HUD 上。
+
+**驗證機制沒有觸發路徑，等於沒寫**——這套契約寫在只有一款玩法的時候，從來沒發生過切換，所以它兩天沒被執行過。大廳做完、第一次能真的切場景，一驗就抓到漏：renderer 握著的 texture source 每進出一次就疊一階（1 → 65 → 70 → 75 → 79 → 81），**而回報的 `leaked` 全程是 0**。
+
+- **根因**：Pixi v8 的 `Texture.destroy()` 預設**不釋放底層的 `TextureSource`**，`Container.destroy({children:true})` 也不會碰子物件的 texture。destroy 確實被呼叫了，只是沒叫到底，所以核對報表看起來很漂亮。
+- **修法兩處**：`ctx.track(obj, destroyOptions)` 多收一個參數（烘出來的 atlas 傳 `true`）；根容器改成 `destroy({ children: true, texture: true, textureSource: true })`——第三個才是 GPU 記憶體。
+- **基線怎麼取，錯了兩次才對**：Pixi 畫文字會在字體 atlas 開頁，那是全域快取、不該還。① 開站量一次 → 第一次進出就 +10；② 每個場景記自己的第一次 → 每款玩法用的字不同、開的頁數也不同，交叉進出時誤報；③ **記「同場景上一次」的值、比相鄰兩次** → 對。判準一句話：**真的漏會每進出一次就漲一階，永遠停不下來。**
+
+**假 socket：輸贏的決定權在前端之外**
+
+玩法不直接呼叫 server，中間隔一層仿 WebSocket 的介面（`net/fakeSocket.ts`）。前端連 server 的參考都拿不到，就寫不出「先偷看結果再決定怎麼轉」的程式碼；而封包帶著 180–320ms 的模擬 RTT，UI 因此被迫處理「按鈕鎖住、轉軸先空轉、不能連按兩次」這些狀態，而不是寫成同步呼叫、上線才發現整套互動要重做。一條連線＝一張桌，離桌就斷；跨桌延續的只有錢包，而錢包活在連線之外（`server/wallet.ts`）——從老虎機贏的錢走到百家樂桌還在。
+
+**數學是驗過的，不是宣稱的**（四支 Node 腳本，共 216 項判定）
+
+| 指令 | 驗什麼 | 抓到過什麼 |
+|---|---|---|
+| `npm run check:slot` | 十萬把取樣 + 21 項判定 | 第一版 RTP **105.9%**（玩家長期淨賺＝賠付表與權重配錯），調到 93%（十萬把取樣實測 93.4%） |
+| `npm run check:baccarat` | 50 萬局，對**公開真值**（莊 1.06% / 閒 1.24% / 和 14.36% / 對子 10.36%） | 補牌表整張 8×10 攤開來比，並斷言「真的比了 80 格」 |
+| `npm run check:reel` | 81 項轉軸時序與落點 | 停軸順序倒置（見下） |
+| `npm run check:road` | 38 項路圖推算 | 把拖尾過的長龍當成好幾條龍 |
+
+**兩個反直覺的根因**（都是實測逼出來的）
+
+1. **停軸順序倒置**：距離驅動的減速段，**起始速度越慢，滑行反而拖越久**（固定 10 格，滿速 0.63 秒走完，被夾到下限的龜速要 1.05 秒，差距大於錯開停軸的 0.22 秒）。而模擬 RTT 比起轉到等速的時間還短，所以第一根軸**必然**在還沒加速完時就收到結果、被後面滿速的軸反超。修法是把錯開的延遲改成**從該軸到達等速那一刻起算**。原本的測試沒抓到，是因為它預設先轉 0.42 秒才給結果——**邊界案例要往「比預期更快」的方向測**。
+2. **路圖**：大路要存成「一欄＝一條龍、長度不受限」，六列是**畫的時候**才有的約束。三張衍生路比對的是「前面第幾條龍有多長」，照網格欄算的話，長龍被拖尾切成三欄後整張圖從那裡開始全錯——而且只在出現超過六局同一邊時才發作，隨手測幾局碰不到。
+
+**canvas 與 DOM 對齊**：百家樂的下注區在 canvas 裡、操作面板是 DOM，原本寫死「讓開 202px」——實測是 179.9，而且切成英文面板會再高 8px（牌寬跟著重排）。改成用 `ResizeObserver` 量實際面板高度寫進 store，玩法訂閱它重排。**這是 canvas / DOM 分兩層畫的必要代價**，不是額外的講究。
+
+### 6. RWD Showcase：站內建裝置模擬器 — `src/rwdShowcase/`
 
 ![RWD Showcase：以 iframe 用實際 CSS 尺寸載入站內任一頁，斷點反應是真的](docs/screenshots/rwd.png)
 
@@ -212,6 +250,7 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 - **渲染引擎**：Babylon.js v8、PixiJS v8、Three.js
 - **Shader**：手寫 GLSL（300 es）與 WGSL，Pixi v8 自訂 `Filter`（`GlProgram` / `GpuProgram` 雙寫）
 - **UI / 狀態**：React 19 + Zustand（Shader Lab 與產品配置器的控制面板；canvas 外歸 React、canvas 內歸引擎，兩邊只透過 store 溝通）
+- **模組生命週期 / 協定層**：頁內熱插拔的玩法模組與資源核對（`src/arcade/core/`）、仿 WebSocket 的封包層與模擬 server（`src/arcade/net/`、`src/arcade/server/`）
 - **效能量測**：自製 benchmark runner（`src/bench/`）— CPU frame time 中位數 / p95、draw call 攔截、環境偵測，可匯出 Markdown / JSON
 - **3D / 材質**：PBR、IBL（`.env` prefiltered environment）、glTF（KHR_materials_variants）、程序生成法線／粗糙度貼圖（`ProceduralTexture` + 自寫 GLSL）
 - **物理**：cannon-es

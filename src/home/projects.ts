@@ -18,6 +18,7 @@
  * 座標是正規化的（0..1，y 向下），刻意排出「架構」而非隨機散佈：
  * Cross-Engine 是共用 WebGL context 的樞紐、Shader Lab 與 Findings 靠 bench 相連、
  * Configurator 是自成一島的 Babylon 3D 旗艦（技術上跟其他人不共用底層——這件事本身就是資訊）。
+ * Arcade 掛在 Cross-Engine 的另一側，讓三條 Pixi 邊都從同一個樞紐散出去。
  */
 
 /**
@@ -28,9 +29,9 @@
  * 有些沒有」。TypeScript 每頁都用，畫上去只會讓每個圓都多一段一模一樣的顏色。
  *
  * React 原本被歸在「每個專案都有」而排除，但那個前提是錯的——查 import 只有
- * Shader Lab 與 Configurator 用（各 2 個檔案），Cross-Engine 刻意維持零框架
- * （lil-gui / Pixi 畫的 HUD）、Findings 與 RWD 是靜態頁。五個節點裡只有兩個有，
- * 區辨力足夠，而且它標示出一件真的架構事實：**只有需要資料驅動 UI 的兩頁，
+ * Shader Lab、Configurator 與 Arcade 用，Cross-Engine 刻意維持零框架
+ * （lil-gui / Pixi 畫的 HUD）、Findings 與 RWD 是靜態頁。六個節點裡三個有，
+ * 區辨力足夠，而且它標示出一件真的架構事實：**只有需要資料驅動 UI 的那幾頁，
  * 才採用「React 管 canvas 外、引擎管 canvas 內」的分工**。
  *
  * 檸檬綠是算出來的，不是挑順眼的：現有色的色相集中在 24° 與 148°~358°，
@@ -87,7 +88,21 @@ export interface ProjectNode {
     y: number;
     /** 節點視覺半徑（正規化到畫布短邊） */
     r: number;
-    /** 窄手機（<520px）用的直式 zig-zag 座標——左右交錯，標籤才不會互相疊 */
+    /**
+     * 窄手機（<520px）用的直式 zig-zag 座標——左右交錯，標籤才不會互相疊。
+     *
+     * 六個節點要塞進一支手機的高度，靠的是 x **嚴格**左右交錯（.68 / .32 輪流）：
+     * 交錯之後相鄰兩個只要垂直錯開就夠，標籤水平重疊看不出來，y 因此可以靠到 0.08。
+     * 排法是配對（組內差 ~0.08、組間差 ~0.16），不是六等分——等分會讓每一個都離得一樣遠，
+     * 讀起來是一條清單而不是一張圖。**破壞交錯的代價很具體**：同側相鄰時 y 要差到 0.19
+     * 以上才不會讓上面那個的標籤壓到下面那片葉子（葉子朝下那端連葉柄佔到 1.3×r，
+     * 標籤本身還有一行字高），而六個節點沒有那麼多垂直空間可以攤。
+     *
+     * 三個邊界不能動：最上不高於 0.26（會撞左上的 wordmark）、
+     * RWD 留在**左**下（小螢幕的技術棧會收成右下角一顆按鈕）、
+     * 且明顯低於其他節點（包圍框的底邊靠 `max(rwd.py, …)` 穿過它，
+     * 見 scene.ts 的 drawWrapFrame；被其他節點的框底追過就會變成浮在框內）。
+     */
     narrow: { x: number; y: number; r: number };
 }
 
@@ -133,7 +148,7 @@ export const NODES: ProjectNode[] = [
         x: 0.31,
         y: 0.36,
         r: 0.085,
-        narrow: { x: 0.32, y: 0.28, r: 0.13 },
+        narrow: { x: 0.68, y: 0.26, r: 0.12 },
     },
     {
         id: 'shaderLab',
@@ -147,7 +162,34 @@ export const NODES: ProjectNode[] = [
         x: 0.72,
         y: 0.31,
         r: 0.085,
-        narrow: { x: 0.68, y: 0.37, r: 0.15 },
+        narrow: { x: 0.32, y: 0.35, r: 0.13 },
+    },
+    {
+        id: 'arcade',
+        href: './arcade.html',
+        i18nKey: 'home.arcade',
+        // 葉尖朝右上。**不能取正上方（-90）**：那會讓葉柄指向正下方，而葉柄那端比葉尖
+        // 多伸出約 0.36×r（見 leaf.ts 的 leafStem），垂直總長 1.51×r 就超過 scene.ts
+        // 給標籤讓出的 1.25×r，標籤會壓在葉柄上。45° 把垂直佔用壓到 1.34×r。
+        leafAngle: -45,
+        // 「Simulated socket」不寫成 WebSocket：這裡是仿 WebSocket 介面的同行程實作
+        // （net/fakeSocket.ts），沒有真的連線——標籤要對得上 source 才禁得起追問
+        tags: ['PixiJS v8', 'React', 'Simulated socket'],
+        // 玩法全畫在 Pixi 裡，HUD／面板是 React——跟 Shader Lab 同一套分工。
+        // 假 WebSocket 那層沒有對應的顏色：色彩語彙只給引擎與著色器（見 Tone），
+        // 多開一色會讓外框的讀法從「用什麼畫的」變成「用了哪些技術」。
+        stack: ['pixi', 'react'],
+        tone: 'pixi',
+        // 這是唯一擺在圖上緣的節點，x 不能再往左：左上角的 wordmark 寬度是**固定的**
+        // （30ch 的 tagline），而節點座標是正規化的——瀏覽器視窗越窄，葉子越靠近那塊字。
+        // 0.52 是視窗剛好 520px（再窄就換 narrow 排版）時葉子左緣仍在 wordmark 右側的位置。
+        x: 0.52,
+        // 0.22 是量出來的下限：視窗 520px 時 wordmark 底緣在 117px，葉子上緣正好落在它下面。
+        // 這個節點同時被兩件事夾著——再往上撞 wordmark，再往下就貼上 Cross-Engine。
+        y: 0.22,
+        // 比其他節點小一號：它夾在 wordmark 與 Cross-Engine 之間，是全圖餘裕最少的位置
+        r: 0.07,
+        narrow: { x: 0.68, y: 0.51, r: 0.12 },
     },
     {
         id: 'findings',
@@ -161,7 +203,7 @@ export const NODES: ProjectNode[] = [
         x: 0.42,
         y: 0.66,
         r: 0.075,
-        narrow: { x: 0.34, y: 0.54, r: 0.135 },
+        narrow: { x: 0.32, y: 0.61, r: 0.115 },
     },
     {
         id: 'configurator',
@@ -178,7 +220,7 @@ export const NODES: ProjectNode[] = [
         x: 0.74,
         y: 0.68,
         r: 0.08,
-        narrow: { x: 0.68, y: 0.71, r: 0.14 },
+        narrow: { x: 0.68, y: 0.76, r: 0.12 },
     },
     {
         id: 'rwd',
@@ -192,7 +234,8 @@ export const NODES: ProjectNode[] = [
         // 這是整張圖唯一跟 overlay 文字搶位置的節點（其餘都在畫面中右側）。
         y: 0.57,
         r: 0.06,
-        narrow: { x: 0.32, y: 0.88, r: 0.11 },
+        // 留在左下：小螢幕的技術棧會收成右下角一顆按鈕，RWD 換到右邊就會跟它擠在一起
+        narrow: { x: 0.32, y: 0.90, r: 0.10 },
     },
 ];
 
@@ -203,18 +246,23 @@ export const EDGES: ResourceEdge[] = [
     // Optimization Lab / Stress / Stress2），三個都 import pixi.js。`src/findings/` 這一個
     // 資料夾裡確實沒有 pixi，但拿單一 HTML 檔的 import 當判準會判錯這個節點的範圍。
     { from: 'crossEngine', to: 'findings', resource: 'Pixi v8', tone: 'pixi', kind: 'library' },
+    // 遊樂場也是 `import from 'pixi.js'`，同樣接在 crossEngine 上——Pixi 的邊一律以它為樞紐
+    // 匯集，否則四個都用 Pixi 的節點兩兩相連會變成完全圖。標籤推到弧的另一側，
+    // 避開上方那條 crossEngine↔shaderLab 的 Pixi v8。
+    { from: 'crossEngine', to: 'arcade', resource: 'Pixi v8', tone: 'pixi', kind: 'library', labelOffset: -30 },
     // src/bench/（BenchRunner / BenchPanel / drawCallCounter / 型別）被 shaderLab 的
     // runShaderBench、optimization、findings 三方 import；findings/results/*.json 就是
     // 同一個 runner 跑出來原樣存檔的。全站唯一真正的點對點程式碼共用。
     // 中點跟上面那條 Pixi v8 幾乎重疊，標籤推到弧的另一側去。
     { from: 'shaderLab', to: 'findings', resource: 'bench', tone: 'neutral', kind: 'module', labelOffset: -34 },
     // RWD 包住站內每一頁。meta 邊**不畫成線**——scene.ts 把它們畫成一圈框住所有節點的
-    // 點狀輪廓（見 drawWrapFrame）。這裡列全部四個節點，是為了 hover RWD 時每一頁都跟著
+    // 點狀輪廓（見 drawWrapFrame）。這裡列其餘每一個節點，是為了 hover RWD 時每一頁都跟著
     // 亮起來（isConnected 吃這份資料）：既然說「每一頁」，就不能只有其中兩頁有反應。
     { from: 'rwd', to: 'crossEngine', resource: 'wraps', tone: 'neutral', kind: 'meta' },
     { from: 'rwd', to: 'findings', resource: 'wraps', tone: 'neutral', kind: 'meta' },
     { from: 'rwd', to: 'shaderLab', resource: 'wraps', tone: 'neutral', kind: 'meta' },
     { from: 'rwd', to: 'configurator', resource: 'wraps', tone: 'neutral', kind: 'meta' },
+    { from: 'rwd', to: 'arcade', resource: 'wraps', tone: 'neutral', kind: 'meta' },
 ];
 
 export function nodeById(id: string): ProjectNode {

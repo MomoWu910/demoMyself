@@ -82,6 +82,11 @@ export const DICT: Record<string, Entry> = {
         zh: '自訂 PixiJS v8 shader，<strong>GLSL 與 WGSL 兩份原始碼手寫並存</strong>——溶解、水波折射，以及一面在 vertex 階段被扭曲的旗幟。輸出是讀 framebuffer 在兩個 backend 上逐像素比對出來的，不是用眼睛看的。控制面板用 React + Zustand，原始碼直接攤在畫面上，並說明每個效果真正的代價。',
     },
     'home.shader.foot': { en: 'GLSL + WGSL, both written by hand', zh: 'GLSL + WGSL，兩份都自己寫' },
+    'home.arcade.title': { en: 'Arcade', zh: '遊樂場' },
+    'home.arcade.desc': {
+        en: 'Two games — a slot machine and baccarat — hot-swapped on <strong>one module contract</strong>: on the way out every texture and ticker callback is handed back to the host and reconciled, so leaks show up as a number instead of a slowdown. Outcomes come from a simulated server behind a fake socket with 180–320 ms latency; the client only plays back the result it was given. The payout math is checked by Node scripts — 93% RTP over 100k spins, the full 8×10 baccarat drawing table, and the derived roads.',
+        zh: '兩款玩法（老虎機、百家樂）掛在<strong>同一組模組契約</strong>上熱插拔：離桌時每一張 texture、每一個每幀回呼都交還給 host 統一核對，漏掉的東西會變成一個數字而不是越玩越卡。盤面由模擬伺服器決定，經一層帶 180–320ms 延遲的假 socket 送來，前端只負責把收到的結果演出來。賠付數學用 Node 腳本驗過——十萬把取樣 RTP 93%、整張 8×10 百家樂補牌表，以及路圖推算。',
+    },
 
     // ---- RWD Showcase ----
     'rwd.title': { en: 'RWD Showcase', zh: 'RWD 響應式展示' },
@@ -106,6 +111,7 @@ export const DICT: Record<string, Entry> = {
     'rwd.page.opt': { en: 'Optimization', zh: '最佳化 Lab' },
     'rwd.page.find': { en: 'Findings', zh: '實測結論' },
     'rwd.page.shader': { en: 'Shader Lab', zh: 'Shader Lab' },
+    'rwd.page.arcade': { en: 'Arcade', zh: '遊樂場' },
 
     // ---- pixiHub ----
     'hub.title': { en: 'PixiJS Experiments', zh: 'PixiJS 實驗場' },
