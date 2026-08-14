@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BETS, SPIN_STYLES, useArcadeStore } from '../store';
+import { BETS, SPIN_STYLES, STOP_ORDERS, useArcadeStore } from '../store';
 import { useT } from '../../i18n/useT';
 import { wireGoBack } from '../../shell/goBack';
 
@@ -67,33 +67,77 @@ function BetPicker() {
 }
 
 /**
- * 起轉演法的切換。
+ * 表演選項的切換（起轉演法、停軸順序）。
  *
  * 放在面板上而不是寫死在程式裡，是因為手感這種東西**講不清楚，要當場按過才知道**——
- * 兩種轉法之間差的只有起轉前那 0.2 秒，用文字描述遠不如按兩次來得直接。
- * 它不影響輸贏（盤面照樣是 server 算的），所以轉動中也讓改，下一把生效。
+ * 兩種起轉之間差的只有那 0.2 秒的蓄力，用文字描述遠不如按兩次來得直接。
+ * 這些選項都不影響輸贏（盤面照樣是 server 算的），所以轉動中也讓改，下一把生效。
  */
-function SpinStylePicker() {
+function StylePicker<T extends string>({
+    area,
+    label,
+    options,
+    value,
+    onPick,
+    tKey,
+}: {
+    /** 這一組在面板格線上佔哪一列（見 style.css 的 .dock） */
+    area: 'spin-style' | 'stop-order';
+    label: string;
+    options: readonly T[];
+    value: T;
+    onPick: (v: T) => void;
+    /** 選項的翻譯字首，跟選項值接起來就是字典的 key */
+    tKey: string;
+}) {
     const t = useT();
-    const style = useArcadeStore((s) => s.spinStyle);
-    const setSpinStyle = useArcadeStore((s) => s.setSpinStyle);
 
     return (
-        <div className="style">
-            <span className="cap">{t('arcade.spinStyle')}</span>
+        <div className={`style ${area}`}>
+            <span className="cap">{t(label)}</span>
             <div className="style-row">
-                {SPIN_STYLES.map((s) => (
+                {options.map((o) => (
                     <button
-                        key={s}
+                        key={o}
                         type="button"
-                        className={`chip${s === style ? ' on' : ''}`}
-                        onClick={() => setSpinStyle(s)}
+                        className={`chip${o === value ? ' on' : ''}`}
+                        onClick={() => onPick(o)}
                     >
-                        {t(`arcade.style.${s}`)}
+                        {t(`${tKey}.${o}`)}
                     </button>
                 ))}
             </div>
         </div>
+    );
+}
+
+function SpinStylePicker() {
+    const value = useArcadeStore((s) => s.spinStyle);
+    const onPick = useArcadeStore((s) => s.setSpinStyle);
+    return (
+        <StylePicker
+            area="spin-style"
+            label="arcade.spinStyle"
+            options={SPIN_STYLES}
+            value={value}
+            onPick={onPick}
+            tKey="arcade.style"
+        />
+    );
+}
+
+function StopOrderPicker() {
+    const value = useArcadeStore((s) => s.stopOrder);
+    const onPick = useArcadeStore((s) => s.setStopOrder);
+    return (
+        <StylePicker
+            area="stop-order"
+            label="arcade.stopOrder"
+            options={STOP_ORDERS}
+            value={value}
+            onPick={onPick}
+            tKey="arcade.order"
+        />
     );
 }
 
@@ -155,6 +199,7 @@ export function Hud() {
                 </button>
 
                 <SpinStylePicker />
+                <StopOrderPicker />
 
                 {/* 這一頁最該讓人知道的一件事，直接寫在面板上而不是藏在 README 裡 */}
                 <p className="note">{t('arcade.serverNote')}</p>

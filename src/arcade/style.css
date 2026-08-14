@@ -129,6 +129,7 @@ canvas { display: block; touch-action: none; }
     grid-template-areas:
         'readouts bet spin'
         'style style style'
+        'order order order'
         'note note note';
     align-items: center;
     gap: 12px 18px;
@@ -156,8 +157,18 @@ canvas { display: block; touch-action: none; }
 .bet { grid-area: bet; display: flex; flex-direction: column; gap: 5px; }
 .bet-row { display: flex; gap: 5px; flex-wrap: wrap; }
 
-/* 起轉演法：橫排放，跟押注共用 chip 樣式——它們是同一類「選一個」的控制項 */
-.style { grid-area: style; display: flex; align-items: center; gap: 8px; }
+/*
+ * 表演選項（起轉演法、停軸順序）：橫排放，跟押注共用 chip 樣式——它們是同一類
+ * 「選一個」的控制項。各佔一列而不是擠在同一列，是因為標籤加選項的總寬在窄視窗會換行，
+ * 換行後兩組會纏在一起看不出哪個 chip 屬於哪一組。
+ *
+ * 標籤給一個 min-width，兩排的 chip 才會對齊——中文「起轉」與「停軸順序」字數不同，
+ * 不對齊的話兩排看起來像沒有關係的東西。
+ */
+.style { display: flex; align-items: center; gap: 8px; }
+.style.spin-style { grid-area: style; }
+.style.stop-order { grid-area: order; }
+.style > .cap { min-width: 4.5em; }
 .style-row { display: flex; gap: 5px; flex-wrap: wrap; }
 
 .chip {

@@ -120,6 +120,15 @@ export class Reel extends Container {
     /** 目前的捲動速度（格／秒）。加速與滑行都是改它，不是直接改 offset。 */
     private speed = 0;
 
+    /**
+     * 距離「加速完成、進入等速」還剩幾秒。`spin()` 設定，`update()` 每幀扣掉。
+     *
+     * 存的是**剩餘時間**而不是「起轉的時刻」，是為了不引進第二個時基：轉軸的每幀邏輯
+     * 走 Pixi 的 ticker，停軸的排程走 gsap 的 ticker，兩邊各有各的時間原點，用時刻去比
+     * 遲早會對不上。剩餘時間只跟 delta 有關，兩邊都成立。
+     */
+    private spinUpLeft = 0;
+
     private phase: Phase = 'idle';
 
     /** 減速滑行的起訖（offset 座標）與起始速度。 */
@@ -199,6 +208,7 @@ export class Reel extends Container {
     public spin(style: SpinStyle = 'direct'): void {
         this.killTweens();
         this.speed = 0;
+        this.spinUpLeft = (style === 'windup' ? WINDUP_TIME : 0) + SPIN_UP;
 
         if (style !== 'windup') {
             this.accelerate();
@@ -230,14 +240,24 @@ export class Reel extends Container {
      * 注意這個延遲**不能**用 gsap tween 自己的 `delay`：那只是延後緩動開始，等待期間
      * 轉軸是不動的，玩家會看到後面幾根軸停住排隊。這裡改用 delayedCall 排程，等待期間
      * 維持等速轉動，時間到了才切進減速段。
+     *
+     * 另外，`delay` 是**從等速那一刻起算**，不是從收到結果起算。這件事不直覺，但少了它
+     * 停軸順序會亂掉，原因在滑行段是距離驅動的（見 beginCoast）：距離固定，所以起始速度
+     * 越慢、滑行反而拖越久。滿速進滑行約 0.63 秒走完，龜速進去要 1.05 秒——差距比
+     * STOP_STAGGER 還大。而 RTT 通常短於「蓄力 + 加速」的總時長，於是第一根軸幾乎必然
+     * 在還沒加速完就收到結果，用最慢的速度進滑行，被後面滿速的軸反超。等大家都到等速
+     * 再起算，五根軸的滑行時間才一致，順序與間隔就完全由 STOP_STAGGER 決定。
+     *
+     * 順帶一提這樣**整體反而更快**：多等的那點加速時間，比龜速滑行多花的時間少。
      */
     public stopAt(symbols: Sym[], delay = 0): Promise<void> {
         return new Promise((resolve) => {
             this.resolveStop?.(); // 上一把若還懸著（理論上不會），先放掉免得呼叫端等不到
             this.resolveStop = resolve;
 
-            if (delay > 0) {
-                this.stopDelay = gsap.delayedCall(delay, () => {
+            const wait = Math.max(0, this.spinUpLeft) + delay;
+            if (wait > 0) {
+                this.stopDelay = gsap.delayedCall(wait, () => {
                     this.stopDelay = null;
                     this.beginCoast(symbols);
                 });
@@ -258,6 +278,7 @@ export class Reel extends Container {
         // 加速中就收到結果的話，加速 tween 還在寫 speed，得先收掉
         this.spinTween?.kill();
         this.spinTween = null;
+        this.spinUpLeft = 0;
 
         // 用當下速度接續，而不是假設已經到等速；下限擋住「才剛起轉就要停」的情況
         this.coastStartSpeed = Math.max(this.speed, COAST_END_SPEED);
@@ -303,6 +324,9 @@ export class Reel extends Container {
 
     /** 每幀推進。等速段與滑行段靠它走，回彈段由 gsap 接管（此時 speed 已歸零）。 */
     public update(deltaSec: number): void {
+        // 在 switch 之前扣：蓄力段走的是 default 分支，漏掉的話那 0.2 秒不會被算進去
+        if (this.spinUpLeft > 0) this.spinUpLeft = Math.max(0, this.spinUpLeft - deltaSec);
+
         switch (this.phase) {
             case 'spinning': {
                 if (this.speed <= 0) return;

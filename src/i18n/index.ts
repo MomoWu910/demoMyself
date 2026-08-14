@@ -563,6 +563,11 @@ export const DICT: Record<string, Entry> = {
     'arcade.spinStyle': { en: 'Spin-up', zh: '起轉' },
     'arcade.style.direct': { en: 'Direct', zh: '直接' },
     'arcade.style.windup': { en: 'Wind-up', zh: '蓄力' },
+    // 停軸順序：一樣是純表演。換順序不會換掉盤面，五格內容在收到封包當下就定了
+    'arcade.stopOrder': { en: 'Stop order', zh: '停軸順序' },
+    'arcade.order.left': { en: 'Left to right', zh: '由左到右' },
+    'arcade.order.center': { en: 'Centre out', zh: '中間先停' },
+    'arcade.order.random': { en: 'Random', zh: '隨機' },
     // 這一頁最該讓人知道的一件事：輸贏不是前端算的。寫在面板上而不是藏在 README 裡，
     // 因為它同時解釋了「為什麼按下去要等一下」——那個延遲是刻意模擬的 RTT，不是卡頓。
     'arcade.serverNote': {

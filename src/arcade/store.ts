@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { SpinStyle } from './games/slot/reel';
+import type { StopOrder } from './games/slot/stopOrder';
 import type { SocketState } from './net/fakeSocket';
 import type { WinLine } from './net/protocol';
 
@@ -37,6 +38,12 @@ export interface ArcadeState {
     spinStyle: SpinStyle;
 
     /**
+     * 停軸的順序演法。跟 spinStyle 一樣是**純表演**，換順序不會換掉盤面——
+     * 五根軸的內容在收到封包的當下就定了，順序只決定它們用什麼次序演出來。
+     */
+    stopOrder: StopOrder;
+
+    /**
      * 目前掛載的玩法向 store 註冊的「請轉一把」入口。
      *
      * 用 handler 而不是用旗標，是因為 spin 是**動作**不是狀態：用旗標的話 React 設 true、
@@ -53,6 +60,7 @@ export interface ArcadeState {
     setError: (msg: string | null) => void;
     setSpinHandler: (fn: (() => void) | null) => void;
     setSpinStyle: (s: SpinStyle) => void;
+    setStopOrder: (o: StopOrder) => void;
 }
 
 /** 可選的押注額。 */
@@ -60,6 +68,10 @@ export const BETS = [50, 100, 250, 500, 1000];
 
 /** 面板上可選的起轉演法。加第三種轉法時只要動這裡與 reel.ts 的 SpinStyle。 */
 export const SPIN_STYLES: SpinStyle[] = ['direct', 'windup'];
+
+// 停軸順序的清單由 stopOrder.ts 自己維護（那裡才知道有哪幾種），這裡轉出去讓面板
+// 跟 BETS、SPIN_STYLES 走同一個入口——面板不必知道每個選項各自住在哪支檔案。
+export { STOP_ORDERS } from './games/slot/stopOrder';
 
 export const useArcadeStore = create<ArcadeState>((set) => ({
     connection: 'connecting',
@@ -71,6 +83,7 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
     error: null,
     spinHandler: null,
     spinStyle: 'windup',
+    stopOrder: 'left',
 
     setConnection: (connection) => set({ connection }),
     setBalance: (balance) => set({ balance }),
@@ -80,6 +93,7 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
     setError: (error) => set({ error }),
     setSpinHandler: (spinHandler) => set({ spinHandler }),
     setSpinStyle: (spinStyle) => set({ spinStyle }),
+    setStopOrder: (stopOrder) => set({ stopOrder }),
 }));
 
 /** 在 React 之外讀當下狀態（Pixi 那半邊用）。 */

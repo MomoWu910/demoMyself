@@ -31,6 +31,7 @@ const out = buildSync({
         contents: `
             export { Reel } from './games/slot/reel';
             export { SYMBOLS } from './games/slot/rules';
+            export { STOP_ORDERS, stopRanks } from './games/slot/stopOrder';
             export { REELS, ROWS } from './net/protocol';
             export { clock } from './dev/stub-gsap.mjs';
             export { Texture } from './dev/stub-pixi.mjs';
@@ -50,7 +51,7 @@ const out = buildSync({
 });
 const mod = { exports: {} };
 new Function('module', 'exports', 'require', out.outputFiles[0].text)(mod, mod.exports, createRequire(import.meta.url));
-const { Reel, SYMBOLS, REELS, ROWS, clock, Texture } = mod.exports;
+const { Reel, SYMBOLS, STOP_ORDERS, stopRanks, REELS, ROWS, clock, Texture } = mod.exports;
 
 /** 要跟 games/slot/index.ts 的 STOP_STAGGER 一致 */
 const STOP_STAGGER = 0.22;
@@ -86,7 +87,13 @@ function visibleCells(reel) {
         .map((s) => texToSym.get(s.texture));
 }
 
-/** 找出「該轉卻沒轉」的幀：只看等速與滑行段，回彈段的收尾趨近靜止是正常的。 */
+/**
+ * 找出「該轉卻沒轉」的幀：只看等速與滑行段，回彈段的收尾趨近靜止是正常的。
+ *
+ * 蓄力轉加速的那一個交界要排除，那不是 bug 是物理：往回拉到底才能往前衝，中間速度
+ * 必然經過零。加上 gsap 在 onComplete 裡建立的新 tween 要下一個 tick 才推進，
+ * 於是交界處固定會有一幀不動。它只有 16ms，且發生在起轉初期畫面還在高速捲動的時候。
+ */
 function stallFrames(trace, fromFrame) {
     const out = [];
     out.checked = 0; // 實際檢查了幾幀。若是 0，代表這項檢查根本沒生效
@@ -94,6 +101,7 @@ function stallFrames(trace, fromFrame) {
         for (let f = fromFrame + 1; f < trace[i].length; f++) {
             const cur = trace[i][f];
             if (cur.phase !== 'spinning' && cur.phase !== 'coasting') continue;
+            if (trace[i][f - 1].phase === 'winding') continue; // 蓄力→加速的交界，見上
             out.checked++;
             if (cur.offset - trace[i][f - 1].offset <= 1e-9) out.push({ reel: i, frame: f });
         }
@@ -102,7 +110,7 @@ function stallFrames(trace, fromFrame) {
 }
 
 /** 跑完整的一把，回傳每根軸的逐幀紀錄。 */
-function runOneSpin(grid, { spinBeforeResult = 0.42, style = 'direct' } = {}) {
+function runOneSpin(grid, { spinBeforeResult = 0.42, style = 'direct', ranks = null } = {}) {
     clock.reset();
 
     const reels = [];
@@ -127,10 +135,87 @@ function runOneSpin(grid, { spinBeforeResult = 0.42, style = 'direct' } = {}) {
     for (let f = 0; f < Math.round(spinBeforeResult / DT); f++) step();
 
     const resultFrame = frame;
-    reels.forEach((reel, i) => reel.stopAt(grid[i], i * STOP_STAGGER));
+    const useRanks = ranks ?? stopRanks('left', REELS);
+    reels.forEach((reel, i) => reel.stopAt(grid[i], useRanks[i] * STOP_STAGGER));
     for (let f = 0; f < 600 && settledAt.some((s) => s < 0); f++) step();
 
-    return { reels, trace, settledAt, resultFrame };
+    return { reels, trace, settledAt, resultFrame, ranks: useRanks };
+}
+
+/**
+ * 用多重判準驗停軸順序。
+ *
+ * 眼睛判斷「停了」不是看狀態機，是看「不再明顯移動」——所以狀態轉 idle 的順序對了還不夠，
+ * 得確認各種看法下都是同一個順序，否則就會有「邏輯是對的但看起來相反」的爭議，
+ * 而那種爭議沒有數據就吵不完。
+ */
+function checkStopOrder({ trace, settledAt, ranks }) {
+    // ranks 是「軸 → 名次」，這裡要的是「名次 → 軸」，反轉一次
+    const expected = new Array(ranks.length);
+    ranks.forEach((rank, reel) => {
+        expected[rank] = reel;
+    });
+
+    const lastMomentMoving = (rows, threshold) => {
+        let last = -1;
+        for (let f = 0; f < rows.length; f++) if (rows[f].moved > threshold) last = f;
+        return last;
+    };
+    const criteria = {
+        '進減速滑行': (rows) => rows.findIndex((r) => r.phase === 'coasting'),
+        '進回彈': (rows) => rows.findIndex((r) => r.phase === 'settling'),
+        '狀態轉 idle': (_rows, i) => settledAt[i],
+        '不再大幅移動（>0.3 格/幀）': (rows) => lastMomentMoving(rows, 0.3),
+        '完全靜止（>0.02 格/幀）': (rows) => lastMomentMoving(rows, 0.02),
+    };
+    for (const [name, fn] of Object.entries(criteria)) {
+        const times = trace.map((rows, i) => ({ i, v: fn(rows, i) }));
+        const order = [...times].sort((a, b) => a.v - b.v).map((x) => x.i);
+        check(
+            `${name}：依 ${expected.join('→')}`,
+            order.every((v, idx) => v === expected[idx]),
+            `實得 ${order.join(' → ')}（幀 ${times.map((x) => x.v).join(', ')}）`
+        );
+    }
+}
+
+/** 相鄰兩個「名次」之間的實際間隔（秒），照停軸先後排序，不是照軸的索引。 */
+function stopGaps(settledAt, ranks) {
+    const byRank = settledAt.map((f, i) => ({ f, rank: ranks[i] })).sort((a, b) => a.rank - b.rank);
+    return byRank.slice(1).map((x, i) => (x.f - byRank[i].f) * DT);
+}
+
+/**
+ * 停軸間隔分兩層驗：**平均**要準，**單筆**只保證落在已知的抖動範圍內。
+ *
+ * 分兩層是因為這兩件事的性質不同。平均間隔決定整段停軸演出會不會愈跑愈快或愈拖愈長，
+ * 那是必須守住的；單筆間隔則天生有抖動——滑行落點是 `Math.ceil(offset + ...)`
+ * （見 reel.beginCoast），實際滑行距離因此落在 10~11 格之間，每根軸會多或少花掉幾幀。
+ * 實測單筆間隔 9~15 幀（0.15~0.25 秒）。
+ *
+ * **這個抖動是既有行為，不是停軸順序那個 bug 的殘留**——順序修好前後 settledAt 一模一樣
+ * （89, 99, 114, 128, 139）。要不要消掉是另一個決定：得讓滑行的減速曲線隨實際距離反算，
+ * 而那條方程式沒有閉式解。
+ *
+ * 註：單筆門檻原本寫 0.05 而且是綠的，但那是浮點巧合——判定前先 `toFixed(2)` 把 0.16667
+ * 進位成 0.17，誤差剛好變成 0.04999999999999999，比 0.05 小了 1e-17。現在改成直接比原始值。
+ */
+const GAP_AVG_TOLERANCE = 0.03;
+const GAP_JITTER = 0.08;
+
+function checkGaps(label, gaps) {
+    const avg = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    const shown = gaps.map((g) => g.toFixed(2)).join('s, ');
+    check(
+        `${label}：平均間隔接近 STOP_STAGGER（節奏不漂移）`,
+        Math.abs(avg - STOP_STAGGER) < GAP_AVG_TOLERANCE,
+        `平均 ${avg.toFixed(3)}s，間隔 ${shown}s`
+    );
+    check(
+        `${label}：單筆間隔都在已知抖動範圍內（±${GAP_JITTER}s）`,
+        gaps.every((g) => Math.abs(g - STOP_STAGGER) <= GAP_JITTER),
+        `間隔 ${shown}s`
+    );
 }
 
 /** 每軸每格都不同的盤面，差一格就看得出來。 */
@@ -148,7 +233,7 @@ async function main() {
     console.log('\n== 停軸時序 ==');
     const grid = makeGrid();
     {
-        const { reels, trace, settledAt, resultFrame } = runOneSpin(grid);
+        const { reels, trace, settledAt, resultFrame, ranks } = runOneSpin(grid);
 
         const stalls = stallFrames(trace, resultFrame);
         check('靜止偵測有真的檢查到幀（防止假通過）', stalls.checked > 100, `檢查了 ${stalls.checked} 幀`);
@@ -175,12 +260,7 @@ async function main() {
             `實測 ${speedDuringWait.map((v) => v.toFixed(1)).join(', ')} 格/秒`
         );
 
-        const gaps = settledAt.slice(1).map((s, i) => ((s - settledAt[i]) * DT).toFixed(2));
-        check(
-            '相鄰兩根的間隔接近 STOP_STAGGER',
-            gaps.every((g) => Math.abs(parseFloat(g) - STOP_STAGGER) < 0.05),
-            `間隔 ${gaps.join('s, ')}s`
-        );
+        checkGaps('相鄰兩根', stopGaps(settledAt, ranks));
 
         const preStop = [];
         for (let i = 0; i < REELS; i++) {
@@ -194,34 +274,8 @@ async function main() {
             `末段 ${preStop.map((v) => v.toFixed(1)).join(', ')} 格/秒`
         );
 
-        /*
-         * 停軸順序要「左到右」，而且**在哪一種判準下都要成立**。
-         * 眼睛判斷「停了」不是看狀態機，是看「不再明顯移動」——所以狀態轉 idle 的順序
-         * 對了還不夠，得確認各種看法下都是同一個順序，否則就會有「邏輯是對的但看起來
-         * 相反」的爭議，而那種爭議沒有數據就吵不完。
-         */
         console.log('\n== 停軸順序（多重判準）==');
-        const lastMomentMoving = (rows, threshold) => {
-            let last = -1;
-            for (let f = 0; f < rows.length; f++) if (rows[f].moved > threshold) last = f;
-            return last;
-        };
-        const criteria = {
-            '進減速滑行': (rows) => rows.findIndex((r) => r.phase === 'coasting'),
-            '進回彈': (rows) => rows.findIndex((r) => r.phase === 'settling'),
-            '狀態轉 idle': (_rows, i) => settledAt[i],
-            '不再大幅移動（>0.3 格/幀）': (rows) => lastMomentMoving(rows, 0.3),
-            '完全靜止（>0.02 格/幀）': (rows) => lastMomentMoving(rows, 0.02),
-        };
-        for (const [name, fn] of Object.entries(criteria)) {
-            const times = trace.map((rows, i) => ({ i, v: fn(rows, i) }));
-            const order = [...times].sort((a, b) => a.v - b.v).map((x) => x.i);
-            check(
-                `${name}：由左到右依序`,
-                order.every((v, idx) => v === idx),
-                `順序 ${order.join(' → ')}（幀 ${times.map((x) => x.v).join(', ')}）`
-            );
-        }
+        checkStopOrder({ trace, settledAt, ranks });
 
         console.log('\n== 落點正確性 ==');
         for (let i = 0; i < REELS; i++) {
@@ -235,16 +289,60 @@ async function main() {
         );
     }
 
-    console.log('\n== 邊界：結果在起轉加速中就回來（極快的 RTT）==');
-    {
-        const { reels, trace, resultFrame } = runOneSpin(grid, { spinBeforeResult: 0.03 });
+    /*
+     * 這一段是回歸測試，對應一個已經發生過的 bug：停軸順序在慢速起轉時會倒置。
+     *
+     * 根因在滑行段是距離驅動的——距離固定，起始速度越慢滑行反而拖越久（滿速約 0.63 秒，
+     * 龜速要 1.05 秒，差距比 STOP_STAGGER 還大）。而模擬的 RTT 是 180~320ms，短於
+     * 「蓄力 0.2 + 加速 0.28」，所以第一根軸幾乎必然在還沒加速完就收到結果，用最慢的
+     * 速度進滑行，被後面滿速的軸反超。修法是讓 stagger 從等速那一刻起算（見 reel.stopAt）。
+     *
+     * 原本的測試抓不到它，因為 runOneSpin 預設先轉 0.42 秒才給結果——那時候早就滿速了。
+     * 所以這裡刻意用**短於加速時間**的 spinBeforeResult，並且兩種起轉演法都跑。
+     */
+    for (const style of ['direct', 'windup']) {
+        console.log(`\n== 回歸：結果在起轉加速中就回來（極快 RTT × ${style}）==`);
+        const { reels, trace, settledAt, resultFrame, ranks } = runOneSpin(grid, {
+            spinBeforeResult: 0.03,
+            style,
+        });
+
         const stalls = stallFrames(trace, resultFrame);
         check('加速中收到結果也不會靜止', stalls.length === 0, `${stalls.length} 幀靜止`);
+        checkStopOrder({ trace, settledAt, ranks });
+
+        checkGaps('沒有被起轉速度吃掉', stopGaps(settledAt, ranks));
         check(
             '落點依然正確',
             reels.every((r, i) => visibleCells(r).join() === grid[i].join())
         );
     }
+
+    /*
+     * 順序演法（見 stopOrder.ts）。這裡測的是**換順序不會動到別的東西**：
+     * 落點、間隔、「沒有一幀靜止」都該跟預設順序一樣，換掉的只有誰先排隊。
+     */
+    console.log('\n== 停軸順序演法 ==');
+    for (const order of STOP_ORDERS) {
+        const ranks = stopRanks(order, REELS);
+        check(
+            `${order}：名次是 0..${REELS - 1} 的排列（沒有重複或缺號）`,
+            [...ranks].sort((a, b) => a - b).every((v, i) => v === i),
+            `名次 ${ranks.join(', ')}`
+        );
+
+        const run = runOneSpin(grid, { ranks });
+        checkStopOrder(run);
+        checkGaps(order, stopGaps(run.settledAt, ranks));
+        check(
+            `${order}：落點不受順序影響`,
+            run.reels.every((r, i) => visibleCells(r).join() === grid[i].join())
+        );
+    }
+
+    // center 的名次是寫死的預期值，不照實作重算一次——重算等於把實作抄到測試裡
+    check('center 是中間先停、往兩側擴', stopRanks('center', 5).join() === [3, 1, 0, 2, 4].join(), stopRanks('center', 5).join(', '));
+    check('left 是由左到右', stopRanks('left', 5).join() === [0, 1, 2, 3, 4].join(), stopRanks('left', 5).join(', '));
 
     console.log('\n== 邊界：連續兩把 ==');
     {

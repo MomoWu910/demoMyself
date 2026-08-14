@@ -6,6 +6,7 @@ import { REELS, ROWS, type S2C, type WinLine } from '../../net/protocol';
 import { arcadeState, useArcadeStore } from '../../store';
 import { Reel } from './reel';
 import { PAYLINES, type Sym } from './rules';
+import { stopRanks } from './stopOrder';
 import { bakeSymbolAtlas } from './symbols';
 
 /**
@@ -25,10 +26,12 @@ const CELL_RATIO = 1.06;
 const GAP_RATIO = 0.09;
 
 /**
- * 相鄰兩根轉軸的停止時間差（秒）。逐根停才有節奏，一起停會像畫面卡住。
+ * 前後兩根轉軸的停止時間差（秒）。逐根停才有節奏，一起停會像畫面卡住。
  *
  * 一根軸從減速到停穩約要一秒（見 reel.ts），所以這個值不必接近那個長度——前一根還在
  * 回彈時下一根就開始減速，看起來是連續的一串，而不是五段各自為政的動作。
+ *
+ * 乘的是**停軸名次**而不是轉軸索引（見 stopOrder.ts），順序才換得動。
  */
 const STOP_STAGGER = 0.22;
 
@@ -160,18 +163,9 @@ export class SlotModule implements GameModule {
      * 玩家會先從數字知道結果，轉軸就白轉了。
      */
     private async playResult(grid: number[][], wins: WinLine[], totalWin: number, balance: number): Promise<void> {
-        // ---- 暫時的診斷 log（查「停軸順序」用，確認後整段移除）----
-        const t0 = performance.now();
-        const stops = this.reels.map((reel, i) =>
-            reel.stopAt(grid[i] as Sym[], i * STOP_STAGGER).then(() => {
-                console.log(
-                    `[slot] 索引 ${i}｜畫面 x=${Math.round(reel.getGlobalPosition().x)}｜停穩 +${Math.round(
-                        performance.now() - t0
-                    )}ms`
-                );
-            })
-        );
-        await Promise.all(stops);
+        // 順序演法每把重讀，跟起轉演法一樣，面板上切換完下一把就生效
+        const ranks = stopRanks(arcadeState().stopOrder, this.reels.length);
+        await Promise.all(this.reels.map((reel, i) => reel.stopAt(grid[i] as Sym[], ranks[i] * STOP_STAGGER)));
 
         const st = arcadeState();
         st.setBalance(balance);
