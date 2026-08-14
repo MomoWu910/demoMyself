@@ -1,7 +1,9 @@
-import type { CommonC2S, CommonS2C, GameId } from './protocol';
+import type { CommonC2S, GameId } from './protocol';
 import type { SlotC2S, SlotS2C } from './games/slot';
+import type { BaccaratC2S, BaccaratS2C } from './games/baccarat';
 import type { GameServer } from '../server/gameServer';
 import { SlotServer } from '../server/slotServer';
+import { BaccaratServer } from '../server/baccaratServer';
 import { sessionWallet } from '../server/wallet';
 
 /**
@@ -47,9 +49,7 @@ export interface FakeSocketHandlers<Out> {
  */
 export interface GameProtocols {
     slot: { c2s: SlotC2S; s2c: SlotS2C };
-    // 百家樂的封包還沒定，先掛共用的那組佔位；做 baccaratServer 時
-    // 補一支 net/games/baccarat.ts 換掉這一列
-    baccarat: { c2s: CommonC2S; s2c: CommonS2C };
+    baccarat: { c2s: BaccaratC2S; s2c: BaccaratS2C };
 }
 
 export type C2SOf<G extends GameId> = GameProtocols[G]['c2s'];
@@ -78,7 +78,7 @@ function createServer<G extends GameId>(game: G): GameServer<C2SOf<G>, S2COf<G>>
         case 'slot':
             return new SlotServer(sessionWallet) as unknown as GameServer<C2SOf<G>, S2COf<G>>;
         case 'baccarat':
-            throw new Error('[arcade] 百家樂 server 還沒做');
+            return new BaccaratServer(sessionWallet) as unknown as GameServer<C2SOf<G>, S2COf<G>>;
         default:
             throw new Error(`[arcade] 未知的玩法：${String(game)}`);
     }

@@ -8,7 +8,9 @@
     "build": "webpack --mode production",
     "deploy": "npm run build && gh-pages -d dist",
     "check:slot": "node src/arcade/server/rtp-check.mjs",
-    "check:reel": "node src/arcade/games/slot/reel-check.mjs"
+    "check:reel": "node src/arcade/games/slot/reel-check.mjs",
+    "check:baccarat": "node src/arcade/server/baccarat-check.mjs",
+    "check:road": "node src/arcade/games/baccarat/roadmap-check.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "8.2.0",
