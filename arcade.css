@@ -1,24 +1,34 @@
 /*
  * 遊樂場的樣式——**這一頁刻意跟站台其他頁不同調**。
  *
- * 其他頁是冷色極簡加一面水；這裡是暖紫底配霓虹金，因為它演的是另一個場合。
+ * 其他頁是冷色極簡加一面水；這裡是**黑金**，因為它演的是另一個場合。
  * 作品集上一頁一個樣才看得出能配合不同的美術方向，全站長一樣只證明得了一種品味。
  * 共用的是字體與版面節奏（同一組 Archivo / JetBrains Mono、同樣的圓角與間距語彙），
  * 所以換了顏色仍然看得出是同一個人做的。
+ *
+ * **調性的規則只有一條：金是筆，不是漆。**
+ * 金色只出現在邊緣、文字、細線與強調，大面積一律留給近黑的底。
+ * 高級感來自漸層與層次（亮金 → 金 → 古銅三階），不是來自把東西塗成金色——
+ * 大塊的飽和金看起來一定廉價，那是這一版最容易走錯的地方。
+ *
+ * canvas 那半邊的同一組值在 theme.ts，**兩邊要一起改**（見那支檔案的說明）。
  */
 
 :root {
-    --bg: #120a1e;
-    --ink: #1c1030;
-    --panel: rgba(28, 16, 48, 0.72);
-    --border: rgba(255, 217, 61, 0.16);
-    --text: #f4eeff;
-    --muted: #b9a8d4;
-    --gold: #ffd93d;
-    --gold-deep: #ffb703;
-    --hot: #f72585;
-    --cool: #4cc9f0;
-    --good: #4fd18b;
+    --bg: #0a0908;
+    --ink: #151310;
+    --well: #0d0c0a;
+    --panel: rgba(21, 19, 16, 0.82);
+    --border: rgba(217, 184, 113, 0.16);
+    --border-lit: rgba(217, 184, 113, 0.42);
+    --text: #f2ece1;
+    --muted: #9a9083;
+    --gold: #d9b871;
+    --gold-bright: #f0dcac;
+    --gold-deep: #8a6a33;
+    --hot: #c05a5a;
+    --cool: #7fa8bd;
+    --good: #86a86b;
     --display: 'Archivo', ui-sans-serif, system-ui, sans-serif;
     --mono: 'JetBrains Mono', ui-monospace, monospace;
 }
@@ -41,7 +51,9 @@ canvas { display: block; touch-action: none; }
 /* canvas 鋪滿；HUD 疊在上面 */
 .stage { position: fixed; inset: 0; }
 
-#hud-root { position: fixed; inset: 0; pointer-events: none; }
+/* z-index 要比語言鈕（#lang-slot 的 5）高，資源核對展開的說明才蓋得過它。
+   這一層自己是 pointer-events: none，所以疊在上面不會擋住底下任何東西的點擊 */
+#hud-root { position: fixed; inset: 0; pointer-events: none; z-index: 6; }
 /* HUD 的容器不吃指標事件，讓點擊穿透回 canvas；只有實際的控制項重新開啟 */
 .hud > * { pointer-events: none; }
 .hud button, .hud a { pointer-events: auto; }
@@ -72,35 +84,163 @@ canvas { display: block; touch-action: none; }
     -webkit-backdrop-filter: blur(10px);
     transition: color 0.18s, border-color 0.18s;
 }
-.back:hover { color: var(--gold); border-color: rgba(255, 217, 61, 0.4); }
+.back:hover { color: var(--gold); border-color: var(--border-lit); }
 /* 返回鍵在玩法裡是 <button>（回大廳），在大廳是 <a>（離開這一頁）。
    兩者長得一樣，所以要把 button 的預設外觀抹掉 */
 button.back { cursor: pointer; font-weight: inherit; }
 
-/* 頂列右側可能同時放核對數字與連線狀態 */
+/* 頂列左側是返回鍵加玩家資訊，右側是核對數字與連線狀態 */
+.top-left { display: flex; align-items: center; gap: 12px; }
 .top-right { display: flex; align-items: center; gap: 10px; }
 
+/* ---- 玩家與錢包 ----
+   真實博弈大廳的頂列一定有錢包，而且進了遊戲也不會消失——玩家隨時要知道自己還有多少。
+   這一頁的餘額本來只長在底部面板裡，於是大廳完全看不到自己有錢（見 ui/TopBar.tsx）。 */
+.player {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 5px 12px 5px 5px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    font-weight: 700;
+    /* 頭像底色是隨機挑的金屬色，深色字在上面才讀得到 */
+    color: #12100c;
+    flex: none;
+}
+
+.who { display: flex; flex-direction: column; gap: 1px; line-height: 1.15; }
+.pname {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
+.wallet { display: flex; align-items: center; gap: 5px; }
+/* 金幣。用 CSS 畫一個帶內圈的小圓，比放一張圖或一個 emoji 穩定——emoji 在不同系統
+   上長得完全不一樣，而這顆點正好是錢包的視覺錨點 */
+.coin {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 34% 30%, var(--gold-bright), var(--gold-deep) 72%);
+    box-shadow: 0 0 6px rgba(217, 184, 113, 0.35);
+    flex: none;
+}
+.amount {
+    font-family: var(--mono);
+    font-size: 0.94rem;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+/* 餘額變了要有動靜。React 那側是換 key 重掛這個節點來重播動畫（見 TopBar 的 Wallet），
+   所以這裡只要宣告一次性的入場動畫就好，不必管重播 */
+.amount.up { animation: winPop 0.5s ease; }
+.amount.down { animation: losePop 0.4s ease; }
+@keyframes winPop {
+    0% { color: var(--gold); transform: translateY(-3px) scale(1.12); }
+    100% { color: var(--text); transform: none; }
+}
+@keyframes losePop {
+    0% { color: var(--hot); transform: translateY(2px); }
+    100% { color: var(--text); transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .amount.up, .amount.down { animation: none; }
+}
+
 /* ---- 資源核對 ----
-   這一頁在架構上想證明的事就是這一行數字（見 core/module.ts），所以它一直掛在畫面上，
-   而不是藏在 console。等寬字讓數字跳動時不會整行左右晃。 */
+   這一頁在架構上想證明的事就是這一塊（見 core/module.ts），所以它一直掛在畫面上，
+   而不是藏在 console。收合時只講結論，數字點開才出現——一串沒有標題的數字，
+   看到的人只知道有東西在跳，不知道那是什麼（見 ui/TopBar.tsx）。 */
+.meter-wrap { position: relative; }
+
 .meter {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
     font-family: var(--mono);
     font-size: 0.64rem;
     letter-spacing: 0.03em;
-    padding: 5px 10px;
+    padding: 5px 11px;
     border-radius: 999px;
     border: 1px solid var(--border);
     background: var(--panel);
     color: var(--muted);
     white-space: nowrap;
-    cursor: help;
+    cursor: pointer;
+    transition: color 0.16s, border-color 0.16s;
 }
-.meter.ok { color: var(--good); border-color: rgba(79, 209, 139, 0.35); }
-.meter.warn { color: var(--hot); border-color: rgba(255, 77, 109, 0.45); }
+.meter:hover { border-color: var(--border-lit); }
+.meter strong { font-weight: 600; color: currentColor; }
+/* 一顆狀態燈：綠＝乾淨、紅＝有東西沒還、灰＝還沒量過。
+   顏色跟著 currentColor 走，所以三種狀態只要換文字顏色 */
+.meter-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 6px currentColor;
+    flex: none;
+}
+.meter.clean { color: var(--good); border-color: rgba(134, 168, 107, 0.32); }
+/* 中間態：texture 比上次多，但沒有東西沒回收。那是共用字體 atlas 的一次性成長，
+   不是洩漏，所以用金色而不是紅色（見 ui/TopBar.tsx 的三態說明） */
+.meter.cached { color: var(--gold); border-color: var(--border-lit); }
+.meter.leak { color: var(--hot); border-color: rgba(192, 90, 90, 0.45); }
+
+.meter-pop {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(300px, 78vw);
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(13, 12, 10, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6);
+    /* 這塊有內文要讀，所以它自己要吃指標事件（.hud > * 預設關掉了） */
+    pointer-events: auto;
+    z-index: 6;
+}
+.meter-pop p {
+    margin: 0;
+    font-size: 0.66rem;
+    line-height: 1.6;
+    color: var(--muted);
+}
+.meter-pop .meter-idle, .meter-pop .meter-note { margin-top: 8px; color: var(--gold); }
+.meter-pop dl {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    margin: 10px 0 0;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+}
+.meter-pop dt { color: var(--muted); }
+.meter-pop dd { margin: 0; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* 窄畫面藏起來：頂列塞不下，而它是給人細看的資訊不是即時回饋 */
 @media (max-width: 560px) {
-    .meter { display: none; }
+    .meter-wrap { display: none; }
 }
 
 /* 語言鈕：i18n 掛進 #lang-slot，位置在這裡定。頂列右側留給連線狀態，所以往下錯開一列 */
@@ -139,12 +279,122 @@ button.back { cursor: pointer; font-weight: inherit; }
     font-size: 0.82rem;
     padding: 10px 18px;
     border-radius: 10px;
-    background: rgba(247, 37, 133, 0.16);
-    border: 1px solid rgba(247, 37, 133, 0.5);
-    color: #ffd0e4;
+    background: rgba(192, 90, 90, 0.14);
+    border: 1px solid rgba(192, 90, 90, 0.5);
+    color: #f0cfcf;
     animation: toastIn 0.22s ease;
 }
 @keyframes toastIn { from { opacity: 0; transform: translate(-50%, -6px); } }
+
+/* 中性語氣的提示（「這款還在規劃中」）。用同一個元件不同配色：那不是操作失敗，
+   用紅色會讓人以為自己弄壞了什麼（見 store 的 notice 欄位） */
+.toast.info {
+    background: rgba(127, 168, 189, 0.13);
+    border-color: rgba(127, 168, 189, 0.42);
+    color: #dbeaf2;
+}
+
+/*
+ * ---- 大廳：分類 tab 與頁腳 ----
+ *
+ * 這兩條是 DOM，canvas 那側照 core/layout.ts 的 LOBBY_TAB_H / LOBBY_FOOTER_H 讓位。
+ * **改這裡的高度要同步改那兩個常數**——它們不像操作面板那樣被實測回報，
+ * 因為 tab 與頁腳的高度不會隨語言或內容改變（見那支檔案的說明）。
+ */
+.lobby-tabs {
+    position: absolute;
+    top: calc(max(16px, env(safe-area-inset-top)) + 46px);
+    left: clamp(16px, 3vw, 32px);
+    display: flex;
+    gap: 8px;
+    height: 34px;
+    align-items: center;
+}
+
+.tab {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.16s, border-color 0.16s, background 0.16s;
+}
+.tab:hover { color: var(--text); border-color: var(--border-lit); }
+.tab.on {
+    color: #12100c;
+    background: linear-gradient(180deg, var(--gold-bright), var(--gold) 55%, var(--gold-deep));
+    border-color: transparent;
+    font-weight: 700;
+}
+
+.lobby-foot {
+    position: absolute;
+    left: clamp(16px, 3vw, 32px);
+    right: clamp(16px, 3vw, 32px);
+    bottom: max(12px, env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    height: 42px;
+}
+
+.foot-btns { display: flex; gap: 8px; }
+.foot-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    padding: 7px 13px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.16s, border-color 0.16s;
+}
+.foot-btn:hover { color: var(--gold); border-color: var(--border-lit); }
+
+/* 圖示用 mask 而不是 background-image：這樣顏色跟著 currentColor 走，
+   hover 變金色時圖示會一起變，不必準備第二份素材 */
+.foot-icon {
+    width: 14px;
+    height: 14px;
+    background: currentColor;
+    flex: none;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+}
+.foot-icon.service {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23000%27 d=%27M12 2a9 9 0 0 0-9 9v5a3 3 0 0 0 3 3h1a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1H5v-.5a7 7 0 0 1 14 0v.5h-2a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h1a3 3 0 0 0 3-3v-5a9 9 0 0 0-9-9Z%27/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23000%27 d=%27M12 2a9 9 0 0 0-9 9v5a3 3 0 0 0 3 3h1a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1H5v-.5a7 7 0 0 1 14 0v.5h-2a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h1a3 3 0 0 0 3-3v-5a9 9 0 0 0-9-9Z%27/%3E%3C/svg%3E");
+}
+.foot-icon.news {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23000%27 d=%27M4 5h16v14H4zM6 8h12v2H6zm0 4h9v2H6zm0 4h7v2H6z%27/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23000%27 d=%27M4 5h16v14H4zM6 8h12v2H6zm0 4h9v2H6zm0 4h7v2H6z%27/%3E%3C/svg%3E");
+}
+.foot-icon.campaign {
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23000%27 d=%27m12 2 2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.1 6.1 20.2l1.2-6.6L2.5 9l6.6-.9Z%27/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23000%27 d=%27m12 2 2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.1 6.1 20.2l1.2-6.6L2.5 9l6.6-.9Z%27/%3E%3C/svg%3E");
+}
+
+/* 這一行是必要的，不是客套：活動 banner 做得像真的促銷，而這是一個作品集網站 */
+.foot-note {
+    margin: 0;
+    font-size: 0.6rem;
+    line-height: 1.4;
+    color: var(--muted);
+    opacity: 0.7;
+    max-width: 46ch;
+    text-align: right;
+}
 
 /* ---- 底部操作區 ----
    格線只有三列：主操作、次要選項、說明。**每一款玩法都填同樣這幾格**——玩法自己
@@ -225,7 +475,7 @@ button.back { cursor: pointer; font-weight: inherit; }
     cursor: pointer;
     transition: color 0.16s, border-color 0.16s, background 0.16s;
 }
-.chip:hover:not(:disabled) { color: var(--text); border-color: rgba(255, 217, 61, 0.4); }
+.chip:hover:not(:disabled) { color: var(--text); border-color: var(--border-lit); }
 .chip.on {
     color: var(--ink);
     background: var(--gold);
@@ -247,12 +497,12 @@ button.back { cursor: pointer; font-weight: inherit; }
     border-radius: 12px;
     border: none;
     color: var(--ink);
-    background: linear-gradient(160deg, var(--gold), var(--gold-deep));
+    background: linear-gradient(160deg, var(--gold-bright), var(--gold) 46%, var(--gold-deep));
     cursor: pointer;
-    box-shadow: 0 6px 20px rgba(255, 183, 3, 0.32);
+    box-shadow: 0 6px 20px rgba(217, 184, 113, 0.22);
     transition: transform 0.14s, box-shadow 0.14s, filter 0.14s;
 }
-.spin:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 9px 26px rgba(255, 183, 3, 0.42); }
+.spin:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 9px 26px rgba(217, 184, 113, 0.32); }
 .spin:active:not(:disabled) { transform: translateY(1px); }
 .spin:disabled {
     filter: grayscale(0.7);
@@ -299,7 +549,7 @@ button.back { cursor: pointer; font-weight: inherit; }
     cursor: pointer;
     transition: color 0.16s, border-color 0.16s;
 }
-.drawer-toggle:hover { color: var(--gold); border-color: rgba(255, 217, 61, 0.4); }
+.drawer-toggle:hover { color: var(--gold); border-color: var(--border-lit); }
 .drawer.open .drawer-toggle { border-style: solid; color: var(--text); }
 
 .caret {
@@ -427,7 +677,7 @@ button.back { cursor: pointer; font-weight: inherit; }
     .cap { font-size: 0.55rem; }
     .val { font-size: 0.92rem; }
     /* 核對數字是給人停下來細看的資訊，這個尺寸下它只會去壓玩法的畫面 */
-    .meter { display: none; }
+    .meter-wrap { display: none; }
 
     /* 語言鈕原本錯開一列擺在右上——那裡現在是面板，會整個疊上去。
        移到左上返回鍵旁邊：頂列左半在這個版面本來就是空的 */
@@ -436,6 +686,50 @@ button.back { cursor: pointer; font-weight: inherit; }
         left: 136px;
         right: auto;
     }
+}
+
+/*
+ * ---- 大廳在窄畫面 ----
+ *
+ * 頂列在 390 寬要塞下「返回、頭像、名字、餘額」四樣東西，一定有一樣要讓。讓的是
+ * **名字**：它是四樣裡唯一沒有功能的。餘額不能讓（那是玩家最在意的數字），
+ * 頭像不能讓（沒有它整塊看起來就只是一個數字），返回鍵更不能讓。
+ *
+ * 頁腳的文字也一樣收掉只留圖示，但那行 DEMO 註記**不收**——它是這一頁必須講清楚的話，
+ * 只是換成兩行小字（見 arcade.foot.demo）。
+ */
+@media (max-width: 620px) {
+    .top-left { gap: 8px; }
+    .pname { display: none; }
+    .player { padding: 4px 10px 4px 4px; gap: 7px; }
+    .avatar { width: 24px; height: 24px; font-size: 0.6rem; }
+    .amount { font-size: 0.86rem; }
+
+    .lobby-tabs {
+        right: clamp(16px, 3vw, 32px);
+        /* 分類多起來會塞不下，讓它自己橫捲而不是換行——換行會長高一列，
+           而 canvas 那側是照常數讓位的，多出來的那列會直接壓到滑軌 */
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .lobby-tabs::-webkit-scrollbar { display: none; }
+    .tab { padding: 6px 12px; flex: none; }
+
+    .lobby-foot { flex-direction: column; align-items: stretch; gap: 6px; height: auto; }
+    .foot-btn { padding: 7px 10px; }
+    .foot-note { text-align: left; font-size: 0.55rem; max-width: none; }
+}
+
+/*
+ * ---- 大廳在手機橫放 ----
+ *
+ * 語言鈕在這個尺寸下被搬到左上（見上一段 media query），而頂列左邊現在多了玩家資訊，
+ * 兩者會疊在一起。往右再挪一段，位置抓在返回鍵加錢包之後。
+ */
+@media (max-height: 560px) and (min-aspect-ratio: 1/1) {
+    #lang-slot { left: 300px; }
+    .lobby-foot { bottom: max(8px, env(safe-area-inset-bottom)); height: 34px; }
+    .foot-note { display: none; }
 }
 
 /* 跨頁轉場的落地端：一層純色覆蓋，淡出＋微放大揭開頁面。 */
