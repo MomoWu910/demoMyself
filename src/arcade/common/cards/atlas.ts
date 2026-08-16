@@ -1,4 +1,5 @@
 import { Application, Container, Graphics, Rectangle, Text, TextStyle, Texture } from 'pixi.js';
+import { IVORY } from '../../theme';
 
 /**
  * 撲克牌面——**在 runtime 畫出來，再烘成一張 atlas**，不載任何圖檔。
@@ -26,13 +27,13 @@ export type Suit = (typeof SUITS)[number];
 /** 紅色的兩個花色。分開列出來而不是寫 `suit === 'heart' || …`，加花色時才不會漏改。 */
 const RED: ReadonlySet<Suit> = new Set<Suit>(['heart', 'diamond']);
 
-/** 牌面的底色。純白在這一頁的暖紫背景上太刺眼，壓一點暖調才像桌上的實體牌。 */
-const FACE = 0xf4efe6;
-const INK = 0x1a1420;
-const RED_INK = 0xd62246;
+/** 牌面的底色。純白在近黑的背景上太刺眼，壓一點暖調才像桌上的實體牌。 */
+const FACE = IVORY;
+const INK = 0x171310;
+const RED_INK = 0xb23342;
 
-/** 牌背的主色。用站台既有的紫，讓它跟遊樂場的霓虹是同一家族。 */
-const BACK = 0x6a3fa0;
+/** 牌背的主色。深酒紅——牌背在真桌上一向是深紅或深藍，配黑金取前者。 */
+const BACK = 0x6e2a34;
 
 export interface CardAtlas {
     /** `frames.get('heart')?.[11]` = 紅心 J。索引是 rank（1~13），0 沒有用。 */

@@ -1,5 +1,6 @@
 import { Container, Graphics, Rectangle, type FederatedPointerEvent, type FederatedWheelEvent } from 'pixi.js';
 import { RoadGrid, type RoadGridOptions, type RoadMark } from './RoadGrid';
+import { BG } from '../../theme';
 
 /**
  * 一張**可以橫向捲動**的路圖。
@@ -138,17 +139,17 @@ export class ScrollableRoad extends Container {
         this.fade.clear();
         if (this.viewW <= 0 || this.viewH <= 0) return;
 
-        // 顏色跟舞台背景同一色（見 core/stage.ts 的 BG）。用不透明的窄條加遞減的 alpha
+        // 顏色跟舞台背景同一色（見 theme.ts 的 BG）。用不透明的窄條加遞減的 alpha
         // 疊出漸層，因為 Pixi 的 FillGradient 對這種一格寬的長條反而更貴
         const steps = 7;
         for (let i = 0; i < steps; i++) {
             const alpha = (1 - i / steps) * 0.9;
             const w = FADE_W / steps;
             if (this.offset > 1) {
-                this.fade.rect(i * w, 0, w + 0.5, this.viewH).fill({ color: 0x120a1e, alpha });
+                this.fade.rect(i * w, 0, w + 0.5, this.viewH).fill({ color: BG, alpha });
             }
             if (this.offset < this.maxOffset - 1) {
-                this.fade.rect(this.viewW - (i + 1) * w - 0.5, 0, w + 0.5, this.viewH).fill({ color: 0x120a1e, alpha });
+                this.fade.rect(this.viewW - (i + 1) * w - 0.5, 0, w + 0.5, this.viewH).fill({ color: BG, alpha });
             }
         }
     }

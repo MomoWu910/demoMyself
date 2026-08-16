@@ -1,4 +1,5 @@
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+import { TIE } from '../../theme';
 
 /**
  * 一張「有限列數的網格 + 在格子上畫記號」的圖。
@@ -139,12 +140,12 @@ export class RoadGrid extends Container {
             if (mark.ties && mark.ties > 0) {
                 const d = radius * 1.05;
                 g.moveTo(cx - d, cy - d).lineTo(cx + d, cy + d);
-                g.stroke({ color: 0x4fd18b, width: Math.max(1.2, cell * 0.08) });
+                g.stroke({ color: TIE, width: Math.max(1.2, cell * 0.08) });
                 // 連開三次以上的和很罕見，畫第二條就夠表示「不只一次」，
                 // 再多會把珠子整個蓋掉
                 if (mark.ties > 1) {
                     g.moveTo(cx - d, cy + d * 0.2).lineTo(cx + d * 0.2, cy + d);
-                    g.stroke({ color: 0x4fd18b, width: Math.max(1.2, cell * 0.08) });
+                    g.stroke({ color: TIE, width: Math.max(1.2, cell * 0.08) });
                 }
             }
 

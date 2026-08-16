@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { DisposeReport, ModuleId } from './core/module';
 import type { SocketState } from './net/fakeSocket';
+import type { LobbyTab } from './lobby/catalog';
 
 /**
  * 遊樂場的**外殼**狀態：跟玩哪一款無關的那些東西。
@@ -23,6 +24,24 @@ export interface ArcadeState {
     balance: number;
     /** 伺服器回的錯誤代碼（餘額不足等），顯示完就清掉。翻譯在 UI 那側才發生。 */
     error: string | null;
+
+    /**
+     * 提示訊息的 i18n 鍵。跟 `error` 分開是因為**語氣不一樣**。
+     *
+     * 「餘額不足」是操作失敗，該用紅色攔住視線；「這款還在規劃中」只是回答了一個問題，
+     * 用同一個紅色提示會讓人以為自己弄壞了什麼。共用一個欄位再加個 level 也行，
+     * 但那樣每個呼叫點都得多帶一個參數，而呼叫點分散在 server 封包與 UI 兩邊。
+     */
+    notice: string | null;
+
+    /**
+     * 這位訪客的身分。**純粹是門面**——真正的餘額在 server/wallet.ts，這裡只有顯示用的
+     * 名字與頭像顏色。
+     *
+     * 存進 localStorage 是為了回訪時是同一個人。每次進站都換一組名字的話，頂列那個
+     * 頭像就只是裝飾；記得住才像個帳號。
+     */
+    player: { name: string; tint: string };
 
     /** 目前掛著的是哪一個模組（含大廳）。HUD 靠它決定要掛哪一組面板。 */
     scene: ModuleId | null;
@@ -60,6 +79,15 @@ export interface ArcadeState {
     enter: ((id: ModuleId) => void) | null;
 
     /**
+     * 大廳目前選的分類。
+     *
+     * 放在共享 store 而不是 React 的 useState：切 tab 的是 DOM 的膠囊按鈕，換卡片的是
+     * canvas 裡的滑軌，**兩邊誰也不持有對方**。這是整頁那條分界的縮影——跨過 canvas 邊界的
+     * 溝通一律走 store。
+     */
+    lobbyTab: LobbyTab;
+
+    /**
      * 操作面板實際佔掉畫面哪一側、佔多少（像素，含它自己的外邊距）。兩個都是 0 = 沒有面板。
      *
      * 為什麼是**兩個方向**而不是單一高度：手機橫放時面板會整個移到畫面右側直排
@@ -75,17 +103,56 @@ export interface ArcadeState {
     setConnection: (s: SocketState) => void;
     setBalance: (n: number) => void;
     setError: (msg: string | null) => void;
+    setNotice: (key: string | null) => void;
     setScene: (s: ModuleId | null) => void;
+    setLobbyTab: (tab: LobbyTab) => void;
     /** 記一次卸載的結果，並把該場景的對照值更新成這次的數字。 */
     recordDispose: (scene: ModuleId, report: DisposeReport) => void;
     setEnter: (fn: ((id: ModuleId) => void) | null) => void;
     setDockInset: (bottom: number, right: number) => void;
 }
 
+/**
+ * 訪客身分。名字是隨機的四位數，頭像顏色從一組固定的金屬色裡挑——**不用完全隨機的色相**，
+ * 那樣總會抽到跟黑金調性打架的螢光色，或是在近黑背景上看不見的暗色。
+ */
+const TINTS = ['#c9a227', '#e3c88f', '#c98f7a', '#a9714b', '#8c7853', '#b08d57'];
+const PLAYER_KEY = 'arcade.player';
+
+function loadPlayer(): { name: string; tint: string } {
+    // localStorage 在無痕模式或關掉 cookie 的瀏覽器會直接丟例外，不是回傳 null。
+    // 為了一個裝飾用的名字讓整頁掛掉不划算，所以整段包起來，失敗就用當場產的
+    try {
+        const raw = window.localStorage.getItem(PLAYER_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw) as { name?: unknown; tint?: unknown };
+            if (typeof parsed.name === 'string' && typeof parsed.tint === 'string') {
+                return { name: parsed.name, tint: parsed.tint };
+            }
+        }
+    } catch {
+        /* 讀不到就當第一次來 */
+    }
+
+    const player = {
+        name: `Guest${String(Math.floor(1000 + Math.random() * 9000))}`,
+        tint: TINTS[Math.floor(Math.random() * TINTS.length)],
+    };
+    try {
+        window.localStorage.setItem(PLAYER_KEY, JSON.stringify(player));
+    } catch {
+        /* 存不了也沒關係，這一輪還是有名字 */
+    }
+    return player;
+}
+
 export const useArcadeStore = create<ArcadeState>((set) => ({
     connection: 'connecting',
     balance: 0,
     error: null,
+    notice: null,
+    player: loadPlayer(),
+    lobbyTab: 'all',
     scene: null,
     lastDispose: null,
     lastDisposedScene: null,
@@ -96,8 +163,11 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
 
     setConnection: (connection) => set({ connection }),
     setBalance: (balance) => set({ balance }),
-    setError: (error) => set({ error }),
+    // 兩種提示互斥：後來的那個蓋掉前一個，不要讓兩張卡片同時浮在畫面中間
+    setError: (error) => set({ error, notice: null }),
+    setNotice: (notice) => set({ notice, error: null }),
     setScene: (scene) => set({ scene }),
+    setLobbyTab: (lobbyTab) => set({ lobbyTab }),
     recordDispose: (scene, report) =>
         set((s) => ({
             lastDispose: report,

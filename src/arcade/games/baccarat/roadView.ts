@@ -1,4 +1,5 @@
 import type { RoadMark } from '../../common/roadmap/RoadGrid';
+import { BANKER as THEME_BANKER, PLAYER as THEME_PLAYER, TIE as THEME_TIE } from '../../theme';
 import {
     buildDerivedRoad,
     layoutBeadPlate,
@@ -18,10 +19,13 @@ import {
  * 改演算法不必碰繪製。
  */
 
-/** 莊紅閒藍是全世界百家樂桌的共同語言，跟這一頁的配色無關，不要為了好看改掉。 */
-const BANKER = 0xff4d6d;
-const PLAYER = 0x4cc9f0;
-const TIE = 0x4fd18b;
+/**
+ * 莊紅閒藍是全世界百家樂桌的共同語言，跟這一頁的配色無關，不要為了好看改掉。
+ * 唯一做過的事是把飽和度壓下來配黑金——**色相沒動**（見 theme.ts）。
+ */
+const BANKER = THEME_BANKER;
+const PLAYER = THEME_PLAYER;
+const TIE = THEME_TIE;
 
 /** 衍生路的紅藍。它們表示「齊整／雜亂」，跟莊閒無關，但沿用同一組顏色。 */
 const DERIVED = { red: BANKER, blue: PLAYER };

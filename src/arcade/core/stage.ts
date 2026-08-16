@@ -4,6 +4,8 @@ import { SlotModule } from '../games/slot';
 import { BaccaratModule } from '../games/baccarat';
 import { LobbyModule } from '../lobby';
 import { useArcadeStore } from '../store';
+import { sessionWallet } from '../server/wallet';
+import { BG as THEME_BG } from '../theme';
 
 /**
  * 遊樂場的舞台：一個 Application、一個 ModuleHost，玩法掛在上面換。
@@ -13,8 +15,8 @@ import { useArcadeStore } from '../store';
  * 全站長一樣只證明得了一種品味。共用的仍然是字體與版面節奏，所以不會散掉。
  */
 
-/** 背景底色。比站台其他頁更暖、更深一點，霓虹色壓在上面才亮得起來。 */
-const BG = 0x120a1e;
+/** 背景底色。近黑帶一點暖（見 theme.ts）——純黑會讓金色看起來髒。 */
+const BG = THEME_BG;
 
 export interface ArcadeStage {
     app: Application;
@@ -50,16 +52,19 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
     const drawBg = (w: number, h: number): void => {
         glow.clear();
         // 由中心往外的光暈，把視線壓在盤面所在的位置。用漸層而不是純色，
-        // 是因為整片死平的深色會讓霓虹色浮不起來、看起來像貼紙
+        // 是因為整片死平的黑會讓金色浮不起來，看起來像貼紙。
+        //
+        // 黑金版的中心只比背景亮一點點（0x171410 對 0x0a0908）——**這一層要幾乎看不見**。
+        // 看得出來的漸層底就會變成一顆聚光燈，而聚光燈是舞台的長相，不是牌桌的
         const grad = new FillGradient({
             type: 'radial',
             center: { x: 0.5, y: 0.45 },
             innerRadius: 0,
             outerCenter: { x: 0.5, y: 0.45 },
-            outerRadius: 0.62,
+            outerRadius: 0.68,
             colorStops: [
-                { offset: 0, color: 0x2a1440 },
-                { offset: 0.55, color: 0x1a0d2a },
+                { offset: 0, color: 0x171410 },
+                { offset: 0.55, color: 0x100e0c },
                 { offset: 1, color: BG },
             ],
         });
@@ -138,6 +143,12 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
     };
 
     useArcadeStore.getState().setEnter((id) => void enter(id));
+
+    // 餘額在**進大廳之前**就要有值。連線是玩法自己開的（見 net/fakeSocket.ts），
+    // 所以在大廳裡一個 socket 都沒有——照舊的寫法頂列的錢包會一路顯示 0，直到玩家
+    // 進了某一款遊戲才突然跳出數字。錢包屬於帳號不屬於桌台（見 server/wallet.ts），
+    // 這裡直接向共用錢包查一次，相當於真實平台登入後推的第一個餘額封包。
+    useArcadeStore.getState().setBalance(sessionWallet.get());
 
     await enter('lobby');
 

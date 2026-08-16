@@ -608,15 +608,71 @@ export const DICT: Record<string, Entry> = {
     'arcade.error.no_bet': { en: 'Place a bet first', zh: '請先下注' },
 
     // ---- 大廳與資源核對 ----
-    'arcade.lobby.title': { en: 'ARCADE', zh: 'ARCADE' },
     'arcade.lobby.slot': { en: 'Slot', zh: '老虎機' },
-    'arcade.lobby.slotDesc': { en: '5×3 reels · server-driven stops', zh: '五軸三列 · 停軸由伺服器決定' },
+    'arcade.lobby.slotDesc': { en: '5×3 reels · server stops', zh: '五軸三列 · 伺服器停軸' },
     'arcade.lobby.baccarat': { en: 'Baccarat', zh: '百家樂' },
     'arcade.lobby.baccaratDesc': { en: 'Four roadmaps · 8-deck shoe', zh: '四張路圖 · 八副牌靴' },
+    // 還沒做的那幾款。名字用真實桌台的叫法，因為它們是接下來要做的東西，不是佔位的假名
+    'arcade.lobby.dragontiger': { en: 'Dragon Tiger', zh: '龍虎' },
+    'arcade.lobby.sicbo': { en: 'Sic Bo', zh: '骰寶' },
+    'arcade.lobby.roulette': { en: 'Roulette', zh: '輪盤' },
+    'arcade.lobby.ox28': { en: 'Ox 28', zh: '二八槓' },
+    'arcade.lobby.paigow': { en: 'Pai Gow', zh: '牌九' },
+    'arcade.lobby.goldenflower': { en: 'Golden Flower', zh: '炸金花' },
+    'arcade.lobby.sangong': { en: 'San Gong', zh: '三公' },
+    'arcade.lobby.fruit': { en: 'Fruit Slot', zh: '水果盤' },
+    'arcade.lobby.soon': { en: 'SOON', zh: '規劃中' },
+    'arcade.lobby.soonDesc': { en: 'Not built yet', zh: '尚未實作' },
+    'arcade.lobby.badge.hot': { en: 'HOT', zh: '熱門' },
+    'arcade.lobby.badge.new': { en: 'NEW', zh: '新上架' },
+    'arcade.lobby.categories': { en: 'Game categories', zh: '遊戲分類' },
+    'arcade.lobby.tab.all': { en: 'All', zh: '全部' },
+    'arcade.lobby.tab.electronic': { en: 'Slots', zh: '電子' },
+    'arcade.lobby.tab.table': { en: 'Table', zh: '桌台' },
+    'arcade.lobby.tab.card': { en: 'Cards', zh: '棋牌' },
+    'arcade.notice.comingSoon': { en: 'Not built yet — on the roadmap', zh: '這款還在規劃中，敬請期待' },
     'arcade.backLobby': { en: '← Lobby', zh: '← 大廳' },
-    // 資源核對：這一頁在架構上想證明的事就是這一行數字，所以它一直掛在畫面上
-    'arcade.meter.label': { en: 'tracked', zh: '登記' },
+
+    // ---- 活動 banner ----
+    // 版面照真實大廳做（那個位置就是放廣告的），但**活動是假的**：沒有優惠、沒有東西可以領。
+    // 所以每張都掛著 DEMO 角標，頁腳也寫了一行。作品集裡放看起來像真的促銷而不標明，
+    // 是會被誤讀的那種東西（見 arcade.foot.demo）。
+    'arcade.promo.cta': { en: 'View', zh: '看看' },
+    'arcade.promo.topup.kicker': { en: 'FIRST DEPOSIT', zh: '首儲加碼' },
+    'arcade.promo.topup.headline': { en: '100%', zh: '100%' },
+    'arcade.promo.topup.sub': { en: 'Matched on your first top-up', zh: '首次儲值等額回饋' },
+    'arcade.promo.rakeback.kicker': { en: 'WEEKLY', zh: '每週結算' },
+    'arcade.promo.rakeback.headline': { en: '1.2%', zh: '1.2%' },
+    'arcade.promo.rakeback.sub': { en: 'Rakeback, paid every Monday', zh: '週週返水，逢週一入帳' },
+    'arcade.promo.newgame.kicker': { en: 'NEW TABLE', zh: '新機台' },
+    'arcade.promo.newgame.headline': { en: 'Baccarat', zh: '百家樂' },
+    'arcade.promo.newgame.sub': { en: 'Four roadmaps, now live', zh: '四張路圖，現已上線' },
+
+    // ---- 頁腳 ----
+    'arcade.foot.service': { en: 'Support', zh: '客服' },
+    'arcade.foot.news': { en: 'News', zh: '公告' },
+    'arcade.foot.campaign': { en: 'Events', zh: '活動' },
+    'arcade.foot.demo': {
+        en: 'Portfolio demo. The promos are mock-ups — nothing here is a real service, and no money of any kind is involved.',
+        zh: '作品集展示。活動內容為模擬視覺，本頁非真實服務，不涉及任何金流。',
+    },
+    // 資源核對：這一頁在架構上想證明的事就是這一塊，所以它一直掛在畫面上。
+    // 收合時只講結論，數字與解釋要點開才出現——一串沒有標題的數字等於沒做（見 ui/TopBar.tsx）
+    'arcade.meter.title': { en: 'GPU audit', zh: '資源核對' },
+    'arcade.meter.clean': { en: 'no leaks', zh: '零洩漏' },
+    'arcade.meter.dirty': { en: 'leaking', zh: '有洩漏' },
+    'arcade.meter.idle': { en: 'idle', zh: '待機' },
+    'arcade.meter.idleHint': {
+        en: 'Enter a game and come back — the audit runs when a scene is unloaded.',
+        zh: '進一款遊戲再回來，這裡就會顯示那個場景卸載後的核對結果。',
+    },
+    'arcade.meter.cachedHint': {
+        en: 'The increase is the shared font atlas — global on purpose, and correctly never returned. A real leak climbs on every single visit to the same scene.',
+        zh: '這次的增加是共用的字體 atlas——那是刻意全域的，本來就不該還。真的漏會在同一個場景每進出一次就漲一階，永遠停不下來。',
+    },
+    'arcade.meter.label': { en: 'tracked', zh: '登記資源' },
     'arcade.meter.leaked': { en: 'leaked', zh: '未回收' },
+    'arcade.meter.texture': { en: 'GPU textures', zh: 'GPU 貼圖' },
     'arcade.meter.hint': {
         en: 'Resources the last module registered, how many were still alive after unmount, and the renderer’s texture-source count compared with the previous time that same scene was unloaded. A one-off increase is the shared font atlas, which is global on purpose; a leak would climb on every single visit.',
         zh: '上一個模組登記了幾個資源、卸載後還有幾個沒回收，以及 renderer 的 texture source 數對照「同一個場景上一次」的值。一次性的增加是共用的字體 atlas（那是刻意全域的）；真的漏會每進出一次就漲一階。',

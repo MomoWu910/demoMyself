@@ -10,6 +10,7 @@ import { PAYLINES, REELS, ROWS, type Sym } from './rules';
 import { slotState, useSlotStore } from './store';
 import { stopRanks } from './stopOrder';
 import { bakeSymbolAtlas } from './symbols';
+import { GOLD_BRIGHT, METAL } from '../../theme';
 
 /**
  * 老虎機玩法。
@@ -91,7 +92,7 @@ export class SlotModule implements GameModule {
                 fontFamily: 'Archivo, ui-sans-serif, sans-serif',
                 fontSize: 46,
                 fontWeight: '900',
-                fill: 0xffd93d,
+                fill: GOLD_BRIGHT,
                 dropShadow: { color: 0x000000, alpha: 0.6, blur: 6, distance: 0, angle: 0 },
             }),
         });
@@ -297,4 +298,4 @@ export class SlotModule implements GameModule {
 }
 
 /** 每條賠付線一個顏色，同時中好幾條時才分得出是哪幾條。 */
-const LINE_COLORS = [0xffd93d, 0x4cc9f0, 0xff4d6d, 0x4fd18b, 0xb57bff];
+const LINE_COLORS = [GOLD_BRIGHT, METAL.champagne, METAL.rose, METAL.steel, METAL.copper];

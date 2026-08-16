@@ -18,3 +18,15 @@
  * 多半是置中的，用最保守的 92 會白白讓出一截。
  */
 export const TOP_BAR = 72;
+
+/**
+ * 大廳的分類 tab 列與頁腳各佔多高。
+ *
+ * 這兩條也是 DOM 畫的、canvas 要讓位的東西，但**它們不像操作面板那樣需要實測**：
+ * tab 是固定一列膠囊、頁腳是固定一列圖示，內容再怎麼換語言都不會多長出一行。
+ * 判準就是那句老話——**會變的才量，不會變的寫常數**（見 ui/Hud.tsx 的 useDockMeasure）。
+ *
+ * 改這裡要同步改 style.css 的 `.lobby-tabs` 與 `.lobby-foot`，兩邊是同一組數字。
+ */
+export const LOBBY_TAB_H = 48;
+export const LOBBY_FOOTER_H = 66;

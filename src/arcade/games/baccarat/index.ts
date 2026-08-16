@@ -15,6 +15,7 @@ import { buildBigRoad } from './roadmap';
 import { beadMarks, bigRoadMarks, derivedMarks, ROAD_ROWS } from './roadView';
 import { baccaratState, useBaccaratStore } from './store';
 import { BET_SPOTS, PAYOUTS, type BetSpot, type Card, type Round } from './rules';
+import { BANKER, PLAYER, TIE } from '../../theme';
 
 /**
  * 百家樂玩法。
@@ -62,12 +63,14 @@ const DEAL_GAP = 0.16;
 /** 牌下方那行點數要留多高。字級固定，所以這是常數而不是比例（見 layout） */
 const TOTAL_LABEL_H = 34;
 
+// 紅莊藍閒是牌桌的通用語言，**不因為換配色而改**——改了路圖上的紅藍就跟全世界的
+// 百家樂桌對不起來。能做的是壓飽和度，讓它們在黑金裡不刺眼（見 theme.ts）
 const SPOT_COLOR: Record<BetSpot, number> = {
-    player: 0x4cc9f0,
-    banker: 0xff4d6d,
-    tie: 0x4fd18b,
-    playerPair: 0x4cc9f0,
-    bankerPair: 0xff4d6d,
+    player: PLAYER,
+    banker: BANKER,
+    tie: TIE,
+    playerPair: PLAYER,
+    bankerPair: BANKER,
 };
 
 export class BaccaratModule implements GameModule {

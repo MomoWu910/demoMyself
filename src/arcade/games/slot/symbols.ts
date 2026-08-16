@@ -1,5 +1,6 @@
 import { Application, Container, Graphics, Rectangle, Text, TextStyle, Texture } from 'pixi.js';
 import { Sym, SYMBOLS } from './rules';
+import { BG, METAL, WELL } from '../../theme';
 
 /**
  * 符號的長相——**在 runtime 畫出來，再烘成一張 atlas**，不載任何圖檔。
@@ -21,18 +22,21 @@ import { Sym, SYMBOLS } from './rules';
 export const CELL = 128;
 
 /**
- * 符號的主色。這一頁刻意跟站台其他頁**不同調**——那些頁是冷色極簡，
- * 這裡是霓虹高彩，因為它演的是另一個場合。紫與綠沿用站台既有的 wgsl／three 色，
- * 讓它看起來仍是同一個人做的，不是隨手貼上的另一套風格。
+ * 符號的主色。
+ *
+ * 這一頁刻意跟站台其他頁**不同調**——那些頁是冷色極簡，這裡是黑金。
+ * 符號因此收在金屬色階與少數幾個壓過飽和度的實物色裡（櫻桃是紅的、檸檬是黃的，
+ * 那個不能改），而不是原本那套霓虹。**盤面上七個符號同時出現**，
+ * 只要有一個是螢光色，整台機器就會拉回廉價感。
  */
 const COLOR: Record<Sym, number> = {
-    [Sym.Cherry]: 0xff4d6d,
-    [Sym.Lemon]: 0xffd93d,
-    [Sym.Bell]: 0xffb703,
-    [Sym.Bar]: 0x4cc9f0,
-    [Sym.Seven]: 0xf72585,
-    [Sym.Wild]: 0xb57bff,
-    [Sym.Scatter]: 0x4fd18b,
+    [Sym.Cherry]: 0xb23342,
+    [Sym.Lemon]: 0xd9c05a,
+    [Sym.Bell]: METAL.gold,
+    [Sym.Bar]: METAL.steel,
+    [Sym.Seven]: 0xc2454f,
+    [Sym.Wild]: METAL.champagne,
+    [Sym.Scatter]: 0x7d8c5e,
 };
 
 export interface SymbolAtlas {
@@ -87,7 +91,7 @@ function drawSymbol(sym: Sym): Container {
     box.addChild(g);
 
     // 共用的底：一塊圓角暗牌，讓每個符號都有一致的落腳處，轉軸上才不會看起來高低不齊
-    g.roundRect(6, 6, CELL - 12, CELL - 12, 18).fill({ color: 0x11141c, alpha: 0.9 });
+    g.roundRect(6, 6, CELL - 12, CELL - 12, 18).fill({ color: WELL, alpha: 0.92 });
     g.roundRect(6, 6, CELL - 12, CELL - 12, 18).stroke({ color: c, width: 2, alpha: 0.5 });
 
     const mid = CELL / 2;
@@ -97,7 +101,7 @@ function drawSymbol(sym: Sym): Container {
             // 兩顆果實 + 一段梗。梗用兩條曲線從同一點分出去，看起來才是連在一起的
             g.moveTo(mid + 4, 30).quadraticCurveTo(mid + 26, 52, mid + 24, 74);
             g.moveTo(mid + 4, 30).quadraticCurveTo(mid - 20, 54, mid - 22, 72);
-            g.stroke({ color: 0x4fd18b, width: 4 });
+            g.stroke({ color: 0x7d8c5e, width: 4 });
             g.circle(mid - 24, 88, 17).fill(c);
             g.circle(mid + 24, 90, 17).fill(c);
             // 高光：一顆果實上的小亮點，是讓平塗看起來有體積最省事的一筆
@@ -127,7 +131,7 @@ function drawSymbol(sym: Sym): Container {
         }
         case Sym.Bar: {
             g.roundRect(mid - 40, mid - 17, 80, 34, 8).fill(c);
-            box.addChild(label('BAR', 0x0b0c10, 24, mid, mid));
+            box.addChild(label('BAR', BG, 24, mid, mid));
             break;
         }
         case Sym.Seven: {
@@ -137,12 +141,12 @@ function drawSymbol(sym: Sym): Container {
         case Sym.Wild: {
             // 菱形襯底 + 字。Wild 要一眼跟水果類分開，所以用幾何形而不是具象物件
             g.moveTo(mid, 26).lineTo(CELL - 26, mid).lineTo(mid, CELL - 26).lineTo(26, mid).closePath().fill(c);
-            box.addChild(label('W', 0x0b0c10, 44, mid, mid));
+            box.addChild(label('W', BG, 44, mid, mid));
             break;
         }
         case Sym.Scatter: {
             star(g, mid, mid, 38, 17, 6).fill(c);
-            g.circle(mid, mid, 9).fill({ color: 0x0b0c10, alpha: 0.85 });
+            g.circle(mid, mid, 9).fill({ color: BG, alpha: 0.85 });
             break;
         }
     }
