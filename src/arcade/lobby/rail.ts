@@ -2,7 +2,7 @@ import gsap from 'gsap';
 import { Container, FillGradient, Graphics, Text, TextStyle } from 'pixi.js';
 import { InertiaScroller } from '../common/scroll/InertiaScroller';
 import { t } from '../../i18n';
-import { BG, DIM, GOLD, GOLD_BRIGHT, GOLD_DEEP, INK, IVORY, IVORY_DIM, TEXT, WELL } from '../theme';
+import { BANKER, BG, DIM, GOLD, GOLD_BRIGHT, GOLD_DEEP, INK, IVORY, IVORY_DIM, TEXT, WELL } from '../theme';
 import type { LobbyEntry } from './catalog';
 
 /**
@@ -18,12 +18,47 @@ import type { LobbyEntry } from './catalog';
 /** 卡片的寬高比。沿用真實大廳 icon 的橫幅比例（Ducky 是 235×180） */
 const CARD_RATIO = 235 / 180;
 const CARD_GAP = 14;
-/** 卡片最矮做到這裡。再矮下去圖示與兩行字就疊在一起了 */
+/** 卡片最小做到這裡。再小下去圖示與兩行字就疊在一起了 */
 const MIN_CARD_H = 108;
+const MIN_CARD_W = 112;
+/** 卡片最大做到這裡（基準尺寸下；實際還要乘 UI 縮放係數，見 core/layout.ts） */
+const MAX_CARD_W = 280;
+const MAX_CARD_H = 200;
 /** 最多排幾排。再多下去每一排都太矮，而且十款遊戲在第四排就沒東西可放了 */
 const MAX_ROWS = 3;
 /** 箭頭按鈕的半徑。捲不動時整顆藏起來 */
 const ARROW_R = 17;
+/**
+ * 卡片群左右各留這麼寬的內距（基準值，實際還要乘 UI 縮放係數）。
+ *
+ * 這是**最邊緣那張卡 hover 放大時的容身之處**。垂直方向靠 scroller 的 `overflowY`
+ * 把遮罩往外放（上下多出來的是背景，露出來無所謂），但水平方向不能那樣做——
+ * 捲動軸就是水平的，遮罩往外放露出的會是正要被捲出去的那張卡的半個字。
+ *
+ * 所以水平改成**往內讓**：裁切線齊著可視範圍，卡片群自己從第 8px 開始排。
+ * 捲到底時最邊那張左右各有 8px 可以脹，而捲動中被切的永遠是「本來就只露一半」的卡。
+ *
+ * 這個內距**要從排版的可用寬度裡先扣掉**，否則「剛好填滿」的排法會多出 16px 的
+ * 捲動範圍——卡片明明鋪滿了，箭頭卻亮著、還能晃兩下。
+ */
+const CARD_INSET = 8;
+/**
+ * 兩個排法的填滿率差在這個數以內，就當它們一樣滿。
+ *
+ * 沒有容差的話，0.998 與 1.000 會被判成勝負分明——而那 0.2% 是兩張卡片各差
+ * 一個像素的捨入誤差，人眼看到的是同樣鋪滿的一排。少了它，視窗寬度慢慢拉的時候
+ * 排數會在兩種擺法之間來回跳。
+ */
+const FILL_EPS = 0.02;
+
+/** 一種擺法：排幾排、卡片多大、把可用寬度填掉多少。 */
+interface GridPlan {
+    rows: number;
+    cardW: number;
+    cardH: number;
+    /** 內容寬 ÷ 視窗寬。大於 1 表示要用捲的 */
+    fill: number;
+}
 
 export class GameRail extends Container {
     private readonly scroller: InertiaScroller;
@@ -37,15 +72,20 @@ export class GameRail extends Container {
     private cardW = 160;
     private cardH = 122;
     private rows = 1;
+    /** UI 縮放係數。**不能叫 `scale`**——Container 自己有一個同名的 ObservablePoint */
+    private ui = 1;
 
     constructor(onPick: (entry: LobbyEntry) => void) {
         super();
         this.onPick = onPick;
 
-        // `overflow` 是 hover 那 4% 放大的容身之處。沒有它，滑鼠移上去的卡片會被
-        // 自己所在的捲動視窗**齊邊切掉**——最上排切頭、最下排切腳、最邊那張切側面。
-        // 那個裁切比不放大還糟：它讓卡片看起來像壓在一塊玻璃底下
-        this.scroller = new InertiaScroller({ fadeColor: BG, fadeWidth: 22, overflow: 14 });
+        // `overflowY` 是 hover 那 4% 放大的容身之處。沒有它，滑鼠移上去的卡片會被
+        // 自己所在的捲動視窗**齊邊切掉**——最上排切頭、最下排切腳。
+        // 那個裁切比不放大還糟：它讓卡片看起來像壓在一塊玻璃底下。
+        //
+        // **水平方向刻意不放寬**：捲動軸就是水平的，往外多切一截露出來的會是
+        // 正要被捲出去的那張卡的半個字（見 InertiaScroller 的 overflowX 說明）
+        this.scroller = new InertiaScroller({ overflowY: 14 });
         this.addChild(this.scroller);
 
         this.leftArrow = new ArrowButton(-1, () => this.scroller.pageBy(-1));
@@ -62,35 +102,89 @@ export class GameRail extends Container {
         this.syncArrows();
     }
 
-    public setViewport(width: number, height: number): void {
+    public setViewport(width: number, height: number, ui = 1): void {
         this.viewW = width;
         this.viewH = height;
+        this.ui = ui;
 
-        /*
-         * 排幾排，是**由卡片的理想大小反推的**，不是拿高度除以一個常數。
-         *
-         * 因為卡片有多大其實是**寬度**決定的：`width * 0.46` 那條規則（一眼要看得到
-         * 兩張多一點，否則沒人知道旁邊還有東西）在手機上把卡片壓到 127 高、在桌機上
-         * 是 200 高。所以同樣 420 的高度，手機該排三排、桌機該排兩排——
-         * 用固定的「每排 200」去除，手機就會排成兩排小卡加一大片空白。
-         */
-        const cardWMax = Math.min(280, width * 0.46);
-        const idealH = Math.max(MIN_CARD_H, Math.min(200, cardWMax / CARD_RATIO));
-        this.rows = Math.max(1, Math.min(MAX_ROWS, Math.round(height / (idealH + CARD_GAP))));
-
-        // 卡片尺寸由排數與高度起算、被寬度修正，最後回頭夾一次高度好維持比例
-        const perRow = (height - (this.rows - 1) * CARD_GAP) / this.rows;
-        const maxH = Math.max(MIN_CARD_H, Math.min(perRow, 200));
-        this.cardW = Math.max(112, Math.min(maxH * CARD_RATIO, cardWMax));
-        this.cardH = Math.max(MIN_CARD_H, Math.min(maxH, this.cardW / CARD_RATIO));
+        const plan = this.planGrid(width - CARD_INSET * 2 * ui, height, ui);
+        this.rows = plan.rows;
+        this.cardW = plan.cardW;
+        this.cardH = plan.cardH;
 
         this.scroller.setViewport(width, height);
         this.layoutCards();
 
         const cy = height / 2;
-        this.leftArrow.position.set(ARROW_R + 4, cy);
-        this.rightArrow.position.set(width - ARROW_R - 4, cy);
+        const r = ARROW_R * ui;
+        this.leftArrow.setScale(ui);
+        this.rightArrow.setScale(ui);
+        this.leftArrow.position.set(r + 4, cy);
+        this.rightArrow.position.set(width - r - 4, cy);
         this.syncArrows();
+    }
+
+    /**
+     * 決定排幾排、卡片多大。
+     *
+     * 原本這裡是「拿高度除以一個理想卡片高」——那在筆電上剛好，在 2560 寬的螢幕上
+     * 就露餡了：排數只看得到高度，於是右邊躺著四百多 px 的黑。
+     *
+     * 現在改成**把三種排法都算出來，挑最好的那個**。每種排法先把寬度平分給每一欄
+     * （卡片只會比平分值小、不會更大，所以「剛好用完寬度」是這個算法的天花板），
+     * 再讓上限與比例去修它。
+     *
+     * 挑選的順序不能反：**先看填不填得滿，再看卡片夠不夠大，最後才比排數**。
+     * 只比大小會選出「四張巨無霸卡加一片空白」；只比填滿率會選出「一排十張小卡
+     * 剛好貼齊邊緣」。而當三種排法都塞不下（手機上必定如此，卡片會溢出去用捲的），
+     * 填滿率全都爆表分不出高下，那時才輪到排數——排滿一點，高度才不會空著。
+     */
+    private planGrid(width: number, height: number, ui: number): GridPlan {
+        const gap = CARD_GAP * ui;
+        // 寬度那條上限是「一眼要看得到兩張多一點」，否則沒人知道旁邊還有東西
+        const capW = Math.min(MAX_CARD_W * ui, width * 0.46);
+        const capH = MAX_CARD_H * ui;
+        const n = Math.max(1, this.cards.length);
+
+        let best: GridPlan | null = null;
+
+        for (let rows = 1; rows <= MAX_ROWS; rows++) {
+            const cols = Math.ceil(n / rows);
+            const share = (width - (cols - 1) * gap) / cols;
+            let cw = Math.min(capW, share);
+            let ch = cw / CARD_RATIO;
+
+            // 高度放不下就從高度回推寬度。**維持比例而不是壓扁**——一張被壓扁的卡片
+            // 看起來是壞掉的，一片留白只是空的
+            const rowH = (height - (rows - 1) * gap) / rows;
+            const hCap = Math.min(capH, rowH);
+            if (ch > hCap) {
+                ch = hCap;
+                cw = ch * CARD_RATIO;
+            }
+            cw = Math.max(MIN_CARD_W, cw);
+            ch = Math.max(MIN_CARD_H, ch);
+
+            // 撞到最小尺寸之後仍然放不下的排法直接淘汰（rows === 1 永遠保留當退路，
+            // 否則極矮的視窗會一個候選都不剩）
+            if (rows > 1 && rows * ch + (rows - 1) * gap > height) continue;
+
+            const fill = (cols * (cw + gap) - gap) / width;
+            if (!best || this.beats({ rows, cardW: cw, cardH: ch, fill }, best)) {
+                best = { rows, cardW: cw, cardH: ch, fill };
+            }
+        }
+
+        return best ?? { rows: 1, cardW: MIN_CARD_W, cardH: MIN_CARD_H, fill: 1 };
+    }
+
+    /** planGrid 的排序規則。填滿率一律夾到 1——超出去的都是「要捲」，捲多捲少沒有好壞。 */
+    private beats(a: GridPlan, b: GridPlan): boolean {
+        const fa = Math.min(a.fill, 1);
+        const fb = Math.min(b.fill, 1);
+        if (Math.abs(fa - fb) > FILL_EPS) return fa > fb;
+        if (Math.abs(a.cardW - b.cardW) > 1) return a.cardW > b.cardW;
+        return a.rows > b.rows;
     }
 
     /** 換分類：整批換掉卡片。捲動位置回到最左，因為看的已經是另一組東西了。 */
@@ -109,6 +203,15 @@ export class GameRail extends Container {
             return card;
         });
 
+        // 排法要跟著**卡片數**重算，不是只跟著視窗大小。分類 tab 從十款切到兩款，
+        // 同樣的寬度該排成一排大卡而不是留著三排的格子空在那裡
+        if (this.viewW > 0) {
+            const plan = this.planGrid(this.viewW - CARD_INSET * 2 * this.ui, this.viewH, this.ui);
+            this.rows = plan.rows;
+            this.cardW = plan.cardW;
+            this.cardH = plan.cardH;
+        }
+
         this.layoutCards();
         this.scroller.scrollTo(0);
         this.syncArrows();
@@ -125,25 +228,29 @@ export class GameRail extends Container {
 
     private layoutCards(): void {
         const rows = this.rows;
+        const gap = CARD_GAP * this.ui;
+        const inset = CARD_INSET * this.ui;
         // **先填直的再往右**（column-major）。橫向填的話，捲動時同一欄的上下兩張
         // 會是清單裡相隔五個位置的東西，看起來像亂排的；直的填才符合「一欄是一組」的直覺
         const cols = Math.max(1, Math.ceil(this.cards.length / rows));
-        const blockH = rows * this.cardH + (rows - 1) * CARD_GAP;
+        const blockH = rows * this.cardH + (rows - 1) * gap;
         const top = (this.viewH - blockH) / 2;
 
         for (let i = 0; i < this.cards.length; i++) {
             const card = this.cards[i];
-            card.setSize(this.cardW, this.cardH);
+            card.setSize(this.cardW, this.cardH, this.ui);
             const col = Math.floor(i / rows);
             const row = i % rows;
             // 卡片畫在自己的中心座標裡（hover 放大才會從中間脹開），所以這裡給中心點
             card.position.set(
-                col * (this.cardW + CARD_GAP) + this.cardW / 2,
-                top + row * (this.cardH + CARD_GAP) + this.cardH / 2
+                inset + col * (this.cardW + gap) + this.cardW / 2,
+                top + row * (this.cardH + gap) + this.cardH / 2
             );
         }
 
-        const len = this.cards.length === 0 ? 0 : cols * (this.cardW + CARD_GAP) - CARD_GAP;
+        // 內容長度含兩側的內距，右邊那一側才留得住（只加左邊的話，捲到最右時
+        // 最後一張會貼死在裁切線上，放大照樣被切）
+        const len = this.cards.length === 0 ? 0 : cols * (this.cardW + gap) - gap + inset * 2;
         this.scroller.setContentLength(len);
     }
 
@@ -173,6 +280,8 @@ class GameCard extends Container {
 
     private w = 160;
     private h = 122;
+    /** UI 縮放係數。字級、圓角、內距全部乘它——只放大卡片而字不動，看起來會像貼圖被拉開 */
+    private ui = 1;
     private hover = false;
     private tween: gsap.core.Tween | null = null;
     /** 卡片自己烘的兩道漸層（面上的光暈、邊框的金屬邊）。
@@ -201,9 +310,10 @@ class GameCard extends Container {
         this.redraw();
     }
 
-    public setSize(w: number, h: number): void {
+    public setSize(w: number, h: number, ui = 1): void {
         this.w = w;
         this.h = h;
+        this.ui = ui;
         this.redraw();
     }
 
@@ -251,13 +361,29 @@ class GameCard extends Container {
     }
 
     private redraw(): void {
-        const { w, h } = this;
+        const { w, h, ui } = this;
         const playable = this.entry.playable;
         const c = this.entry.color;
         const g = this.bg;
+        // 圓角跟著放大。固定的 14px 貼在一張 390 寬的卡片上會顯得幾乎是直角
+        const radius = 14 * ui;
+
+        /*
+         * 字級跟著縮放走。**這一段是「大螢幕上字太小」的正主**——原本 15／10／8
+         * 這三個數字是在 1440 寬調出來的絕對值，螢幕變成 2560 之後它們一點都沒變。
+         *
+         * 但光乘一個係數還不夠：字級是絕對值、卡片寬度不是，兩者在手機上會對撞。
+         * 實測 390×844 的卡片只有 113px 寬，而百家樂的副標「Five roadmaps · 8-deck shoe」
+         * 量出來 131px——**左右各有 9px 的字跑到卡片外面**。所以理想字級之後還要
+         * 過一道「量出來太寬就縮回去」（見 fitText）。
+         */
+        const maxTextW = w - 14 * ui;
+        fitText(this.title, 15 * ui, maxTextW);
+        fitText(this.sub, 10 * ui, maxTextW);
+        this.badgeText.style.fontSize = 8 * ui;
 
         g.clear();
-        g.roundRect(-w / 2, -h / 2, w, h, 14).fill({ color: INK, alpha: 0.96 });
+        g.roundRect(-w / 2, -h / 2, w, h, radius).fill({ color: INK, alpha: 0.96 });
 
         /*
          * 上緣往下的一道金屬光暈。
@@ -278,7 +404,7 @@ class GameCard extends Container {
             textureSpace: 'local',
         });
         const glowAlpha = playable ? (this.hover ? 0.3 : 0.16) : 0.1;
-        g.roundRect(-w / 2, -h / 2, w, h * 0.62, 14).fill({ fill: this.glow, alpha: glowAlpha });
+        g.roundRect(-w / 2, -h / 2, w, h * 0.62, radius).fill({ fill: this.glow, alpha: glowAlpha });
 
         /*
          * 邊框也是漸層——**上緣亮、下緣暗**。
@@ -298,13 +424,13 @@ class GameCard extends Container {
             ],
             textureSpace: 'local',
         });
-        g.roundRect(-w / 2, -h / 2, w, h, 14).stroke({
+        g.roundRect(-w / 2, -h / 2, w, h, radius).stroke({
             fill: this.edge,
-            width: this.hover && playable ? 1.8 : 1,
+            width: (this.hover && playable ? 1.8 : 1) * ui,
             alpha: playable ? (this.hover ? 1 : 0.42) : 0.3,
         });
         // 底部的一條光：讓卡片看起來是站在檯面上的
-        g.roundRect(-w / 2 + 14, h / 2 - 2.5, w - 28, 2.5, 1.5).fill({
+        g.roundRect(-w / 2 + 14 * ui, h / 2 - 2.5 * ui, w - 28 * ui, 2.5 * ui, 1.5 * ui).fill({
             color: c,
             alpha: playable ? (this.hover ? 0.85 : 0.34) : 0.18,
         });
@@ -325,8 +451,8 @@ class GameCard extends Container {
 
         this.title.anchor.set(0.5);
         this.sub.anchor.set(0.5);
-        this.title.position.set(0, h / 2 - 34);
-        this.sub.position.set(0, h / 2 - 16);
+        this.title.position.set(0, h / 2 - 34 * ui);
+        this.sub.position.set(0, h / 2 - 16 * ui);
 
         this.drawBadge(c);
     }
@@ -340,13 +466,13 @@ class GameCard extends Container {
 
         // 膠囊寬度跟著文字走——中英文的長度差很多（SOON vs 規劃中），寫死會切字
         this.badgeText.anchor.set(0.5);
-        const padX = 7;
+        const padX = 7 * this.ui;
         const bw = this.badgeText.width + padX * 2;
-        const bh = 15;
-        const bx = this.w / 2 - bw / 2 - 8;
-        const by = -this.h / 2 + bh / 2 + 8;
+        const bh = 15 * this.ui;
+        const bx = this.w / 2 - bw / 2 - 8 * this.ui;
+        const by = -this.h / 2 + bh / 2 + 8 * this.ui;
 
-        this.badge.roundRect(bx - bw / 2, by - bh / 2, bw, bh, 7).fill({
+        this.badge.roundRect(bx - bw / 2, by - bh / 2, bw, bh, bh / 2).fill({
             color: this.entry.playable ? color : 0x322d26,
             alpha: this.entry.playable ? 0.95 : 1,
         });
@@ -372,22 +498,99 @@ function drawIcon(host: Container, key: string, color: number, size: number, fac
 
     switch (key) {
         case 'slot': {
-            // 三格轉軸，中間那格亮著
+            /*
+             * 三格轉軸，每格一個 7。
+             *
+             * **777 是老虎機唯一不用解釋的符號。** 原本這裡畫的是三個空轉軸加中間
+             * 一條亮條——那個形狀在 130px 的卡片上看起來像三顆並排的按鈕，
+             * 抽象到失去了指涉對象。抽象的目的是在小尺寸下更好認，不是更難認。
+             */
             const cw = s * 0.42;
             const ch = s * 0.66;
             const gap = s * 0.12;
+            const round = s * 0.07;
             for (let i = -1; i <= 1; i++) {
-                const x = i * (cw + gap) - cw / 2;
-                g.roundRect(x, -ch / 2, cw, ch, 4).fill({ color: WELL, alpha: 0.95 });
-                g.roundRect(x, -ch / 2, cw, ch, 4).stroke({ color, width: 1.4, alpha: 0.75 });
+                const cx = i * (cw + gap);
+                g.roundRect(cx - cw / 2, -ch / 2, cw, ch, round).fill({ color: WELL, alpha: 0.95 });
+                g.roundRect(cx - cw / 2, -ch / 2, cw, ch, round).stroke({ color, width: Math.max(1, s * 0.032), alpha: 0.55 });
+
+                // 「7」用一橫一斜的**筆畫**而不是實心多邊形：實心的字腳在這個尺寸下
+                // 會糊成一塊，而筆畫的線寬跟著 s 走，放大縮小都是同一個字形
+                const fw = cw * 0.5;
+                const fh = ch * 0.5;
+                g.moveTo(cx - fw / 2, -fh / 2)
+                    .lineTo(cx + fw / 2, -fh / 2)
+                    .lineTo(cx - fw * 0.14, fh / 2)
+                    .stroke({
+                        color,
+                        width: Math.max(1.2, s * 0.072),
+                        alpha: 0.95,
+                        cap: 'round',
+                        join: 'round',
+                    });
             }
-            g.roundRect(-cw / 2 + 3, -s * 0.11, cw - 6, s * 0.22, 3).fill(color);
             break;
         }
         case 'baccarat': {
-            // 兩張斜放的牌。角度相反才看得出是兩張疊著，不是一張變形
-            twoCards(host, color, s, face, [-0.18, 0.16]);
-            g.circle(0, s * 0.04, s * 0.1).fill({ color, alpha: 0.9 });
+            /*
+             * 兩張牌加一疊籌碼——**牌桌的樣子**。
+             *
+             * 原本是兩張一模一樣的白牌加中間一個圓點：兩張同尺寸同角度的牌看起來像
+             * 一張牌畫歪了，中間那個圓點則不代表任何東西。現在後面一張大、前面一張小，
+             * 花色一黑一紅，右下角壓三枚部分重疊的籌碼——**大小差、花色差、遮擋關係**，
+             * 三件事一起才說得出「這是一張正在下注的牌桌」，少了任何一件都只是幾何圖形。
+             */
+            const lw = Math.max(1, s * 0.03);
+            const round = s * 0.07;
+            /*
+             * 整組往左讓一點。牌偏左、籌碼偏右，兩邊的外框加起來不對稱，
+             * 不補這一下，圖示的重心會落在右邊，一排卡片掃過去只有這張是歪的。
+             */
+            const ox = -s * 0.1;
+
+            // 後面那張大牌，左傾。牌各自旋轉，所以要各自是一個物件
+            const big = new Graphics();
+            const bw = s * 0.62;
+            const bh = s * 0.82;
+            big.roundRect(-bw / 2, -bh / 2, bw, bh, round).fill({ color: face, alpha: 0.97 });
+            big.roundRect(-bw / 2, -bh / 2, bw, bh, round).stroke({ color, width: lw, alpha: 0.85 });
+            spade(big, 0, -bh * 0.04, s * 0.16, WELL);
+            big.position.set(ox - s * 0.26, 0);
+            big.rotation = -0.2;
+            host.addChild(big);
+
+            // 前面那張小牌，右傾且壓在大牌上緣——遮擋是「這兩張有前後」最省事的說法
+            const small = new Graphics();
+            const sw = s * 0.5;
+            const sh = s * 0.66;
+            small.roundRect(-sw / 2, -sh / 2, sw, sh, round).fill({ color: face, alpha: 0.97 });
+            small.roundRect(-sw / 2, -sh / 2, sw, sh, round).stroke({ color, width: lw, alpha: 0.85 });
+            heart(small, 0, 0, s * 0.13, BANKER);
+            small.position.set(ox + s * 0.22, -s * 0.12);
+            small.rotation = 0.26;
+            host.addChild(small);
+
+            /*
+             * 右下角三枚籌碼。**最後畫**，所以它們疊在牌上——籌碼壓著牌是牌桌上的常態，
+             * 反過來（牌壓著籌碼）看起來像東西掉在地上。
+             *
+             * 位置偏右而不是偏下，是被卡片的版面逼出來的：圖示下方 20px 就是標題那一行，
+             * 而這張圖示比其他張都「高」（牌本來就是直立的）。籌碼往正下方堆的話，
+             * **手機上那疊籌碼會直接壓在「百家樂」三個字上**——實測 390×844 踩到。
+             */
+            const chips = new Graphics();
+            const r = s * 0.19;
+            for (const [cx, cy, tint] of [
+                [ox + s * 0.34, s * 0.14, GOLD_DEEP],
+                [ox + s * 0.66, s * 0.04, color],
+                [ox + s * 0.52, s * 0.28, GOLD],
+            ] as Array<[number, number, number]>) {
+                chips.circle(cx, cy, r).fill({ color: tint, alpha: 0.97 });
+                // 深色描邊讓疊在一起的三枚分得開——同色的圓疊在一起會糊成一團雲
+                chips.circle(cx, cy, r).stroke({ color: WELL, width: lw * 1.5, alpha: 0.9 });
+                chips.circle(cx, cy, r * 0.5).fill({ color: face, alpha: 0.8 });
+            }
+            host.addChild(chips);
             break;
         }
         case 'dragontiger': {
@@ -518,6 +721,36 @@ function drawIcon(host: Container, key: string, color: number, size: number, fac
     }
 }
 
+/**
+ * 花色。
+ *
+ * 兩個都是**兩顆圓加一個三角**拼的，不是貝茲曲線也不是文字。
+ * 文字要載字型而且不同平台的 ♠ ♥ 長得不一樣；貝茲在 20px 見方的尺寸下，
+ * 那幾個控制點的差別根本看不出來，卻要多維護八個座標。
+ */
+function heart(g: Graphics, cx: number, cy: number, size: number, color: number): void {
+    g.moveTo(cx - size * 0.86, cy - size * 0.04)
+        .lineTo(cx + size * 0.86, cy - size * 0.04)
+        .lineTo(cx, cy + size * 0.98)
+        .fill(color);
+    g.circle(cx - size * 0.43, cy - size * 0.28, size * 0.47).fill(color);
+    g.circle(cx + size * 0.43, cy - size * 0.28, size * 0.47).fill(color);
+}
+
+function spade(g: Graphics, cx: number, cy: number, size: number, color: number): void {
+    // 紅心倒過來，再補一根梗——黑桃跟紅心的差別就只有這兩件事
+    g.moveTo(cx - size * 0.86, cy + size * 0.22)
+        .lineTo(cx + size * 0.86, cy + size * 0.22)
+        .lineTo(cx, cy - size * 0.92)
+        .fill(color);
+    g.circle(cx - size * 0.43, cy + size * 0.18, size * 0.47).fill(color);
+    g.circle(cx + size * 0.43, cy + size * 0.18, size * 0.47).fill(color);
+    g.moveTo(cx - size * 0.3, cy + size * 1.02)
+        .lineTo(cx, cy + size * 0.42)
+        .lineTo(cx + size * 0.3, cy + size * 1.02)
+        .fill(color);
+}
+
 /** 兩張牌。各自是一個物件因為要各自旋轉——畫進同一個 Graphics 會共用變換。 */
 function twoCards(host: Container, color: number, s: number, face: number, angles: [number, number], spread = s * 0.34): void {
     const cw = s * 0.56;
@@ -582,6 +815,17 @@ class ArrowButton extends Container {
         this.visible = false;
     }
 
+    /**
+     * 跟著 UI 縮放。
+     *
+     * 用 `scale` 而不是重畫：這顆圓裡面只有一個圓和一個箭頭，等比放大不會有任何
+     * 細節走樣，而重畫要多維護一份「線寬也得乘」的規則。**能用變換解決的就別重畫**——
+     * 卡片得重畫是因為它裡面有文字（文字放大會糊）。
+     */
+    public setScale(ui: number): void {
+        this.scale.set(ui);
+    }
+
     /** 淡入淡出而不是直接開關：捲到底的瞬間硬消失會讓人以為畫面閃了一下。 */
     public setShown(on: boolean): void {
         if (this.shown === on) return;
@@ -597,6 +841,20 @@ class ArrowButton extends Container {
             },
         });
     }
+}
+
+/**
+ * 給理想字級，量出來太寬就按比例縮到剛好。
+ *
+ * 改 `fontSize` 而不是改 `scale`：Pixi 的 Text 是烘成貼圖的，縮放會糊掉，
+ * 而重設字級是重烘一張——在這個尺寸下，糊掉的小字比小一號的清楚字難讀得多。
+ *
+ * 一次就夠，不必迭代：字寬與字級是線性的，比例算一次就落在目標上。
+ */
+function fitText(text: Text, size: number, maxW: number): void {
+    text.style.fontSize = size;
+    const w = text.width;
+    if (w > maxW && w > 0) text.style.fontSize = size * (maxW / w);
 }
 
 function label(content: string, size: number, fill: number, weight: '500' | '800'): Text {

@@ -6,6 +6,7 @@ import { LobbyModule } from '../lobby';
 import { useArcadeStore } from '../store';
 import { sessionWallet } from '../server/wallet';
 import { BG as THEME_BG } from '../theme';
+import { uiScale } from './layout';
 
 /**
  * 遊樂場的舞台：一個 Application、一個 ModuleHost，玩法掛在上面換。
@@ -72,6 +73,21 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
     };
     drawBg(app.screen.width, app.screen.height);
 
+    /**
+     * 把 UI 縮放係數推給 CSS。
+     *
+     * DOM 那半邊（頂列、分類 tab、頁腳）沒辦法自己算出這個值——它要看的是 canvas
+     * 實際拿到的尺寸，而純 CSS 的 `vw` 只知道視窗有多寬。**兩邊各算各的，放大後
+     * 頂列與盤面之間就會錯開一截**，所以這裡是唯一的來源，CSS 只負責讀。
+     *
+     * 寫在 `<html>` 上而不是某個容器上：頂列與 HUD 掛在 #hud-root，跟 canvas 是
+     * 兄弟不是子孫，掛在容器上它們讀不到。
+     */
+    const pushScale = (w: number, h: number): void => {
+        document.documentElement.style.setProperty('--ui-scale', uiScale(w, h).toFixed(4));
+    };
+    pushScale(app.screen.width, app.screen.height);
+
     const host = new ModuleHost(app);
 
     // ---- 尺寸 ----
@@ -92,6 +108,8 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
 
     app.renderer.on('resize', (w: number, h: number) => {
         drawBg(w, h);
+        // 先推 scale 再讓玩法重排：CSS 那側的頂列高度得在 canvas 算讓位之前就定案
+        pushScale(w, h);
         host.resize(w, h);
     });
 
@@ -158,6 +176,7 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
         enter,
         destroy: () => {
             ro.disconnect();
+            document.documentElement.style.removeProperty('--ui-scale');
             document.removeEventListener('visibilitychange', onVisibility);
             host.disposeCurrent();
             const store = useArcadeStore.getState();

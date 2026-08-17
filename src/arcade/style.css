@@ -31,6 +31,17 @@
     --good: #86a86b;
     --display: 'Archivo', ui-sans-serif, system-ui, sans-serif;
     --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    /*
+     * UI 縮放係數——**這個值由 JS 寫進來**（見 core/stage.ts 的 pushScale），
+     * 這裡只是 canvas 還沒掛上來時的退路。
+     *
+     * 為什麼不用純 CSS 的 `clamp(1, 100vw / 1440, 1.5)`：那樣算出來的是「視窗有多寬」，
+     * 而 canvas 那側算的是「畫布拿到多大」，兩者在有捲軸、有安全區、有瀏覽器 UI 的
+     * 情況下差得出來。**兩邊各算各的，放大後頂列與盤面之間就會錯開一截。**
+     * 縮放係數只有一個來源（core/layout.ts 的 uiScale），CSS 負責讀不負責算。
+     */
+    --ui-scale: 1;
 }
 
 * { box-sizing: border-box; }
@@ -61,23 +72,23 @@ canvas { display: block; touch-action: none; }
 /* ---- 頂列 ---- */
 .top {
     position: absolute;
-    top: max(16px, env(safe-area-inset-top));
-    left: clamp(16px, 3vw, 32px);
-    right: clamp(16px, 3vw, 32px);
+    top: calc(max(16px, env(safe-area-inset-top)) * var(--ui-scale));
+    left: calc(clamp(16px, 3vw, 32px) * var(--ui-scale));
+    right: calc(clamp(16px, 3vw, 32px) * var(--ui-scale));
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: calc(12px * var(--ui-scale));
 }
 
 .back {
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: calc(0.78rem * var(--ui-scale));
     letter-spacing: 0.04em;
     color: var(--muted);
     text-decoration: none;
-    padding: 7px 12px;
-    border-radius: 8px;
+    padding: calc(7px * var(--ui-scale)) calc(12px * var(--ui-scale));
+    border-radius: calc(8px * var(--ui-scale));
     border: 1px solid var(--border);
     background: var(--panel);
     backdrop-filter: blur(10px);
@@ -90,8 +101,8 @@ canvas { display: block; touch-action: none; }
 button.back { cursor: pointer; font-weight: inherit; }
 
 /* 頂列左側是返回鍵加玩家資訊，右側是核對數字與連線狀態 */
-.top-left { display: flex; align-items: center; gap: 12px; }
-.top-right { display: flex; align-items: center; gap: 10px; }
+.top-left { display: flex; align-items: center; gap: calc(12px * var(--ui-scale)); }
+.top-right { display: flex; align-items: center; gap: calc(10px * var(--ui-scale)); }
 
 /* ---- 玩家與錢包 ----
    真實博弈大廳的頂列一定有錢包，而且進了遊戲也不會消失——玩家隨時要知道自己還有多少。
@@ -99,8 +110,8 @@ button.back { cursor: pointer; font-weight: inherit; }
 .player {
     display: flex;
     align-items: center;
-    gap: 9px;
-    padding: 5px 12px 5px 5px;
+    gap: calc(9px * var(--ui-scale));
+    padding: calc(5px * var(--ui-scale)) calc(12px * var(--ui-scale)) calc(5px * var(--ui-scale)) calc(5px * var(--ui-scale));
     border-radius: 999px;
     border: 1px solid var(--border);
     background: var(--panel);
@@ -109,13 +120,13 @@ button.back { cursor: pointer; font-weight: inherit; }
 }
 
 .avatar {
-    width: 28px;
-    height: 28px;
+    width: calc(28px * var(--ui-scale));
+    height: calc(28px * var(--ui-scale));
     border-radius: 50%;
     display: grid;
     place-items: center;
     font-family: var(--mono);
-    font-size: 0.68rem;
+    font-size: calc(0.68rem * var(--ui-scale));
     font-weight: 700;
     /* 頭像底色是隨機挑的金屬色，深色字在上面才讀得到 */
     color: #12100c;
@@ -125,17 +136,17 @@ button.back { cursor: pointer; font-weight: inherit; }
 .who { display: flex; flex-direction: column; gap: 1px; line-height: 1.15; }
 .pname {
     font-family: var(--mono);
-    font-size: 0.6rem;
+    font-size: calc(0.6rem * var(--ui-scale));
     letter-spacing: 0.06em;
     color: var(--muted);
 }
 
-.wallet { display: flex; align-items: center; gap: 5px; }
+.wallet { display: flex; align-items: center; gap: calc(5px * var(--ui-scale)); }
 /* 金幣。用 CSS 畫一個帶內圈的小圓，比放一張圖或一個 emoji 穩定——emoji 在不同系統
    上長得完全不一樣，而這顆點正好是錢包的視覺錨點 */
 .coin {
-    width: 10px;
-    height: 10px;
+    width: calc(10px * var(--ui-scale));
+    height: calc(10px * var(--ui-scale));
     border-radius: 50%;
     background: radial-gradient(circle at 34% 30%, var(--gold-bright), var(--gold-deep) 72%);
     box-shadow: 0 0 6px rgba(217, 184, 113, 0.35);
@@ -143,7 +154,7 @@ button.back { cursor: pointer; font-weight: inherit; }
 }
 .amount {
     font-family: var(--mono);
-    font-size: 0.94rem;
+    font-size: calc(0.94rem * var(--ui-scale));
     font-weight: 600;
     color: var(--text);
     font-variant-numeric: tabular-nums;
@@ -173,11 +184,11 @@ button.back { cursor: pointer; font-weight: inherit; }
 .meter {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: calc(7px * var(--ui-scale));
     font-family: var(--mono);
-    font-size: 0.64rem;
+    font-size: calc(0.64rem * var(--ui-scale));
     letter-spacing: 0.03em;
-    padding: 5px 11px;
+    padding: calc(5px * var(--ui-scale)) calc(11px * var(--ui-scale));
     border-radius: 999px;
     border: 1px solid var(--border);
     background: var(--panel);
@@ -191,8 +202,8 @@ button.back { cursor: pointer; font-weight: inherit; }
 /* 一顆狀態燈：綠＝乾淨、紅＝有東西沒還、灰＝還沒量過。
    顏色跟著 currentColor 走，所以三種狀態只要換文字顏色 */
 .meter-dot {
-    width: 6px;
-    height: 6px;
+    width: calc(6px * var(--ui-scale));
+    height: calc(6px * var(--ui-scale));
     border-radius: 50%;
     background: currentColor;
     box-shadow: 0 0 6px currentColor;
@@ -246,18 +257,18 @@ button.back { cursor: pointer; font-weight: inherit; }
 /* 語言鈕：i18n 掛進 #lang-slot，位置在這裡定。頂列右側留給連線狀態，所以往下錯開一列 */
 #lang-slot {
     position: fixed;
-    top: max(58px, calc(env(safe-area-inset-top) + 46px));
-    right: clamp(16px, 3vw, 32px);
+    top: calc(max(58px, calc(env(safe-area-inset-top) + 46px)) * var(--ui-scale));
+    right: calc(clamp(16px, 3vw, 32px) * var(--ui-scale));
     z-index: 5;
 }
 
 /* ---- 連線狀態 ---- */
 .conn {
     font-family: var(--mono);
-    font-size: 0.68rem;
+    font-size: calc(0.68rem * var(--ui-scale));
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    padding: 5px 11px;
+    padding: calc(5px * var(--ui-scale)) calc(11px * var(--ui-scale));
     border-radius: 999px;
     border: 1px solid currentColor;
     opacity: 0.9;
@@ -297,25 +308,28 @@ button.back { cursor: pointer; font-weight: inherit; }
 /*
  * ---- 大廳：分類 tab 與頁腳 ----
  *
- * 這兩條是 DOM，canvas 那側照 core/layout.ts 的 LOBBY_TAB_H / LOBBY_FOOTER_H 讓位。
- * **改這裡的高度要同步改那兩個常數**——它們不像操作面板那樣被實測回報，
+ * 這兩條是 DOM，canvas 那側照 core/layout.ts 的 lobbyTabH() / lobbyFooterH() 讓位。
+ * **改這裡的高度要同步改那兩個函式的基準值**——它們不像操作面板那樣被實測回報，
  * 因為 tab 與頁腳的高度不會隨語言或內容改變（見那支檔案的說明）。
+ *
+ * 兩邊也都要吃同一個 `--ui-scale`。只有一邊乘的話，大螢幕上會出現一條沒人佔用的
+ * 縫或者一截被蓋住的內容——而那種錯位很難從畫面上看出是誰的問題。
  */
 .lobby-tabs {
     position: absolute;
-    top: calc(max(16px, env(safe-area-inset-top)) + 46px);
-    left: clamp(16px, 3vw, 32px);
+    top: calc((max(16px, env(safe-area-inset-top)) + 46px) * var(--ui-scale));
+    left: calc(clamp(16px, 3vw, 32px) * var(--ui-scale));
     display: flex;
-    gap: 8px;
-    height: 34px;
+    gap: calc(8px * var(--ui-scale));
+    height: calc(34px * var(--ui-scale));
     align-items: center;
 }
 
 .tab {
     font-family: var(--mono);
-    font-size: 0.7rem;
+    font-size: calc(0.7rem * var(--ui-scale));
     letter-spacing: 0.04em;
-    padding: 6px 14px;
+    padding: calc(6px * var(--ui-scale)) calc(14px * var(--ui-scale));
     border-radius: 999px;
     border: 1px solid var(--border);
     background: var(--panel);
@@ -333,25 +347,25 @@ button.back { cursor: pointer; font-weight: inherit; }
 
 .lobby-foot {
     position: absolute;
-    left: clamp(16px, 3vw, 32px);
-    right: clamp(16px, 3vw, 32px);
-    bottom: max(12px, env(safe-area-inset-bottom));
+    left: calc(clamp(16px, 3vw, 32px) * var(--ui-scale));
+    right: calc(clamp(16px, 3vw, 32px) * var(--ui-scale));
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) * var(--ui-scale));
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    height: 42px;
+    gap: calc(16px * var(--ui-scale));
+    height: calc(42px * var(--ui-scale));
 }
 
-.foot-btns { display: flex; gap: 8px; }
+.foot-btns { display: flex; gap: calc(8px * var(--ui-scale)); }
 .foot-btn {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    gap: calc(7px * var(--ui-scale));
     font-family: var(--mono);
-    font-size: 0.68rem;
-    padding: 7px 13px;
-    border-radius: 10px;
+    font-size: calc(0.68rem * var(--ui-scale));
+    padding: calc(7px * var(--ui-scale)) calc(13px * var(--ui-scale));
+    border-radius: calc(10px * var(--ui-scale));
     border: 1px solid var(--border);
     background: var(--panel);
     color: var(--muted);
@@ -363,8 +377,8 @@ button.back { cursor: pointer; font-weight: inherit; }
 /* 圖示用 mask 而不是 background-image：這樣顏色跟著 currentColor 走，
    hover 變金色時圖示會一起變，不必準備第二份素材 */
 .foot-icon {
-    width: 14px;
-    height: 14px;
+    width: calc(14px * var(--ui-scale));
+    height: calc(14px * var(--ui-scale));
     background: currentColor;
     flex: none;
     -webkit-mask-repeat: no-repeat;
@@ -388,7 +402,7 @@ button.back { cursor: pointer; font-weight: inherit; }
 /* 這一行是必要的，不是客套：活動 banner 做得像真的促銷，而這是一個作品集網站 */
 .foot-note {
     margin: 0;
-    font-size: 0.6rem;
+    font-size: calc(0.6rem * var(--ui-scale));
     line-height: 1.4;
     color: var(--muted);
     opacity: 0.7;
@@ -403,10 +417,12 @@ button.back { cursor: pointer; font-weight: inherit; }
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    bottom: max(18px, env(safe-area-inset-bottom));
+    bottom: calc(max(18px, env(safe-area-inset-bottom)) * var(--ui-scale));
     /* 760 而不是 680：百家樂的讀數比老虎機多兩欄（本局押注、牌靴），680 的中間欄
-       擠到讓五顆籌碼換行——換行後那一列會長高，canvas 那側就得多讓一截出來 */
-    width: min(760px, calc(100vw - 32px));
+       擠到讓五顆籌碼換行——換行後那一列會長高，canvas 那側就得多讓一截出來。
+       面板整組跟著 --ui-scale 放大：**高度是實測回報給 canvas 的**（見 Hud.tsx 的
+       useDockMeasure），所以放大之後盤面會自己讓位，不必在兩邊各維護一份數字 */
+    width: calc(min(760px, calc(100vw - 32px)) * var(--ui-scale));
     display: grid;
     grid-template-columns: auto 1fr auto;
     grid-template-areas:
@@ -414,9 +430,9 @@ button.back { cursor: pointer; font-weight: inherit; }
         'options options options'
         'note note note';
     align-items: center;
-    gap: 12px 18px;
-    padding: 14px 18px;
-    border-radius: 16px;
+    gap: calc(12px * var(--ui-scale)) calc(18px * var(--ui-scale));
+    padding: calc(14px * var(--ui-scale)) calc(18px * var(--ui-scale));
+    border-radius: calc(16px * var(--ui-scale));
     background: var(--panel);
     border: 1px solid var(--border);
     backdrop-filter: blur(14px);
@@ -424,20 +440,20 @@ button.back { cursor: pointer; font-weight: inherit; }
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
 }
 
-.readouts { grid-area: readouts; display: flex; gap: 18px; }
+.readouts { grid-area: readouts; display: flex; gap: calc(18px * var(--ui-scale)); }
 .stat { display: flex; flex-direction: column; gap: 2px; }
 .cap {
     font-family: var(--mono);
-    font-size: 0.6rem;
+    font-size: calc(0.6rem * var(--ui-scale));
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted);
 }
-.val { font-family: var(--mono); font-size: 1.12rem; font-weight: 600; color: var(--text); }
+.val { font-family: var(--mono); font-size: calc(1.12rem * var(--ui-scale)); font-weight: 600; color: var(--text); }
 .val.hit { color: var(--gold); }
 
-.bet { grid-area: bet; display: flex; flex-direction: column; gap: 5px; }
-.bet-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.bet { grid-area: bet; display: flex; flex-direction: column; gap: calc(5px * var(--ui-scale)); }
+.bet-row { display: flex; gap: calc(5px * var(--ui-scale)); flex-wrap: wrap; }
 
 /*
  * 次要選項區。寬畫面直接攤開，窄畫面整組被抽屜接手（見 .drawer 與 Hud.tsx）。
@@ -447,7 +463,7 @@ button.back { cursor: pointer; font-weight: inherit; }
     grid-area: options;
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 20px;
+    gap: calc(8px * var(--ui-scale)) calc(20px * var(--ui-scale));
 }
 /* 玩法沒有選項可調時（百家樂）不要留下一條空的 gap */
 .options:empty { display: none; }
@@ -460,15 +476,15 @@ button.back { cursor: pointer; font-weight: inherit; }
  * 不對齊的話兩組看起來像沒有關係的東西。窄畫面會把這個 min-width 拿掉並改直排，
  * 因為在單欄裡它反而會把「Spin-up」壓成兩行。
  */
-.style { display: flex; align-items: center; gap: 8px; }
+.style { display: flex; align-items: center; gap: calc(8px * var(--ui-scale)); }
 .style > .cap { min-width: 4.5em; }
-.style-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.style-row { display: flex; gap: calc(5px * var(--ui-scale)); flex-wrap: wrap; }
 
 .chip {
     font-family: var(--mono);
-    font-size: 0.72rem;
-    padding: 6px 10px;
-    border-radius: 8px;
+    font-size: calc(0.72rem * var(--ui-scale));
+    padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
+    border-radius: calc(8px * var(--ui-scale));
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.04);
     color: var(--muted);
@@ -490,11 +506,11 @@ button.back { cursor: pointer; font-weight: inherit; }
 .spin {
     grid-area: spin;
     font-family: var(--display);
-    font-size: 0.95rem;
+    font-size: calc(0.95rem * var(--ui-scale));
     font-weight: 800;
     letter-spacing: 0.08em;
-    padding: 15px 30px;
-    border-radius: 12px;
+    padding: calc(15px * var(--ui-scale)) calc(30px * var(--ui-scale));
+    border-radius: calc(12px * var(--ui-scale));
     border: none;
     color: var(--ink);
     background: linear-gradient(160deg, var(--gold-bright), var(--gold) 46%, var(--gold-deep));
@@ -515,7 +531,7 @@ button.back { cursor: pointer; font-weight: inherit; }
     grid-area: note;
     margin: 0;
     font-family: var(--mono);
-    font-size: 0.62rem;
+    font-size: calc(0.62rem * var(--ui-scale));
     line-height: 1.5;
     color: var(--muted);
     opacity: 0.8;
@@ -537,11 +553,11 @@ button.back { cursor: pointer; font-weight: inherit; }
     justify-content: center;
     gap: 7px;
     font-family: var(--mono);
-    font-size: 0.66rem;
+    font-size: calc(0.66rem * var(--ui-scale));
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    padding: 6px 12px;
-    border-radius: 8px;
+    padding: calc(6px * var(--ui-scale)) calc(12px * var(--ui-scale));
+    border-radius: calc(8px * var(--ui-scale));
     /* 虛線＝還有東西收在裡面。展開後轉成實線，不必另外寫「收起」兩個字 */
     border: 1px dashed var(--border);
     background: none;

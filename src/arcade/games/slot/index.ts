@@ -1,6 +1,6 @@
 import gsap from 'gsap';
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
-import { TOP_BAR } from '../../core/layout';
+import { topBarH, uiScale } from '../../core/layout';
 import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import type { SlotS2C, WinLine } from '../../net/games/slot';
@@ -260,7 +260,10 @@ export class SlotModule implements GameModule {
         const inset = arcadeState().dockInset;
         const measured = inset.bottom > 0 || inset.right > 0;
         const availW = w - inset.right;
-        const availH = Math.max(140, h - TOP_BAR - (measured ? inset.bottom : h * 0.26) - 12);
+        // 頂列在大螢幕上會跟著 UI 一起放大（見 core/layout.ts），讓位的高度得跟著問，
+        // 不能拿基準尺寸下的那個常數——不然盤面上緣會被放大後的返回鍵壓到
+        const topBar = topBarH(uiScale(w, h));
+        const availH = Math.max(140, h - topBar - (measured ? inset.bottom : h * 0.26) - 12);
 
         // 盤面寬 = 5 格 + 4 個間距；高 = 3 格。取兩軸各自能容納的較小值，並留邊。
         // 窄畫面吃得比寬畫面兇一點：橫向本來就是那裡最稀缺的東西，留太多邊會讓格子
@@ -291,7 +294,7 @@ export class SlotModule implements GameModule {
         // 置中的是「盤面加贏分數字」這一整組，不是盤面自己——只把盤面置中的話，
         // 下方剩的空間會不夠放數字，它就會壓在底部面板上
         const groupH = boardH + cellH * WIN_TEXT_GAP + WIN_TEXT_H;
-        this.board.position.set((availW - boardW) / 2, TOP_BAR + Math.max(0, (availH - groupH) / 2));
+        this.board.position.set((availW - boardW) / 2, topBar + Math.max(0, (availH - groupH) / 2));
 
         if (this.winText) this.winText.position.set(boardW / 2, boardH + cellH * WIN_TEXT_GAP);
     }

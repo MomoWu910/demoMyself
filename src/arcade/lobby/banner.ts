@@ -50,6 +50,8 @@ export class BannerCarousel extends Container {
 
     private viewW = 0;
     private viewH = 0;
+    /** UI 縮放係數（見 core/layout.ts）。**不能叫 `scale`**——Container 有同名屬性 */
+    private ui = 1;
     private index = 1;
 
     private tween: gsap.core.Tween | null = null;
@@ -95,20 +97,23 @@ export class BannerCarousel extends Container {
         this.scheduleAuto();
     }
 
-    public setViewport(width: number, height: number): void {
+    public setViewport(width: number, height: number, ui = 1): void {
         this.viewW = width;
         this.viewH = height;
+        this.ui = ui;
 
         this.clip.clear();
-        this.clip.roundRect(0, 0, width, height, 14).fill(0xffffff);
+        this.clip.roundRect(0, 0, width, height, 14 * ui).fill(0xffffff);
         this.frame.clear();
-        this.frame.roundRect(0.5, 0.5, width - 1, height - 1, 14).stroke({ color: GOLD, width: 1, alpha: 0.24 });
+        this.frame
+            .roundRect(0.5, 0.5, width - 1, height - 1, 14 * ui)
+            .stroke({ color: GOLD, width: 1 * ui, alpha: 0.24 });
         // 遮罩擋得住繪製，擋不住 bounds 與命中判斷（見 common/scroll/InertiaScroller）
         this.hitArea = new Rectangle(0, 0, width, height);
         this.boundsArea = new Rectangle(0, 0, width, height);
 
         for (let i = 0; i < this.slides.length; i++) {
-            this.slides[i].resize(width, height);
+            this.slides[i].resize(width, height, ui);
             this.slides[i].position.set(i * width, 0);
         }
         this.track.x = -this.index * width;
@@ -170,17 +175,20 @@ export class BannerCarousel extends Container {
     private layoutDots(): void {
         if (this.viewW <= 0) return;
         const active = this.realIndex;
-        const gap = 14;
+        const u = this.ui;
+        const gap = 14 * u;
         const total = (PROMOS.length - 1) * gap;
         for (let i = 0; i < this.dots.children.length; i++) {
             const dot = this.dots.children[i] as Graphics;
             dot.clear();
             const on = i === active;
             // 選中的畫成短橫條而不是大一點的圓：形狀差異在 5px 的尺度下比大小差異好認
-            if (on) dot.roundRect(-6, -2.5, 12, 5, 2.5).fill({ color: GOLD, alpha: 0.95 });
-            else dot.circle(0, 0, 2.6).fill({ color: IVORY, alpha: 0.3 });
-            dot.position.set(this.viewW / 2 - total / 2 + i * gap, this.viewH - 14);
-            dot.hitArea = new Rectangle(-9, -9, 18, 18);
+            if (on) dot.roundRect(-6 * u, -2.5 * u, 12 * u, 5 * u, 2.5 * u).fill({ color: GOLD, alpha: 0.95 });
+            else dot.circle(0, 0, 2.6 * u).fill({ color: IVORY, alpha: 0.3 });
+            dot.position.set(this.viewW / 2 - total / 2 + i * gap, this.viewH - 14 * u);
+            // 命中範圍**不跟著縮**，只跟著放大：小圓點本來就難點，44px 是能穩定點到的下限
+            const hit = Math.max(18, 18 * u);
+            dot.hitArea = new Rectangle(-hit / 2, -hit / 2, hit, hit);
         }
     }
 
@@ -235,6 +243,7 @@ class PromoSlide extends Container {
 
     private w = 0;
     private h = 0;
+    private ui = 1;
     private grad: FillGradient | null = null;
 
     constructor(promo: Promo) {
@@ -257,7 +266,7 @@ class PromoSlide extends Container {
         this.headline.text = t(`arcade.promo.${this.promo.key}.headline`);
         this.sub.text = t(`arcade.promo.${this.promo.key}.sub`);
         this.ctaText.text = t('arcade.promo.cta');
-        if (this.w > 0) this.resize(this.w, this.h);
+        if (this.w > 0) this.resize(this.w, this.h, this.ui);
     }
 
     public dispose(): void {
@@ -265,9 +274,10 @@ class PromoSlide extends Container {
         this.grad = null;
     }
 
-    public resize(w: number, h: number): void {
+    public resize(w: number, h: number, ui = 1): void {
         this.w = w;
         this.h = h;
+        this.ui = ui;
         const { color, accent } = this.promo;
 
         this.dispose();
@@ -311,13 +321,19 @@ class PromoSlide extends Container {
          */
         const wide = w > h * 1.15;
 
-        // 字級同時受寬與高約束。只看寬度的話，橫幅那個形狀（寬得很、只是矮）
-        // 會被判定成「空間充足」，然後用桌機的字級把自己撐爆
-        const k = Math.min(1, w / 240, h / 300);
+        /*
+         * 字級同時受寬與高約束。只看寬度的話，橫幅那個形狀（寬得很、只是矮）
+         * 會被判定成「空間充足」，然後用桌機的字級把自己撐爆。
+         *
+         * 上限是 `ui` 而不是寫死的 1：**海報放大了字卻不放大，等於把同一張圖
+         * 拉去貼在更大的框裡**——大螢幕上那行標題會縮在海報中央變成一小條。
+         */
+        const k = Math.min(ui, w / 240, h / 300);
         this.kicker.style.fontSize = 11 * k;
         this.headline.style.fontSize = 34 * k;
         this.sub.style.fontSize = 11 * k;
         this.ctaText.style.fontSize = 11 * k;
+        this.demo.style.fontSize = 8 * k;
 
         const ch = 28 * k + 6;
         const cw = Math.min(w * (wide ? 0.36 : 0.72), 132 * k + 40);
@@ -346,21 +362,21 @@ class PromoSlide extends Container {
             this.ctaText.position.set(textX + cw / 2, y + ch / 2);
 
             this.drawDeco(w * 0.76, h / 2, Math.min(w * 0.16, h * 0.34));
-            this.demo.position.set(w - 10, h - 8);
+            this.demo.position.set(w - 10 * k, h - 8 * k);
         } else {
             for (const label of [this.kicker, this.headline, this.sub]) label.anchor.set(0.5, 0);
             this.kicker.position.set(w / 2, h * 0.1);
             this.headline.position.set(w / 2, h * 0.1 + 20 * k);
             this.sub.position.set(w / 2, h * 0.1 + 62 * k);
 
-            const cy = h - ch - 34;
+            const cy = h - ch - 34 * k;
             this.cta.roundRect(w / 2 - cw / 2, cy, cw, ch, ch / 2).fill({ color: accent, alpha: 0.95 });
             this.ctaText.position.set(w / 2, cy + ch / 2);
 
             // 裝飾夾在副標與 CTA 中間那一段，不是「畫面中央」——中央會被 CTA 壓到
             const decoTop = h * 0.1 + 78 * k;
             this.drawDeco(w / 2, (decoTop + cy) / 2, Math.min(w * 0.34, (cy - decoTop) * 0.4));
-            this.demo.position.set(w - 10, h - 26);
+            this.demo.position.set(w - 10 * k, h - 26 * k);
         }
     }
 

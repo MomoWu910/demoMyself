@@ -611,7 +611,7 @@ export const DICT: Record<string, Entry> = {
     'arcade.lobby.slot': { en: 'Slot', zh: '老虎機' },
     'arcade.lobby.slotDesc': { en: '5×3 reels · server stops', zh: '五軸三列 · 伺服器停軸' },
     'arcade.lobby.baccarat': { en: 'Baccarat', zh: '百家樂' },
-    'arcade.lobby.baccaratDesc': { en: 'Four roadmaps · 8-deck shoe', zh: '四張路圖 · 八副牌靴' },
+    'arcade.lobby.baccaratDesc': { en: 'Five roadmaps · 8-deck shoe', zh: '五張路圖 · 八副牌靴' },
     // 還沒做的那幾款。名字用真實桌台的叫法，因為它們是接下來要做的東西，不是佔位的假名
     'arcade.lobby.dragontiger': { en: 'Dragon Tiger', zh: '龍虎' },
     'arcade.lobby.sicbo': { en: 'Sic Bo', zh: '骰寶' },
@@ -646,7 +646,7 @@ export const DICT: Record<string, Entry> = {
     'arcade.promo.rakeback.sub': { en: 'Rakeback, paid every Monday', zh: '週週返水，逢週一入帳' },
     'arcade.promo.newgame.kicker': { en: 'NEW TABLE', zh: '新機台' },
     'arcade.promo.newgame.headline': { en: 'Baccarat', zh: '百家樂' },
-    'arcade.promo.newgame.sub': { en: 'Four roadmaps, now live', zh: '四張路圖，現已上線' },
+    'arcade.promo.newgame.sub': { en: 'Five roadmaps, now live', zh: '五張路圖，現已上線' },
 
     // ---- 頁腳 ----
     'arcade.foot.service': { en: 'Support', zh: '客服' },

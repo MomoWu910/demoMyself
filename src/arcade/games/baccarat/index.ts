@@ -5,7 +5,7 @@ import { CardView } from '../../common/cards/CardView';
 import { bakeChipAtlas, type ChipAtlas } from '../../common/chips/atlas';
 import { BetSpotView } from '../../common/chips/BetSpotView';
 import { ScrollableRoad } from '../../common/roadmap/ScrollableRoad';
-import { TOP_BAR } from '../../core/layout';
+import { topBarH, uiScale } from '../../core/layout';
 import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import type { BaccaratS2C } from '../../net/games/baccarat';
@@ -25,7 +25,7 @@ import { BANKER, PLAYER, TIE } from '../../theme';
  *
  * 它跟老虎機的差別，正好是這一頁想證明的事：**大部分的東西不是重寫的**。牌、籌碼、
  * 下注區、路圖網格都來自 `common/`，這支只做三件百家樂才有的事——桌面怎麼排、
- * 牌怎麼發、四張路怎麼從歷史推出來。第三款玩法（龍虎、骰寶）會再一次證明這件事。
+ * 牌怎麼發、五張路怎麼從歷史推出來。第三款玩法（龍虎、骰寶）會再一次證明這件事。
  */
 
 /**
@@ -436,7 +436,7 @@ export class BaccaratModule implements GameModule {
     // ---- 路圖 ----
 
     /**
-     * 四張路全部從同一份歷史重推。
+     * 五張路全部從同一份歷史重推。
      *
      * 不做增量更新是刻意的：路圖的增量規則比重推複雜得多（新的一顆可能讓拖尾轉向、
      * 讓後面所有衍生路的判定改變），而一靴最多八十局，全部重算是幾十微秒的事。
@@ -514,7 +514,7 @@ export class BaccaratModule implements GameModule {
         // ---- 路圖區 ----
         // 豎屏時右上角有語言鈕，路圖得整個往下讓——不讓的話被壓住的正好是最右邊那幾欄，
         // 而那是最新的幾局，也就是最常被看的部分
-        const roadY = portrait ? TOP_BAR + 24 : 12;
+        const roadY = portrait ? topBarH(uiScale(w, h)) + 24 : 12;
 
         // 「路圖是參考資訊，牌才是主角，所以路圖先讓步」——這句話原本只寫在 ROAD_RATIO 的
         // 註解裡，實際的程式卻是路圖照比例吃滿、牌撿剩下的。豎屏就是這個落差爆出來的地方：

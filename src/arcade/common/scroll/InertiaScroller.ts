@@ -31,19 +31,38 @@ const RUBBER = 0.35;
 /** 回彈時間（秒）。 */
 const SNAP_BACK = 0.32;
 
+/*
+ * 這裡曾經有一組 `fadeColor` / `fadeWidth`，在兩側畫一道往外淡出的底色當作
+ * 「還捲得動」的提示。**拿掉了**（2026-08-17，Eric 回報「像破圖」）：
+ *
+ * 那道漸層是用八段矩形疊出來的，最內側 alpha 0.95 幾乎是實心。疊在深色卡片上
+ * 看不出漸層，只看得到兩條硬邊的黑柱，形狀像個 `[ ]` 框住整條軌。
+ * **在近黑的底上用底色做淡出，本來就沒有可以淡的空間。**
+ *
+ * 「旁邊還有東西」這件事沒有因此失去提示——左右兩顆箭頭本來就照同一個條件出現
+ * （見 rail.ts 的 syncArrows），而且它按得下去，比一道漸層說得更清楚。
+ * 真要重做的話該用 alpha 遮罩而不是疊色塊，那是另一件事，不是把這段調一調。
+ */
 export interface ScrollerOptions {
-    /** 兩側要不要畫淡出提示，以及用什麼底色畫（預設不畫）。 */
-    fadeColor?: number;
-    /** 淡出提示的寬度。 */
-    fadeWidth?: number;
     /**
-     * 遮罩往外放寬幾 px（預設 0，齊邊裁切）。
+     * 遮罩往上下放寬幾 px（預設 0，齊邊裁切）。
      *
      * 給滑鼠移上去會**放大或浮起**的內容用。遮罩齊著可視範圍切的話，那些效果會在
      * 邊緣的項目上被切掉一角——看起來像卡片壓在玻璃底下，比不做效果還糟。
-     * 代價是旁邊的東西會多露一點點，所以這個值要小於項目之間的間距。
+     *
+     * **只有垂直方向該這樣放寬。** 捲動軸是水平的，所以上下多出來的那一截露出的是
+     * 背景，而左右多出來的那一截露出的是**正要被捲出去的那張卡**——一截半個字、
+     * 半張圖，每次捲動都在那裡，看起來就是破圖。當初這個瑕疵被兩側的淡出色塊蓋著，
+     * 色塊拿掉之後它才現形（見上面那段說明）。
      */
-    overflow?: number;
+    overflowY?: number;
+    /**
+     * 遮罩往左右放寬幾 px（預設 0，齊邊裁切）。
+     *
+     * 幾乎都該維持 0，理由見 `overflowY`。代價是**最邊緣那張**在 hover 放大時
+     * 側面會被切掉幾 px——那是偶發且視線不在的地方，比常駐露出半張卡片好。
+     */
+    overflowX?: number;
 }
 
 export class InertiaScroller extends Container {
@@ -51,10 +70,8 @@ export class InertiaScroller extends Container {
     public readonly content = new Container();
 
     private readonly clip = new Graphics();
-    private readonly fade = new Graphics();
-    private readonly fadeColor: number | null;
-    private readonly fadeWidth: number;
-    private readonly overflow: number;
+    private readonly overflowX: number;
+    private readonly overflowY: number;
 
     private viewW = 0;
     private viewH = 0;
@@ -80,13 +97,11 @@ export class InertiaScroller extends Container {
 
     constructor(opts: ScrollerOptions = {}) {
         super();
-        this.fadeColor = opts.fadeColor ?? null;
-        this.fadeWidth = opts.fadeWidth ?? 18;
-        this.overflow = opts.overflow ?? 0;
+        this.overflowX = opts.overflowX ?? 0;
+        this.overflowY = opts.overflowY ?? 0;
 
         this.addChild(this.content);
         this.addChild(this.clip);
-        if (this.fadeColor !== null) this.addChild(this.fade);
         // 遮罩要留在顯示樹裡（見 ScrollableRoad 的同一段註解）——設 renderable = false
         // 等於交出一張空遮罩，被遮的東西會整片消失
         this.content.mask = this.clip;
@@ -105,8 +120,9 @@ export class InertiaScroller extends Container {
         this.viewH = height;
 
         this.clip.clear();
-        const o = this.overflow;
-        this.clip.rect(-o, -o, width + o * 2, height + o * 2).fill(0xffffff);
+        const ox = this.overflowX;
+        const oy = this.overflowY;
+        this.clip.rect(-ox, -oy, width + ox * 2, height + oy * 2).fill(0xffffff);
         // 命中區與 bounds **不跟著放寬**：放寬的只是「畫得出來的範圍」，
         // 這個元件對外宣稱佔多大、以及哪裡按得到，仍然是原本那塊可視範圍
         this.hitArea = new Rectangle(0, 0, width, height);
@@ -224,25 +240,6 @@ export class InertiaScroller extends Container {
     private apply(): void {
         this.content.x = -this.offset;
         this.cursor = this.scrollable ? (this.dragging ? 'grabbing' : 'grab') : 'default';
-        this.drawFade();
-    }
-
-    private drawFade(): void {
-        if (this.fadeColor === null) return;
-        this.fade.clear();
-        if (this.viewW <= 0 || this.viewH <= 0) return;
-
-        const steps = 8;
-        const w = this.fadeWidth / steps;
-        for (let i = 0; i < steps; i++) {
-            const alpha = (1 - i / steps) * 0.95;
-            if (this.offset > 1) {
-                this.fade.rect(i * w, 0, w + 0.5, this.viewH).fill({ color: this.fadeColor, alpha });
-            }
-            if (this.offset < this.maxOffset - 1) {
-                this.fade.rect(this.viewW - (i + 1) * w - 0.5, 0, w + 0.5, this.viewH).fill({ color: this.fadeColor, alpha });
-            }
-        }
     }
 
     private onDown(e: FederatedPointerEvent): void {

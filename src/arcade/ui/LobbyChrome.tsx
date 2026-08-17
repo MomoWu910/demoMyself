@@ -9,9 +9,10 @@ import { useT } from '../../i18n/useT';
  * 換語言時要重排文字寬度。canvas 給不了這些，而它們也不需要每幀重畫。這條分界跟整頁一致
  * （見 lobby/index.ts）。
  *
- * 它們佔的高度是常數（core/layout.ts 的 LOBBY_TAB_H / LOBBY_FOOTER_H），canvas 那側
- * 直接照著讓位——跟操作面板不同，這兩條的高度不會因為語言或內容而改變，
- * 所以不需要 ResizeObserver 那一套（見 Hud.tsx 的 useDockMeasure）。
+ * 它們佔的高度是算得出來的（core/layout.ts 的 lobbyTabH() / lobbyFooterH()，
+ * 基準值再乘上 UI 縮放係數），canvas 那側直接照著讓位——跟操作面板不同，這兩條的
+ * 高度不會因為語言或內容而改變，所以不需要 ResizeObserver 那一套
+ * （見 Hud.tsx 的 useDockMeasure）。
  */
 
 function Tabs() {

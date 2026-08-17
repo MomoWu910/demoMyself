@@ -98,7 +98,7 @@ export interface ModuleContext {
 npm run check:slot       # 十萬把取樣 + 21 項：RTP、中獎率、賠付表
 npm run check:reel       # 81 項：轉軸時序、停軸落點與順序
 npm run check:baccarat   # 50 萬局 + 76 項：補牌表、賠付、莊家優勢
-npm run check:road       # 38 項：四張路圖的推算
+npm run check:road       # 38 項：五張路圖的推算
 ```
 
 **改了什麼就要重跑哪一支**：`PAYOUTS` / `WEIGHTS` → `check:slot`；`COAST_CELLS` / `SNAP_TIME` / `STOP_STAGGER` / `DIR` / `stopOrder` → `check:reel`。
