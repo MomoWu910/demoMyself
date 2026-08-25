@@ -76,7 +76,36 @@ const TOTAL_LABEL_H = 34;
 
 /** 階段膠囊與座位列各要留多高。兩者都是固定字級，所以是常數 */
 const BANNER_H = 32;
-const SEAT_H = 54;
+/**
+ * 桌面的疊法。
+ *
+ * 用具名層級而不是 addChild 的先後順序：順序是隱式的，加一層就得回去數一遍前面有幾個
+ * addChild，而且看程式碼的人得自己在腦裡把那串呼叫翻譯成「誰在誰上面」。留 10 的間隔是
+ * 為了之後插新層不必動既有的數字。
+ *
+ * **飛幣要壓過桌面上的每一樣東西，但壓不過操作介面。** 籌碼從座位飛向注區，路徑會橫越
+ * 牌區與其他座位——被蓋住的話那顆籌碼會在半路消失再冒出來，看起來像掉幀。反過來，
+ * 階段倒數與提示不能被籌碼蓋掉：下注最後五秒正好是籌碼最密的時候，而那也正是玩家最需要
+ * 看清楚還剩幾秒的時候。
+ */
+const Z = {
+    ROAD: 10,
+    TABLE: 20,
+    SEAT: 30,
+    CARD: 40,
+    CHIP: 50,
+    UI: 60,
+} as const;
+
+/**
+ * 座位列要留多高。
+ *
+ * 這是**整組**的高度，不只是頭像那顆圓：圓下面還有名字與餘額兩行。給不夠的話溢出來的
+ * 不是圓而是最底下那行餘額，它會疊到階段膠囊與線上人數上——兩邊都是深色小字，疊在
+ * 一起看起來像字糊掉，不像版面壞掉，所以很容易被當成沒事。
+ */
+const SEAT_H = 84;
+/** 窄畫面只有頭像與名字，不留餘額那一行 */
 const SEAT_H_COMPACT = 38;
 
 /**
@@ -85,9 +114,8 @@ const SEAT_H_COMPACT = 38;
  * server 每秒推來的注可能有十幾筆、每筆好幾顆，一局十五秒累積下來上百顆。全部照演的話
  * 前幾局還好，跑久了畫面會塞滿到看不出注區，低階手機直接掉幀。
  *
- * 前公司那套用的是三層上限（`MAX_BET_ANIMATE_AMOUNT` 每次 30~40、`MAX_COUNT` 每批 30、
- * `ONLINE_MAX_COUNT` 每區 2~3），這裡照同一個結構收斂成兩層加上 FlyingChips 自己的
- * 桌面總量上限。
+ * 上限要分層才擋得住：一批最多演幾顆、同一批裡同一個注區最多演幾顆，再加上
+ * FlyingChips 自己的桌面總量。只擋總量的話，一批猛灌進來還是會瞬間塞滿注區。
  *
  * **被砍掉的只有動畫，不是帳。** 注區角落的金額永遠是 server 給的權威值，
  * 所以「畫面上只飛了 24 顆但總額跳了十萬」是正確的行為，不是 bug。
@@ -211,14 +239,15 @@ export class BaccaratModule implements GameModule {
 
         this.chipLayer = new FlyingChips(this.chips);
 
-        // 疊放順序＝資訊的重要性：路圖在最底，注區、籌碼、座位往上疊，
-        // 牌與階段膠囊在最上面——這兩樣任何時候都不該被蓋住
-        ctx.root.addChild(this.roadLayer);
-        ctx.root.addChild(this.tableLayer);
-        ctx.root.addChild(this.chipLayer);
-        ctx.root.addChild(this.seatLayer);
-        ctx.root.addChild(this.cardLayer);
-        ctx.root.addChild(this.uiLayer);
+        // 疊放順序寫在 Z 裡，這裡只負責掛上去。開 sortableChildren 之後掛的順序就不重要了
+        ctx.root.sortableChildren = true;
+        this.roadLayer.zIndex = Z.ROAD;
+        this.tableLayer.zIndex = Z.TABLE;
+        this.seatLayer.zIndex = Z.SEAT;
+        this.cardLayer.zIndex = Z.CARD;
+        this.chipLayer.zIndex = Z.CHIP;
+        this.uiLayer.zIndex = Z.UI;
+        ctx.root.addChild(this.roadLayer, this.tableLayer, this.seatLayer, this.cardLayer, this.chipLayer, this.uiLayer);
 
         for (const road of Object.values(this.roads)) this.roadLayer.addChild(road);
 
@@ -1083,7 +1112,7 @@ export class BaccaratModule implements GameModule {
         const slot = width / count;
         for (let i = 0; i < count; i++) {
             const view = this.seatViews[i];
-            view.setSeatSize(Math.min(slot * 0.86, 72), compact);
+            view.setSeatSize(Math.min(slot * 0.86, compact ? 72 : 80), compact);
             view.position.set(x + slot * (i + 0.5), y + seatH * 0.42);
         }
     }
@@ -1095,7 +1124,7 @@ export class BaccaratModule implements GameModule {
      * 而不是釘在一條直線上。
      */
     private placeSeatsFlanking(w: number, top: number, space: number): void {
-        const seatW = 78;
+        const seatW = 84;
         const step = Math.min(84, space / 3);
         const startY = top + (space - step * 2) / 2;
 

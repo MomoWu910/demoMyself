@@ -14,8 +14,25 @@ import { GOLD, GOLD_DEEP, GOOD, HOT, INK, MUTED, TEXT } from '../../theme';
  * 空位不畫的話，剩下的人會擠過來重排，看起來像所有人同時換了座位。
  */
 
-/** 頭像圓的直徑相對於整個座位寬度 */
-const AVATAR_RATIO = 0.52;
+/**
+ * 頭像圓的直徑相對於整個座位寬度。
+ *
+ * 這個數字直接決定座位看起來多大——座位框本身不小，小的是圓。0.52 的時候 78px 寬的
+ * 位置只畫得出 40px 的圓，六張椅子散在桌邊像六顆小鈕扣，讀不出「那裡坐著人」。
+ * 剩下的寬度是留給名字的，名字比圓窄不要緊（它可以疊在鄰座的留白上），圓不能。
+ */
+const AVATAR_RATIO = 0.62;
+
+/**
+ * 窄畫面維持原本的比例。那裡的座位只分到 38px 高的一條，圓跟著長大就會壓到底下的注區——
+ * **放大是為了「看得清楚坐著誰」，在一條 38px 的帶子上本來就做不到**，硬放大只是換一種糊。
+ */
+const AVATAR_RATIO_COMPACT = 0.52;
+
+/** 名字離頭像圓下緣多遠。文字改成頂端對齊之後，這個數字就是真的間距 */
+const NAME_GAP = 4;
+/** 餘額接在名字底下的距離 */
+const BALANCE_GAP = 2;
 
 export class SeatView extends Container {
     private readonly ring = new Graphics();
@@ -41,6 +58,13 @@ export class SeatView extends Container {
         this.balance = label('', 10, GOLD_DEEP, '700');
         this.delta = label('', 13, GOOD, '700');
         this.delta.alpha = 0;
+
+        // label() 統一給置中錨點，這裡把圓外面的三行改掉：y 一旦是文字的中心，
+        // 「離圓下緣 3px」實際上是「文字上緣壓進圓裡 3px」，字級一改重疊程度還會跟著變。
+        // 改成貼著圓的那一側對齊，y 就是肉眼看到的間距，跟字級無關
+        this.nameText.anchor.set(0.5, 0);
+        this.balance.anchor.set(0.5, 0);
+        this.delta.anchor.set(0.5, 1);
 
         this.addChild(this.initial);
         this.addChild(this.nameText);
@@ -111,7 +135,7 @@ export class SeatView extends Container {
     }
 
     private avatarR(): number {
-        return (this.w * AVATAR_RATIO) / 2;
+        return (this.w * (this.compact ? AVATAR_RATIO_COMPACT : AVATAR_RATIO)) / 2;
     }
 
     private redraw(): void {
@@ -140,13 +164,15 @@ export class SeatView extends Container {
         // 而數字部分對玩家沒有意義（它只是為了讓名字不重複）
         this.nameText.text = this.info.name.replace(/\d+$/, '');
         this.nameText.style.fontSize = this.compact ? 9 : 10;
-        this.nameText.position.set(0, r + 3);
+        this.nameText.position.set(0, r + NAME_GAP);
 
         if (this.compact) {
             this.balance.text = '';
         } else {
             this.balance.text = shortMoney(this.info.balance);
-            this.balance.position.set(0, r + 15);
+            // 接在名字實際佔掉的高度之後，而不是又一個從圓心量的固定值——
+            // 名字在 compact 下會換字級，兩行的間距得跟著它走
+            this.balance.position.set(0, r + NAME_GAP + this.nameText.height + BALANCE_GAP);
         }
     }
 }
@@ -154,10 +180,8 @@ export class SeatView extends Container {
 /**
  * 「線上 N,NNN 人」的膠囊。**散客的籌碼從這裡飛出來。**
  *
- * 這個做法是從前公司那套抄的：他們把散客下注的起點接到 header 上顯示線上人數的
- * 那顆按鈕（`betContainer.setGetOnlineBetPosFunc(gameHeader.getOnlineButtonPos)`）。
- *
- * 抄它是因為這個設計解決了一個真的問題：桌上大部分的籌碼來自沒有座位的人，
+ * 把散客下注的起點接到「顯示線上人數」的這顆膠囊上，解決的是一個真的問題：
+ * 桌上大部分的籌碼來自沒有座位的人，
  * 如果讓它們從畫面邊緣隨機冒出來，玩家會覺得是特效；讓它們從一個**寫著人數的地方**
  * 飛出來，那些籌碼就變成了那個數字的具體化——「喔，那三千人在押莊」。
  */

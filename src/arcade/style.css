@@ -517,7 +517,13 @@ button.back { cursor: pointer; font-weight: inherit; }
     cursor: pointer;
     box-shadow: 0 6px 20px rgba(217, 184, 113, 0.22);
     transition: transform 0.14s, box-shadow 0.14s, filter 0.14s;
+    /* 兩個 span 疊在同一格：撐寬度的那個永遠是最長的字串，看得見的那個跟著狀態換 */
+    display: grid;
+    place-items: center;
 }
+.spin > * { grid-area: 1 / 1; }
+/* 只負責佔位。visibility 而不是 display:none——後者不佔空間，就撐不出寬度了 */
+.spin-sizer { visibility: hidden; }
 .spin:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 9px 26px rgba(217, 184, 113, 0.32); }
 .spin:active:not(:disabled) { transform: translateY(1px); }
 .spin:disabled {

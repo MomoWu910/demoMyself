@@ -174,8 +174,18 @@ export function SlotControls() {
         <>
             <BetPicker />
 
+            {/*
+                按鈕的寬度必須跟「現在顯示哪一串字」脫鉤。SPIN 換成 SPINNING… 只多了六個字元，
+                但這顆按鈕在 .dock 的 grid 裡佔 auto 欄，它一變寬，中間 1fr 的籌碼列就被擠到
+                換行——面板長高，canvas 那側收到新的 dockInset 就把整個盤面縮一號。轉完再縮回去。
+                所以疊一個隱形的 sizer 永遠撐著最長的那串字，真正的文字疊在它上面。
+                用文字本身撐而不是寫死 px：中英文最長的那串不一樣，寫死的數字換個語言就失準。
+            */}
             <button type="button" className="spin" disabled={!canSpin} onClick={() => spinHandler?.()}>
-                {spinning ? t('arcade.spinning') : t('arcade.spin')}
+                <span className="spin-sizer" aria-hidden="true">
+                    {t('arcade.spinning')}
+                </span>
+                <span>{spinning ? t('arcade.spinning') : t('arcade.spin')}</span>
             </button>
         </>
     );

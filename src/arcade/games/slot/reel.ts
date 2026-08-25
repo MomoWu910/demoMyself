@@ -340,8 +340,8 @@ export class Reel extends Container {
 
             case 'coasting': {
                 /*
-                 * 距離驅動（做法同前公司 slotV2 的 playContinueReelRotation）：速度由「已走完
-                 * 的比例」決定，而不是由經過的時間決定。掉幀時每幀走得多一點、幀數少一點，
+                 * 距離驅動：速度由「已走完的比例」決定，而不是由經過的時間決定。
+                 * 掉幀時每幀走得多一點、幀數少一點，
                  * 走完的距離與落點完全不受影響——時間驅動就會在卡頓的機器上停歪。
                  */
                 const span = this.coastTo - this.coastFrom;
