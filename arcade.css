@@ -517,7 +517,13 @@ button.back { cursor: pointer; font-weight: inherit; }
     cursor: pointer;
     box-shadow: 0 6px 20px rgba(217, 184, 113, 0.22);
     transition: transform 0.14s, box-shadow 0.14s, filter 0.14s;
+    /* 兩個 span 疊在同一格：撐寬度的那個永遠是最長的字串，看得見的那個跟著狀態換 */
+    display: grid;
+    place-items: center;
 }
+.spin > * { grid-area: 1 / 1; }
+/* 只負責佔位。visibility 而不是 display:none——後者不佔空間，就撐不出寬度了 */
+.spin-sizer { visibility: hidden; }
 .spin:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 9px 26px rgba(217, 184, 113, 0.32); }
 .spin:active:not(:disabled) { transform: translateY(1px); }
 .spin:disabled {
@@ -525,6 +531,51 @@ button.back { cursor: pointer; font-weight: inherit; }
     opacity: 0.5;
     cursor: not-allowed;
     box-shadow: none;
+}
+
+/*
+ * 多人桌的階段儀表——**站在原本發牌按鈕的位置上**。
+ *
+ * 刻意長得不像按鈕：沒有金色漸層、沒有 hover、沒有陰影。那個位置在老虎機與單機版
+ * 百家樂上都是「按這裡」，所以這裡最重要的事是讓人一眼看出**這個不能按**，
+ * 否則玩家會一直戳它，然後以為桌子壞了。
+ */
+.table-status {
+    grid-area: spin;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(10px * var(--ui-scale));
+    padding: calc(12px * var(--ui-scale)) calc(20px * var(--ui-scale));
+    border-radius: calc(12px * var(--ui-scale));
+    border: 1px solid var(--border);
+    background: var(--well);
+    /* 倒數每秒換一個數字，寬度會跳。等寬數字讓整塊儀表定住 */
+    font-variant-numeric: tabular-nums;
+}
+.table-status .cap { color: var(--muted); }
+.table-status .clock {
+    font-family: var(--mono);
+    font-size: calc(1.5rem * var(--ui-scale));
+    font-weight: 700;
+    line-height: 1;
+    color: var(--gold-bright);
+}
+/* 最後五秒。跟 canvas 裡那顆膠囊同一個門檻，兩邊要一起變才不會互相矛盾 */
+.table-status.urgent {
+    border-color: color-mix(in srgb, var(--hot) 60%, transparent);
+}
+.table-status.urgent .clock {
+    color: var(--hot);
+    animation: table-urgent 1s ease-in-out infinite;
+}
+@keyframes table-urgent {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.12); }
+}
+/* 會動的東西要尊重系統設定。倒數靠顏色仍然讀得出來，脈動只是加強 */
+@media (prefers-reduced-motion: reduce) {
+    .table-status.urgent .clock { animation: none; }
 }
 
 .note {
@@ -623,6 +674,7 @@ button.back { cursor: pointer; font-weight: inherit; }
     }
     .readouts { justify-content: space-between; gap: 10px; }
     .spin { width: 100%; padding: 13px; font-size: 0.9rem; }
+    .table-status { width: 100%; padding: 10px 16px; }
 }
 
 /*
@@ -658,6 +710,7 @@ button.back { cursor: pointer; font-weight: inherit; }
     .bet { order: 2; }
     .drawer, .options { order: 3; }
     .spin { order: 4; }
+    .table-status { order: 4; }
 
     /* 讀數改兩欄：直排四個（百家樂的餘額／本局／上局／牌靴）會吃掉 144px，
        這個高度下那是整面板的四成 */
@@ -688,7 +741,23 @@ button.back { cursor: pointer; font-weight: inherit; }
     /* 剩下的空間全部堆在這裡，把抽屜與 SPIN 壓到面板底部 */
     .drawer, .options { margin-top: auto; }
 
+    /*
+     * 展開的抽屜也要能自己縮並捲，理由跟 .bet 一樣——但它更容易爆：**選項是會愈加愈多的**。
+     * 這個高度下四組選項疊起來就超過面板，而抽屜若照內容高度撐開，被擠出面板底部的
+     * 會是 SPIN，也就是唯一非按不可的那顆。上限用 vh 而不是固定 px，因為橫放的機型
+     * 高度差很多（390 到 480 都有）。
+     */
+    .drawer { min-height: 0; display: flex; flex-direction: column; }
+    .drawer-body {
+        min-height: 0;
+        max-height: 46vh;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
     .spin { width: 100%; padding: 11px; font-size: 0.86rem; }
+    .table-status { width: 100%; padding: 8px 14px; }
+    .table-status .clock { font-size: 1.2rem; }
     .drawer-toggle { padding: 5px 10px; }
     .cap { font-size: 0.55rem; }
     .val { font-size: 0.92rem; }
