@@ -29,7 +29,8 @@ const { buildSync } = projectRequire('esbuild');
 const out = buildSync({
     stdin: {
         contents: `
-            export { Reel, TEMPO } from './games/slot/reel';
+            export { Reel, TEMPO, HIGHLIGHT_SEC } from './games/slot/reel';
+            export { autoGapSec } from './games/slot/autoGap';
             export { SYMBOLS, REELS, ROWS } from './games/slot/rules';
             export { STOP_ORDERS, stopRanks } from './games/slot/stopOrder';
             export { clock } from './dev/stub-gsap.mjs';
@@ -50,7 +51,7 @@ const out = buildSync({
 });
 const mod = { exports: {} };
 new Function('module', 'exports', 'require', out.outputFiles[0].text)(mod, mod.exports, createRequire(import.meta.url));
-const { Reel, TEMPO, SYMBOLS, STOP_ORDERS, stopRanks, REELS, ROWS, clock, Texture } = mod.exports;
+const { Reel, TEMPO, HIGHLIGHT_SEC, autoGapSec, SYMBOLS, STOP_ORDERS, stopRanks, REELS, ROWS, clock, Texture } = mod.exports;
 
 /** 要跟 games/slot/index.ts 的 STOP_STAGGER 一致 */
 const STOP_STAGGER = 0.22;
@@ -587,6 +588,31 @@ async function main() {
         const afterResult = totalSec - resultFrame * DT;
         console.log(`  結果到達後 ${afterResult.toFixed(2)}s 內全部停穩`);
         check('落點一到就立刻收尾', afterResult < 0.6, `花了 ${afterResult.toFixed(2)}s`);
+    }
+
+    // ---- 自動連轉的空檔 ----
+    console.log('\n== 自動連轉：中獎那把要等演出播完 ==');
+    {
+        // 快速模式最容易踩的坑：時序係數會把等待縮到 0.3 秒，但中獎的脈動是固定的
+        // 1.28 秒——動畫本身沒有跟著變快。玩家還在看連線亮，下一把已經轉起來了
+        for (const tempo of ['normal', 'turbo']) {
+            const won = autoGapSec(true, tempo);
+            const idle = autoGapSec(false, tempo);
+            console.log(`  ${tempo}: 中獎後等 ${won.toFixed(2)}s · 沒中等 ${idle.toFixed(2)}s`);
+            check(`${tempo}：中獎後等得比演出長`, won >= HIGHLIGHT_SEC,
+                `等 ${won.toFixed(2)}s 但演出要 ${HIGHLIGHT_SEC.toFixed(2)}s`);
+            check(`${tempo}：中獎等得比沒中久`, won > idle, `${won.toFixed(2)}s vs ${idle.toFixed(2)}s`);
+        }
+
+        // 沒中獎的空檔純粹是留白，該跟著快慢檔縮
+        check('沒中獎時快速模式的空檔比較短',
+            autoGapSec(false, 'turbo') < autoGapSec(false, 'normal'));
+
+        // 中獎的等待則**不該**跟著縮太多——演出時長是固定的，只有後面的留白能縮。
+        // 這一項是這組測試的重點：把演出時長也乘上係數的話它會亮紅燈
+        const ratio = autoGapSec(true, 'turbo') / autoGapSec(true, 'normal');
+        check('中獎的等待不隨快慢檔等比縮水', ratio > 0.8,
+            `快速只有標準的 ${(ratio * 100).toFixed(0)}%，演出會被切掉`);
     }
 
     console.log(`\n通過 ${pass} 項，失敗 ${fail} 項\n`);

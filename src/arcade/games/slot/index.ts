@@ -6,6 +6,7 @@ import { FakeSocket } from '../../net/fakeSocket';
 import type { SlotS2C, WinLine } from '../../net/games/slot';
 import { arcadeState, useArcadeStore } from '../../store';
 import { Reel, TEMPO } from './reel';
+import { autoGapSec, WIN_TEXT_FADE, WIN_TEXT_POP } from './autoGap';
 import { PAYLINES, REELS, ROWS, type Sym } from './rules';
 import { slotState, useSlotStore } from './store';
 import { stopRanks } from './stopOrder';
@@ -41,15 +42,7 @@ const STOP_STAGGER = 0.22;
 /** 贏超過押注幾倍算大獎，中獎演出會加碼。 */
 const BIG_WIN_MULT = 10;
 
-/**
- * 自動轉動時，這一把停穩到下一把起轉之間的空檔（秒）。
- *
- * **這段空檔是玩家唯一能看清這一把中了什麼的時間**，不能省。中獎那把留得久一點，
- * 因為有連線與贏分數字要看；沒中的話畫面上沒有東西需要停留。
- * 兩個值都會再乘上快慢檔——開了快速模式還等一樣久的話，加速的感覺會被空檔吃掉一半。
- */
-const AUTO_GAP = 0.35;
-const AUTO_GAP_WIN = 0.9;
+// 自動連轉的空檔由 autoGap.ts 算——它同時知道中獎演出要播多久（見那支檔案的說明）
 
 /**
  * 贏分數字佔的位置：中心離盤面底幾格，以及字本身要留多高（半個字高，因為它是置中錨點）。
@@ -269,15 +262,15 @@ export class SlotModule implements GameModule {
      * 自動轉的下一把。
      *
      * 中間要留一段空檔，不能停穩就立刻起轉：**那個空檔是玩家唯一能看清這一把中了什麼的
-     * 時間**。中獎時留得比較久，因為有連線與贏分要看。
+     * 時間**。中獎時要等整段演出播完才排下一把，多久由 autoGap.ts 算。
      *
      * 排程存起來是為了離桌時取消——`gsap.delayedCall` 活在自己的全域 ticker 上，
      * 玩法都卸載了它照樣會醒過來，然後對著已經 destroy 的轉軸送出下一把。
      */
     private queueAutoSpin(): void {
         this.autoTimer?.kill();
-        const gap = slotState().lastWin > 0 ? AUTO_GAP_WIN : AUTO_GAP;
-        this.autoTimer = gsap.delayedCall(gap * TEMPO[slotState().spinTempo].time, () => {
+        const slot = slotState();
+        this.autoTimer = gsap.delayedCall(autoGapSec(slot.lastWin > 0, slot.spinTempo), () => {
             this.autoTimer = null;
             if (slotState().autoRemaining <= 0) return;
             slotState().consumeAuto();
@@ -317,8 +310,8 @@ export class SlotModule implements GameModule {
             this.winText.alpha = 0;
             this.winText.scale.set(big ? 0.6 : 0.85);
             this.fx.push(
-                gsap.to(this.winText, { alpha: 1, duration: 0.22 }),
-                gsap.to(this.winText.scale, { x: 1, y: 1, duration: 0.5, ease: 'back.out(2.2)' })
+                gsap.to(this.winText, { alpha: 1, duration: WIN_TEXT_FADE }),
+                gsap.to(this.winText.scale, { x: 1, y: 1, duration: WIN_TEXT_POP, ease: 'back.out(2.2)' })
             );
         }
     }

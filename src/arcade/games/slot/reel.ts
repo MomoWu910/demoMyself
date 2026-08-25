@@ -101,6 +101,18 @@ const SLAM_SNAP_TIME = 0.12;
 const SLAM_SETTLE_SCALE = 3;
 
 /**
+ * 中獎格子脈動一趟多久、來回幾趟。
+ *
+ * 抽成常數是為了讓外面算得出**整段演出要播多久**——自動連轉要等它播完才排下一把，
+ * 而那個等待時間寫死一個數字的話，改了這裡就會悄悄對不上（見 autoGap.ts）。
+ */
+const HIGHLIGHT_STEP = 0.32;
+const HIGHLIGHT_REPEAT = 3;
+
+/** 脈動整段的實際長度（秒）。yoyo 的 repeat n 表示總共播 n+1 趟。 */
+export const HIGHLIGHT_SEC = HIGHLIGHT_STEP * (HIGHLIGHT_REPEAT + 1);
+
+/**
  * 起轉的兩種演法。玩法可以逐把切換（面板上的開關），轉軸本身不記得上一把用哪種。
  *
  *   - `direct`：按下去就往主方向加速。乾淨俐落。
@@ -480,9 +492,9 @@ export class Reel extends Container {
                 {
                     x: base * 1.14,
                     y: base * 1.14,
-                    duration: 0.32,
+                    duration: HIGHLIGHT_STEP,
                     yoyo: true,
-                    repeat: 3,
+                    repeat: HIGHLIGHT_REPEAT,
                     ease: 'sine.inOut',
                     onComplete: () => {
                         s.scale.set(base);
