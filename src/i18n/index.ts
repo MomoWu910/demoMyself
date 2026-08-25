@@ -84,8 +84,8 @@ export const DICT: Record<string, Entry> = {
     'home.shader.foot': { en: 'GLSL + WGSL, both written by hand', zh: 'GLSL + WGSL，兩份都自己寫' },
     'home.arcade.title': { en: 'Arcade', zh: '遊樂場' },
     'home.arcade.desc': {
-        en: 'Two games — a slot machine and baccarat — hot-swapped on <strong>one module contract</strong>: on the way out every texture and ticker callback is handed back to the host and reconciled, so leaks show up as a number instead of a slowdown. Outcomes come from a simulated server behind a fake socket with 180–320 ms latency; the client only plays back the result it was given. The payout math is checked by Node scripts — 93% RTP over 100k spins, the full 8×10 baccarat drawing table, and the derived roads.',
-        zh: '兩款玩法（老虎機、百家樂）掛在<strong>同一組模組契約</strong>上熱插拔：離桌時每一張 texture、每一個每幀回呼都交還給 host 統一核對，漏掉的東西會變成一個數字而不是越玩越卡。盤面由模擬伺服器決定，經一層帶 180–320ms 延遲的假 socket 送來，前端只負責把收到的結果演出來。賠付數學用 Node 腳本驗過——十萬把取樣 RTP 93%、整張 8×10 百家樂補牌表，以及路圖推算。',
+        en: 'A slot machine and baccarat, both running on the same core — switching between them never reloads the page. Outcomes are decided by a fake server and arrive over a connection with real latency; <strong>the client only plays them back</strong>. The payout math is checked by Node scripts: 93% RTP over 100k spins, the full baccarat drawing table, and all five roadmaps.',
+        zh: '老虎機跟百家樂兩款跑在同一個底層上，切換時整頁不重載。輸贏由假 server 決定，隔著一層有延遲的連線送來，<strong>前端只負責演</strong>。賠付用 Node 腳本驗過：十萬把 RTP 93%、整張百家樂補牌表、五張路圖。',
     },
 
     // ---- RWD Showcase ----
