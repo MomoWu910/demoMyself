@@ -57,35 +57,35 @@ export const DICT: Record<string, Entry> = {
     'home.hint': { en: 'Hover a pass to inspect · click to enter', zh: '滑過節點看細節 · 點擊進入' },
     'home.crossEngine.title': { en: 'Cross-Engine Rendering', zh: '跨引擎渲染' },
     'home.crossEngine.desc': {
-        en: 'PixiJS (2D UI) and Three.js (3D scene) drawing into a <strong>single shared WebGL context</strong> — manual GL state management to avoid depth / stencil / culling pollution, with cannon-es physics.',
-        zh: 'PixiJS（2D UI）與 Three.js（3D 場景）繪製進<strong>同一個共用 WebGL context</strong> — 手動管理 GL 狀態以避免 depth / stencil / culling 污染，搭配 cannon-es 物理。',
+        en: 'A glass tray you tilt with the mouse; the balls and blocks inside slide around. What I wanted to try was whether two rendering engines can share one canvas. The usual approach is to stack two of them — here the 3D scene and the 2D interface share the same one, so the numbers in the HUD and the collisions they describe are always from the same frame.',
+        zh: '一個可以用滑鼠傾斜的玻璃托盤，裡面的球和方塊會滾來滾去。想試的是兩個繪圖引擎能不能共用同一塊畫布。一般做法是各開一個疊起來，這裡 3D 場景和 2D 介面共用同一個，所以 HUD 的數字跟球的碰撞永遠是同一幀。',
     },
     'home.configurator.title': { en: '3D Product Configurator', zh: '3D 產品配置器' },
     'home.configurator.desc': {
-        en: 'Babylon.js real-time configurator: swap finishes (matte / leather / glossy / metallic) and colors, tune studio lighting & background live, with PBR + IBL, soft shadows, post-processing, and colorway variants (glTF KHR_materials_variants).',
-        zh: 'Babylon.js 即時配置器：切換質感（matte / leather / glossy / metallic）與顏色、即時調整棚拍打光與背景，搭配 PBR + IBL、柔和陰影、後製，與 colorway 變體（glTF KHR_materials_variants）。',
+        en: 'A shoe you configure yourself: swap materials and colours, adjust the studio lighting, watch it update as you go. This is the most common real use for 3D on the web — letting a shopper see the exact one they want before they buy it.',
+        zh: '一雙可以自己配的鞋：換材質、換顏色、調棚拍打光，即時看結果。這是 3D 最常見的實際用途——電商讓客人先看到自己要的那一款長什麼樣。',
     },
     'home.lab.title': { en: 'Rendering Findings', zh: '渲染效能實測結論' },
     'home.lab.desc': {
-        en: 'Two test cases, <strong>identical draw call counts, 6.5× the CPU cost</strong>. A measured report on PixiJS v8: how I profiled it, what it proved, and why a single metric can invert your conclusion.',
-        zh: '兩個測試案例，<strong>一模一樣的 draw call 數，CPU 成本卻差 6.5 倍</strong>。一份 PixiJS v8 的實測報告：我怎麼量、量到了什麼，以及為什麼只看單一指標會讓結論完全反過來。',
+        en: 'A performance report you can re-run yourself on the page. It started with the line "fewer draw calls is faster" — I wanted to know whether that actually holds. What came out: the same draw call count, 6.5× the CPU cost.',
+        zh: '一份可以自己在頁面上重跑的效能報告。起因是「draw call 越少越快」這句話——我想知道是不是真的。量出來是：同樣的 draw call 數，CPU 成本可以差 6.5 倍。',
     },
     'home.lab.foot': { en: 'Measured, not claimed', zh: '量出來的，不是講出來的' },
     'home.rwd.title': { en: 'RWD Showcase', zh: 'RWD 響應式展示' },
     'home.rwd.desc': {
-        en: 'Built-in device simulator: preview every page of this site in iPhone / iPad / desktop viewports, rotate, or free-drag to any window size — layouts stay intact everywhere.',
-        zh: '站內建裝置模擬器：以 iPhone / iPad / 桌機視口即時預覽本站每一頁，可轉向、可自由拖拉任意視窗尺寸——所有佈局都不爆版。',
+        en: 'A device simulator built into the site: pick an iPhone, iPad or desktop and see any page of this site at that size, or drag it to whatever size you like. I built it because "it is responsive" is not something a sentence can prove — easier to let people drag it themselves.',
+        zh: '站內建的裝置模擬器：挑 iPhone、iPad 或桌機，即時看本站每一頁在那個尺寸長什麼樣，也可以自己拖成任意大小。做這個是因為「有做 RWD」這句話沒辦法證明，不如讓人自己拉。',
     },
     'home.shader.title': { en: 'Shader Lab', zh: 'Shader Lab' },
     'home.shader.desc': {
-        en: 'Custom PixiJS v8 shaders with <strong>GLSL and WGSL hand-written side by side</strong> — dissolve, water ripple, and a flag deformed in the vertex stage. Outputs verified by reading the framebuffer on both backends, not by eyeballing them. Live controls in React + Zustand, the shader source on screen, and what each effect actually costs.',
-        zh: '自訂 PixiJS v8 shader，<strong>GLSL 與 WGSL 兩份原始碼手寫並存</strong>——溶解、水波折射，以及一面在 vertex 階段被扭曲的旗幟。輸出是讀 framebuffer 在兩個 backend 上逐像素比對出來的，不是用眼睛看的。控制面板用 React + Zustand，原始碼直接攤在畫面上，並說明每個效果真正的代價。',
+        en: 'Three effects you can tune live — dissolve, water ripple, and a flag in the wind — with the shader source sitting next to them. I built it to work out how WebGL and WebGPU shaders actually differ, so each effect is written twice, once in each language, and the two outputs are compared to check they really match.',
+        zh: '三個可以當場調參數的效果：溶解、水波、被風吹動的旗子，原始碼就攤在旁邊。做這個是想搞清楚 WebGL 跟 WebGPU 的 shader 差在哪，所以同一個效果兩種語言各寫一份，再比對輸出有沒有真的一樣。',
     },
     'home.shader.foot': { en: 'GLSL + WGSL, both written by hand', zh: 'GLSL + WGSL，兩份都自己寫' },
     'home.arcade.title': { en: 'Arcade', zh: '遊樂場' },
     'home.arcade.desc': {
-        en: 'A slot machine and baccarat, both running on the same core — switching between them never reloads the page. Outcomes are decided by a fake server and arrive over a connection with real latency; <strong>the client only plays them back</strong>. The payout math is checked by Node scripts: 93% RTP over 100k spins, the full baccarat drawing table, and all five roadmaps.',
-        zh: '老虎機跟百家樂兩款跑在同一個底層上，切換時整頁不重載。輸贏由假 server 決定，隔著一層有延遲的連線送來，<strong>前端只負責演</strong>。賠付用 Node 腳本驗過：十萬把 RTP 93%、整張百家樂補牌表、五張路圖。',
+        en: 'Built like an H5 gaming platform: pick a table from the lobby, then play a slot machine or baccarat with other people betting at the same table. I wanted the whole thing rather than a single game screen, because the hard parts of a platform are not on screen — switching games cannot slow the page down, and the client cannot be the one deciding who wins.',
+        zh: '做成 H5 線上遊戲平台的樣子：大廳選台，進去玩老虎機或百家樂，桌上還有其他人一起下注。會想做整套而不是單一個遊戲畫面，是因為平台麻煩的地方不在畫面——在切換遊戲不能拖慢，以及輸贏不能由前端說了算。',
     },
 
     // ---- RWD Showcase ----
