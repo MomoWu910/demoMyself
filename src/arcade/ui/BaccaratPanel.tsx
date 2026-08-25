@@ -1,4 +1,5 @@
 import { CHIP_VALUES, chipLabel } from '../common/chips/atlas';
+import { BET_SPOTS } from '../games/baccarat/rules';
 import { useBaccaratStore } from '../games/baccarat/store';
 import { useArcadeStore } from '../store';
 import { useT } from '../../i18n/useT';
@@ -6,32 +7,46 @@ import { useT } from '../../i18n/useT';
 /**
  * 百家樂的操作面板。
  *
- * 分工的判準跟整頁一致（見 Hud.tsx）：**下注區在 canvas 裡**，因為它有籌碼疊、
- * 中獎會發亮，是遊戲世界的一部分；**選籌碼面額、清除、重複、發牌在 DOM**，
+ * 分工的判準跟整頁一致（見 Hud.tsx）：**下注區在 canvas 裡**，因為它有籌碼、
+ * 中獎會發亮，是遊戲世界的一部分；**選籌碼面額、重複下注在 DOM**，
  * 因為它們是按鈕——要能被鍵盤按到、要能被翻譯、也不需要每幀重畫。
  *
- * 跟 SlotPanel 一樣拆成讀數與控制兩塊，填進殼留好的兩個插槽。
+ * ---
+ *
+ * 改成多人桌之後，這塊面板**少了一顆最重要的按鈕**：沒有「發牌」了。
+ *
+ * 這件事比它看起來的大。單機版的面板是一個「送出表單」的介面——選好注、按下去、
+ * 看結果。多人版沒有送出這個動作，桌子自己會開，所以面板的角色從「操作」變成
+ * 一半操作、一半**儀表板**：那顆按鈕原本的位置改成階段與倒數，因為玩家在多人桌上
+ * 最需要知道的不是「我能按什麼」，而是「現在還來不來得及」。
  */
 
 /**
- * 籌碼面額與清除／重複。
+ * 籌碼面額與重複下注。
  *
- * 三者合成**一個區塊**而不是各佔面板一列：它們是同一件事的三個動作——決定這一局要押多少。
- * 分成兩列時，窄畫面下「清除／重複」會被推到跟 SPIN 同高的位置，看起來像另一組主操作，
- * 但它們其實是下注的附屬動作。合起來也讓面板在豎屏少掉一整列的高度。
+ * 「清除」在多人桌上不存在了——**押出去就不能撤**，跟真實桌台一樣（見協定裡的 `bet`）。
+ * 留一顆按不動的清除鈕比拿掉更糟：玩家會一直試，然後以為壞了。
  */
 function BetControls() {
     const t = useT();
     const chip = useBaccaratStore((s) => s.chip);
     const setChip = useBaccaratStore((s) => s.setChip);
     const phase = useBaccaratStore((s) => s.phase);
-    const totalBet = useBaccaratStore((s) => s.totalBet);
     const lastBets = useBaccaratStore((s) => s.lastBets);
-    const clearBets = useBaccaratStore((s) => s.clearBets);
-    const repeatBets = useBaccaratStore((s) => s.repeatBets);
+    const betHandler = useBaccaratStore((s) => s.betHandler);
 
     const betting = phase === 'betting';
     const hasLast = Object.keys(lastBets).length > 0;
+
+    // 重複下注＝把上一局的注**一注一注重送**，不是送一包「重複」指令。
+    // server 那邊就只認得單筆下注，少一種封包就少一條要維護的路徑
+    const repeat = (): void => {
+        if (!betHandler) return;
+        for (const spot of BET_SPOTS) {
+            const amount = lastBets[spot] ?? 0;
+            if (amount > 0) betHandler(spot, amount);
+        }
+    };
 
     return (
         <div className="bet">
@@ -42,20 +57,16 @@ function BetControls() {
                         key={v}
                         type="button"
                         className={`chip${v === chip ? ' on' : ''}`}
-                        // 只有下注階段能換籌碼。發牌中換沒有意義，結算中換會讓人以為改得到這一局
-                        disabled={phase !== 'betting'}
+                        // 只有下注階段能換籌碼。開牌中換沒有意義，結算中換會讓人以為改得到這一局
+                        disabled={!betting}
                         onClick={() => setChip(v)}
                     >
                         {chipLabel(v)}
                     </button>
                 ))}
             </div>
-            {/* 沒有可見標籤——按鈕文字已經自明，省下的那行給牌區。標籤改掛在群組上給讀螢幕的人 */}
             <div className="bet-row" role="group" aria-label={t('arcade.bac.actions')}>
-                <button type="button" className="chip ghost" disabled={!betting || totalBet === 0} onClick={clearBets}>
-                    {t('arcade.bac.clear')}
-                </button>
-                <button type="button" className="chip ghost" disabled={!betting || !hasLast} onClick={repeatBets}>
+                <button type="button" className="chip ghost" disabled={!betting || !hasLast} onClick={repeat}>
                     {t('arcade.bac.repeat')}
                 </button>
             </div>
@@ -66,22 +77,22 @@ function BetControls() {
 /** 讀數插槽：本局押注、上一局輸贏、牌靴剩幾張。 */
 export function BaccaratReadouts() {
     const t = useT();
-    const totalBet = useBaccaratStore((s) => s.totalBet);
+    const myTotal = useBaccaratStore((s) => s.myTotal);
     const lastNet = useBaccaratStore((s) => s.lastNet);
-    const lastRound = useBaccaratStore((s) => s.lastRound);
+    const played = useBaccaratStore((s) => s.played);
     const shoe = useBaccaratStore((s) => s.shoe);
 
     return (
         <>
             <div className="stat">
                 <span className="cap">{t('arcade.bac.totalBet')}</span>
-                <strong className="val">{totalBet.toLocaleString()}</strong>
+                <strong className="val">{myTotal.toLocaleString()}</strong>
             </div>
             <div className="stat">
                 <span className="cap">{t('arcade.bac.net')}</span>
                 <strong className={`val${lastNet > 0 ? ' hit' : ''}`}>
-                    {/* 還沒打過任何一局時顯示破折號，而不是 0——0 會被誤讀成「這局平手」 */}
-                    {lastRound === null ? '—' : lastNet > 0 ? `+${lastNet.toLocaleString()}` : lastNet.toLocaleString()}
+                    {/* 還沒押過任何一局時顯示破折號，而不是 0——0 會被誤讀成「這局平手」 */}
+                    {!played ? '—' : lastNet > 0 ? `+${lastNet.toLocaleString()}` : lastNet.toLocaleString()}
                 </strong>
             </div>
             <div className="stat">
@@ -102,24 +113,31 @@ export function BaccaratOptions(): null {
     return null;
 }
 
-/** 控制插槽：籌碼面額、清除／重複、發牌。 */
+/**
+ * 控制插槽：籌碼面額、重複下注，以及**原本是發牌按鈕的那塊地方**。
+ *
+ * 桌子的節奏不歸玩家管，所以那個位置改成一塊儀表：現在是哪一段、還剩幾秒。
+ * canvas 裡的階段膠囊已經顯示過同一件事，這裡再放一次不是重複——**視線在面板上的時候
+ * 不該為了看倒數而抬頭**，那三秒可能就是能不能押到這一手的差別。
+ */
 export function BaccaratControls() {
     const t = useT();
     const connection = useArcadeStore((s) => s.connection);
     const phase = useBaccaratStore((s) => s.phase);
-    const totalBet = useBaccaratStore((s) => s.totalBet);
-    const dealHandler = useBaccaratStore((s) => s.dealHandler);
+    const secondsLeft = useBaccaratStore((s) => s.secondsLeft);
 
-    const canDeal = !!dealHandler && phase === 'betting' && totalBet > 0 && connection === 'open';
-    const label = phase === 'dealing' ? t('arcade.bac.dealing') : phase === 'result' ? t('arcade.bac.settling') : t('arcade.bac.deal');
+    const betting = phase === 'betting';
+    const label = connection !== 'open' ? t('arcade.bac.phase.connecting') : t(`arcade.bac.phase.${phase}`);
 
     return (
         <>
             <BetControls />
 
-            <button type="button" className="spin" disabled={!canDeal} onClick={() => dealHandler?.()}>
-                {label}
-            </button>
+            {/* 倒數只在下注階段有意義。其他階段顯示數字會讓人以為那時候也能做點什麼 */}
+            <div className={`table-status${betting && secondsLeft <= 5 ? ' urgent' : ''}`} aria-live="polite">
+                <span className="cap">{label}</span>
+                {betting && <strong className="clock">{secondsLeft}</strong>}
+            </div>
         </>
     );
 }

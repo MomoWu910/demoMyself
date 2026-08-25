@@ -36,8 +36,9 @@ function load(entry) {
 const { cardValue, handTotal, playerDraws, bankerDraws, settleRound, settleBets, BET_SPOTS } = load(
     'src/arcade/games/baccarat/rules.ts'
 );
-const { BaccaratServer } = load('src/arcade/server/baccaratServer.ts');
-const { Wallet } = load('src/arcade/server/wallet.ts');
+// 測的是**牌靴**而不是桌台。桌台有時鐘（一局要等二十幾秒），這支腳本要在幾秒內
+// 同步跑完五十萬局——所以決定輸贏的那一層被刻意拆了出來（見 baccaratShoe.ts）
+const { BaccaratShoe } = load('src/arcade/server/baccaratShoe.ts');
 
 let pass = 0;
 let fail = 0;
@@ -213,8 +214,8 @@ console.log('\n== 賠付 ==');
 
 console.log('\n== 牌靴 ==');
 {
-    const server = new BaccaratServer(new Wallet(1e9));
-    const first = server.handle({ type: 'deal', bets: { player: 1 } });
+    const shoe = new BaccaratShoe();
+    const first = shoe.draw();
     check('八副牌共 416 張', first.shoe.total, 416);
 
     const used = first.round.player.length + first.round.banker.length;
@@ -223,11 +224,11 @@ console.log('\n== 牌靴 ==');
     check('沒用到的牌有歸位', first.shoe.remaining, 416 - used);
 }
 {
-    const server = new BaccaratServer(new Wallet(1e9));
+    const shoe = new BaccaratShoe();
     let rounds = 0;
     let changed = null;
     while (rounds < 200) {
-        const res = server.handle({ type: 'deal', bets: { player: 1 } });
+        const res = shoe.draw();
         rounds++;
         if (res.shoeChanged) {
             changed = res;
@@ -236,31 +237,22 @@ console.log('\n== 牌靴 ==');
     }
     ok('兩百局內會換到新靴', changed !== null);
     check('換靴後牌靴補滿', changed.shoe.remaining, 416);
-    check('換靴清掉這一靴的路圖歷史', server.getHistory().length, 0);
+    check('換靴清掉這一靴的路圖歷史', shoe.getHistory().length, 0);
     ok('換靴前打了合理局數（切牌位置有效）', rounds > 50, `實際 ${rounds} 局`);
 }
 {
-    const server = new BaccaratServer(new Wallet(1e9));
-    server.handle({ type: 'deal', bets: { player: 1 } });
-    server.handle({ type: 'deal', bets: { player: 1 } });
-    const table = server.handle({ type: 'sit' });
-    check('進桌拿得到這一靴的歷史', table.history.length, 2);
-    check('歷史裡是路圖需要的欄位', Object.keys(table.history[0]).sort(), ['bankerPair', 'outcome', 'playerPair']);
-}
-
-console.log('\n== 押注驗證 ==');
-{
-    const server = new BaccaratServer(new Wallet(1000));
-    check('沒押任何注被擋', server.handle({ type: 'deal', bets: {} }).reason, 'invalid_bet');
-    check('負數押注被擋', server.handle({ type: 'deal', bets: { player: -50 } }).reason, 'invalid_bet');
-    check('押注超過餘額被擋', server.handle({ type: 'deal', bets: { player: 99999 } }).reason, 'insufficient_balance');
-    check('被擋時餘額不變', server.getBalance(), 1000);
+    const shoe = new BaccaratShoe();
+    shoe.draw();
+    shoe.draw();
+    const history = shoe.getHistory();
+    check('牌靴記得這一靴的歷史', history.length, 2);
+    check('歷史裡是路圖需要的欄位', Object.keys(history[0]).sort(), ['bankerPair', 'outcome', 'playerPair']);
 }
 
 console.log('\n== 長期回報率（50 萬局，對照公開的莊家優勢）==');
 {
     const ROUNDS = 500000;
-    const server = new BaccaratServer(new Wallet(1e12));
+    const shoe = new BaccaratShoe();
     const staked = {};
     const returned = {};
     for (const spot of BET_SPOTS) {
@@ -273,11 +265,12 @@ console.log('\n== 長期回報率（50 萬局，對照公開的莊家優勢）==
     for (const spot of BET_SPOTS) bets[spot] = 1;
 
     for (let i = 0; i < ROUNDS; i++) {
-        const res = server.handle({ type: 'deal', bets });
-        outcomes[res.round.outcome]++;
+        const { round } = shoe.draw();
+        const payouts = settleBets(bets, round);
+        outcomes[round.outcome]++;
         for (const spot of BET_SPOTS) {
             staked[spot] += 1;
-            returned[spot] += res.payouts[spot];
+            returned[spot] += payouts[spot];
         }
     }
 

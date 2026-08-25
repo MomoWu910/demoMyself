@@ -15,7 +15,7 @@ import type { LobbyEntry } from './catalog';
  * 圖示在小尺寸下反而比寫實的清楚——一排 130px 寬的卡片，寫實插圖只會糊成一團色塊。
  */
 
-/** 卡片的寬高比。沿用真實大廳 icon 的橫幅比例（Ducky 是 235×180） */
+/** 卡片的寬高比。沿用商用大廳 icon 常見的橫幅比例（約 235×180） */
 const CARD_RATIO = 235 / 180;
 const CARD_GAP = 14;
 /** 卡片最小做到這裡。再小下去圖示與兩行字就疊在一起了 */
@@ -258,7 +258,7 @@ export class GameRail extends Container {
      * 箭頭只在**那個方向真的還有東西**時出現。
      *
      * 兩顆一直亮著的話，捲到底還點得下去就成了沒有回應的按鈕；而捲不動的時候
-     * （只有一兩張卡）根本不該有箭頭。Ducky 的大廳也是這個規則。
+     * （只有一兩張卡）根本不該有箭頭。商用大廳的做法也是這個規則。
      */
     private syncArrows(): void {
         const max = this.scroller.maxOffset;

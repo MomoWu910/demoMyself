@@ -10,6 +10,8 @@
     "check:slot": "node src/arcade/server/rtp-check.mjs",
     "check:reel": "node src/arcade/games/slot/reel-check.mjs",
     "check:baccarat": "node src/arcade/server/baccarat-check.mjs",
+    "check:cards": "node src/arcade/common/cards/card-check.mjs",
+    "check:chips": "node src/arcade/common/chips/chips-check.mjs",
     "check:road": "node src/arcade/games/baccarat/roadmap-check.mjs"
   },
   "dependencies": {

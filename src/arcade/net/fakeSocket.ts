@@ -3,7 +3,7 @@ import type { SlotC2S, SlotS2C } from './games/slot';
 import type { BaccaratC2S, BaccaratS2C } from './games/baccarat';
 import type { GameServer } from '../server/gameServer';
 import { SlotServer } from '../server/slotServer';
-import { BaccaratServer } from '../server/baccaratServer';
+import { baccaratTable } from '../server/baccaratServer';
 import { sessionWallet } from '../server/wallet';
 
 /**
@@ -69,6 +69,13 @@ function welcome<G extends GameId>(): S2COf<G> {
  * 共用的那個錢包在這裡才被傳進去——玩法 server 自己不知道要去哪裡拿錢包，
  * 也就不可能繞過它私自加減餘額。
  *
+ * **兩款的生命週期不一樣**，這不是疏忽：
+ *
+ * - 老虎機是請求驅動的，每次進場 `new` 一台是對的——沒人按它就不該存在。
+ * - 百家樂是**一張一直在跑的桌子**，所以接的是 module-level 的那一張
+ *   （`baccaratTable`）。每次進桌 new 一張新桌的話，路圖與桌上的人會跟著玩家走，
+ *   那就不是多人桌了。
+ *
  * 回傳值需要一次 cast：`game` 的值是**執行期**才知道的，而回傳型別由**編譯期**的 `G`
  * 決定，這個接縫沒辦法讓 TS 自己對上。整支檔案就只有這裡一處，換來的是外面所有
  * 玩法程式碼都拿得到精確型別。
@@ -78,7 +85,7 @@ function createServer<G extends GameId>(game: G): GameServer<C2SOf<G>, S2COf<G>>
         case 'slot':
             return new SlotServer(sessionWallet) as unknown as GameServer<C2SOf<G>, S2COf<G>>;
         case 'baccarat':
-            return new BaccaratServer(sessionWallet) as unknown as GameServer<C2SOf<G>, S2COf<G>>;
+            return baccaratTable as unknown as GameServer<C2SOf<G>, S2COf<G>>;
         default:
             throw new Error(`[arcade] 未知的玩法：${String(game)}`);
     }
@@ -101,6 +108,30 @@ export class FakeSocket<G extends GameId> {
      */
     private timers = new Set<number>();
 
+    /**
+     * server 主動推播時走的那條線。
+     *
+     * 存成欄位而不是每次現包一個，是因為 `detach` 要拿**同一個參考**才解得掉訂閱——
+     * 傳一個新的箭頭函式進去，Set 會安靜地什麼都不刪，然後這條連線就永遠掛在
+     * server 的訂閱名單上。桌台是 module-level 的，那等於漏到整頁結束為止。
+     */
+    private readonly push = (packet: S2COf<G>): void => {
+        // 推播也要走 RTT。不走的話它會比玩家自己請求的回應更早到，
+        // 開發時看起來很順，上線接真 WebSocket 才發現時序全變了
+        const rtt = RTT_MIN + Math.random() * (RTT_MAX - RTT_MIN);
+        this.deliver(packet, rtt * 0.5);
+    };
+
+    /**
+     * 下一則封包最早可以在什麼時候送達。**這是為了保住順序。**
+     *
+     * 沒有它會出真的問題：桌台在同一個瞬間先推 `phase: 'dealing'` 再推 `deal`，
+     * 兩則各自抽一個隨機延遲，於是有機會**牌先到、階段後到**——client 就會在還以為
+     * 自己在下注階段的時候收到一整局的牌。TCP 不會這樣，真的 WebSocket 也不會，
+     * 所以這個假的也不該這樣。
+     */
+    private lastDeliverAt = 0;
+
     constructor(game: G, handlers: FakeSocketHandlers<S2COf<G>>) {
         this.server = createServer(game);
         this.handlers = handlers;
@@ -108,6 +139,9 @@ export class FakeSocket<G extends GameId> {
             this.setState('open');
             this.handlers.onOpen?.();
             this.emit(welcome());
+            // 握手完成才訂閱推播。提早訂的話，桌台的階段封包會比 welcome 先到，
+            // client 那側就得處理「還不知道自己是誰卻收到桌況」的狀態
+            this.server.attach?.(this.push);
         }, CONNECT_MS);
     }
 
@@ -125,6 +159,9 @@ export class FakeSocket<G extends GameId> {
 
     public close(): void {
         this.setState('closed');
+        // 先退訂再清 timer。反過來的話，退訂之前 server 還可能再推一則進來排新的 timer，
+        // 那一則就會活過這次 close
+        this.server.detach?.(this.push);
         for (const id of this.timers) window.clearTimeout(id);
         this.timers.clear();
     }
@@ -144,7 +181,17 @@ export class FakeSocket<G extends GameId> {
         }
 
         const reply = this.server.handle(packet);
-        if (reply) this.emit(reply);
+        // 回應也走同一個佇列。只讓推播排隊、回應插隊的話，順序照樣會亂——
+        // 「我押了一注」的確認可能跑到下一秒的別人下注前面去
+        if (reply) this.deliver(reply, 0);
+    }
+
+    /** 照先進先出送達，且不早於 `delayMs` 之後。同一毫秒的兩則會被拉開 1ms，順序才穩 */
+    private deliver(packet: S2COf<G>, delayMs: number): void {
+        const now = Date.now();
+        const at = Math.max(this.lastDeliverAt + 1, now + delayMs);
+        this.lastDeliverAt = at;
+        this.later(() => this.emit(packet), at - now);
     }
 
     private emit(packet: S2COf<G>): void {

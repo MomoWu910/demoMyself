@@ -27,6 +27,21 @@ export class CardView extends Container {
     /** 進行中的翻牌動畫。重複呼叫 flip 時要先收掉，否則兩個 tween 會搶同一個 scale.x */
     private tween: gsap.core.Timeline | null = null;
 
+    /**
+     * 進行中那個 `flip()` 的 resolve。
+     *
+     * 存起來的理由：**kill 一個 gsap timeline 不會觸發它的 `onComplete`**，
+     * 於是 `await card.flip()` 的呼叫端會永遠停在那一行。百家樂整局演出掛掉
+     * （只剩一張沒翻開的牌、沒有結算、路圖不動）就是這樣來的——中斷動畫是合理的，
+     * 但**中斷不能等於讓等它的人永遠等下去**。
+     *
+     * 規則：凡是會 kill 這個 timeline 的地方，都要先經過 `cutFlip()`。
+     */
+    private finishFlip: (() => void) | null = null;
+
+    /** 進行中那個 `flip()` 翻完之後**應該是哪一面**。中途收掉動畫時要直接跳到它 */
+    private flipTarget = false;
+
     constructor(atlas: CardAtlas, width: number) {
         super();
         this.atlas = atlas;
@@ -43,8 +58,16 @@ export class CardView extends Container {
         return this.up;
     }
 
-    /** 牌面尺寸。高度照 atlas 的比例算，不讓呼叫端自己乘。 */
+    /**
+     * 牌面尺寸。高度照 atlas 的比例算，不讓呼叫端自己乘。
+     *
+     * **改尺寸前要先把翻牌收掉**：翻牌動畫的終點寫的是「回到 `base`」，而那個值是
+     * 建立 tween 當下抓的。中途換掉 base 的話，牌翻完會停在舊的寬度——畫面上就是
+     * 一張被壓扁或拉長的牌，而且再也不會自己修正。resize 本來就是重排的時刻，
+     * 讓牌直接呈現該有的那一面，比留著半個動畫合理。
+     */
     public resize(width: number): void {
+        this.cutFlip();
         this.base = width / CARD_W;
         this.sprite.scale.set(this.base);
     }
@@ -66,8 +89,7 @@ export class CardView extends Container {
 
     /** 立刻顯示某一面，不做動畫。用在重建畫面（resize、重新進桌）的時候。 */
     public setFaceUp(up: boolean): void {
-        this.tween?.kill();
-        this.tween = null;
+        this.cutFlip();
         this.up = up;
         this.sprite.texture = up ? this.faceTexture() : this.atlas.back;
         this.sprite.scale.x = this.base;
@@ -84,12 +106,17 @@ export class CardView extends Container {
      * 閒家先翻、莊家後翻，用 callback 串會變成巢狀。
      */
     public flip(duration = 0.32): Promise<void> {
-        this.tween?.kill();
+        this.cutFlip();
+
+        const target = !this.up;
+        this.flipTarget = target;
 
         return new Promise((resolve) => {
+            this.finishFlip = resolve;
             const tl = gsap.timeline({
                 onComplete: () => {
                     this.tween = null;
+                    this.finishFlip = null;
                     resolve();
                 },
             });
@@ -99,7 +126,7 @@ export class CardView extends Container {
                 duration: duration / 2,
                 ease: 'power2.in',
                 onComplete: () => {
-                    this.up = !this.up;
+                    this.up = target;
                     this.sprite.texture = this.up ? this.faceTexture() : this.atlas.back;
                 },
             }).to(this.sprite.scale, {
@@ -114,8 +141,31 @@ export class CardView extends Container {
 
     /** 收掉進行中的動畫。玩法卸載時呼叫，避免 tween 對著已經 destroy 的物件動手。 */
     public stop(): void {
-        this.tween?.kill();
+        this.cutFlip();
+    }
+
+    /**
+     * 收掉翻牌動畫，**跳到它該有的終點**，然後讓等它的人繼續往下走。
+     *
+     * 三件事缺一不可：
+     * - `kill`：不收的話它會繼續對著 `scale.x` 動手，跟後面的動畫打架
+     * - **補上終點狀態**：純 kill 會讓牌停在翻到一半的樣子（壓扁的、或者根本還沒翻面），
+     *   而呼叫端已經當它翻好了往下走，那張牌就再也沒有人會去翻它
+     * - `resolve`：kill 不觸發 `onComplete`，不補這一下，`await flip()` 會永遠等下去
+     */
+    private cutFlip(): void {
+        const tl = this.tween;
         this.tween = null;
+        const done = this.finishFlip;
+        this.finishFlip = null;
+
+        if (tl) {
+            tl.kill();
+            this.up = this.flipTarget;
+            this.sprite.texture = this.up ? this.faceTexture() : this.atlas.back;
+            this.sprite.scale.x = this.base;
+        }
+        done?.();
     }
 
     private faceTexture() {

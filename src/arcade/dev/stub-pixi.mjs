@@ -6,7 +6,18 @@ export class Container {
         this.mask = null;
         this.x = 0;
         this.y = 0;
+        this.alpha = 1;
+        this.visible = true;
         this.destroyed = false;
+        // `position.set(x, y)` 要寫到 x／y 本身——gsap 動的是 `.x`／`.y`，
+        // 兩者不同步的話測試會讀到一個永遠不變的舊值，然後印出綠燈
+        this.position = {
+            owner: this,
+            set(x, y = x) {
+                this.owner.x = x;
+                this.owner.y = y;
+            },
+        };
     }
     addChild(c) {
         this.children.push(c);
@@ -15,6 +26,12 @@ export class Container {
     addChildAt(c, i) {
         this.children.splice(i, 0, c);
         return c;
+    }
+    setChildIndex(c, i) {
+        const at = this.children.indexOf(c);
+        if (at < 0) return;
+        this.children.splice(at, 1);
+        this.children.splice(i, 0, c);
     }
     destroy() {
         this.destroyed = true;
@@ -58,5 +75,18 @@ export class Graphics extends Container {
 }
 
 export class Texture {}
+
+/** 只是個資料袋。烘 atlas 的程式用它切圖框，Node 這側不需要它真的做什麼 */
+export class Rectangle {
+    constructor(x = 0, y = 0, width = 0, height = 0) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+}
+
+/** 佔位。atlas 那幾支檔案 import 了它（烘圖要 renderer），但 Node 這側不會走到烘圖 */
+export class Application {}
 export class Text extends Container {}
 export class TextStyle {}
