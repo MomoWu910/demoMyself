@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { WinLine } from '../../net/games/slot';
-import type { SpinStyle } from './reel';
+import type { SpinStyle, SpinTempo } from './reel';
 import type { StopOrder } from './stopOrder';
 
 /**
@@ -39,6 +39,34 @@ export interface SlotState {
     stopOrder: StopOrder;
 
     /**
+     * 轉動快慢。跟 spinStyle、stopOrder 一樣是**純表演**——快轉不會改變賠付，
+     * 也不會少扣一次注。
+     */
+    spinTempo: SpinTempo;
+
+    /**
+     * 玩家按過停沒有（這一把）。
+     *
+     * 需要它是因為按停之後**畫面不一定馬上停**：落點還在路上時，按鈕得先變成
+     * 「停止中」讓玩家知道請求收到了，否則他會以為沒按到而狂點。
+     */
+    stopRequested: boolean;
+
+    /**
+     * 自動轉動還剩幾把。0 = 沒在自動。
+     *
+     * 存剩餘次數而不是「自動中」的布林加一個計數器，是因為這兩個永遠要一起改，
+     * 分開存就會出現「顯示自動中但次數是 0」這種對不上的狀態。
+     */
+    autoRemaining: number;
+
+    /**
+     * 玩法註冊的「請停下這一把」入口。跟 spinHandler 同一個道理——停是動作不是狀態。
+     * 沒在轉的時候是 null。
+     */
+    stopHandler: (() => void) | null;
+
+    /**
      * 目前掛載的玩法向 store 註冊的「請轉一把」入口。
      *
      * 用 handler 而不是用旗標，是因為 spin 是**動作**不是狀態：用旗標的話 React 設 true、
@@ -53,6 +81,13 @@ export interface SlotState {
     setSpinHandler: (fn: (() => void) | null) => void;
     setSpinStyle: (s: SpinStyle) => void;
     setStopOrder: (o: StopOrder) => void;
+    setSpinTempo: (t: SpinTempo) => void;
+    setStopRequested: (v: boolean) => void;
+    setStopHandler: (fn: (() => void) | null) => void;
+    /** 開始自動轉 n 把。傳 0 等於取消。 */
+    setAuto: (n: number) => void;
+    /** 自動轉掉一把。回傳扣完之後還剩幾把。 */
+    consumeAuto: () => number;
     /** 玩法卸載時把這張桌的狀態清乾淨，下次進來不會看到上一輪的殘影 */
     reset: () => void;
 }
@@ -62,6 +97,17 @@ export const BETS = [50, 100, 250, 500, 1000];
 
 /** 面板上可選的起轉演法。加第三種轉法時只要動這裡與 reel.ts 的 SpinStyle。 */
 export const SPIN_STYLES: SpinStyle[] = ['direct', 'windup'];
+
+/** 面板上可選的快慢檔。實際的係數住在 reel.ts 的 TEMPO。 */
+export const SPIN_TEMPOS: SpinTempo[] = ['normal', 'turbo'];
+
+/**
+ * 自動轉動的次數選項。
+ *
+ * 沒有「無限」這一檔：這是 demo，無限自動轉只會讓分頁在背景默默跑到餘額見底，
+ * 而且離開頁面前沒有任何一刻是「這一輪結束了」。
+ */
+export const AUTO_COUNTS = [10, 25, 50];
 
 // 停軸順序的清單由 stopOrder.ts 自己維護（那裡才知道有哪幾種），這裡轉出去讓面板
 // 跟 BETS、SPIN_STYLES 走同一個入口——面板不必知道每個選項各自住在哪支檔案。
@@ -74,12 +120,16 @@ const FRESH = {
     lastWin: 0,
     lastWins: [] as WinLine[],
     spinHandler: null,
+    stopHandler: null,
+    stopRequested: false,
+    autoRemaining: 0,
 };
 
 export const useSlotStore = create<SlotState>((set) => ({
     ...FRESH,
     spinStyle: 'windup',
     stopOrder: 'left',
+    spinTempo: 'normal',
 
     setBet: (bet) => set({ bet }),
     setSpinning: (spinning) => set({ spinning }),
@@ -87,6 +137,15 @@ export const useSlotStore = create<SlotState>((set) => ({
     setSpinHandler: (spinHandler) => set({ spinHandler }),
     setSpinStyle: (spinStyle) => set({ spinStyle }),
     setStopOrder: (stopOrder) => set({ stopOrder }),
+    setSpinTempo: (spinTempo) => set({ spinTempo }),
+    setStopRequested: (stopRequested) => set({ stopRequested }),
+    setStopHandler: (stopHandler) => set({ stopHandler }),
+    setAuto: (autoRemaining) => set({ autoRemaining: Math.max(0, autoRemaining) }),
+    consumeAuto: () => {
+        const left = Math.max(0, useSlotStore.getState().autoRemaining - 1);
+        set({ autoRemaining: left });
+        return left;
+    },
     reset: () => set({ ...FRESH }),
 }));
 

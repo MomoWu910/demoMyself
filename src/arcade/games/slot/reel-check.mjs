@@ -29,7 +29,7 @@ const { buildSync } = projectRequire('esbuild');
 const out = buildSync({
     stdin: {
         contents: `
-            export { Reel } from './games/slot/reel';
+            export { Reel, TEMPO } from './games/slot/reel';
             export { SYMBOLS, REELS, ROWS } from './games/slot/rules';
             export { STOP_ORDERS, stopRanks } from './games/slot/stopOrder';
             export { clock } from './dev/stub-gsap.mjs';
@@ -50,7 +50,7 @@ const out = buildSync({
 });
 const mod = { exports: {} };
 new Function('module', 'exports', 'require', out.outputFiles[0].text)(mod, mod.exports, createRequire(import.meta.url));
-const { Reel, SYMBOLS, STOP_ORDERS, stopRanks, REELS, ROWS, clock, Texture } = mod.exports;
+const { Reel, TEMPO, SYMBOLS, STOP_ORDERS, stopRanks, REELS, ROWS, clock, Texture } = mod.exports;
 
 /** 要跟 games/slot/index.ts 的 STOP_STAGGER 一致 */
 const STOP_STAGGER = 0.22;
@@ -108,8 +108,13 @@ function stallFrames(trace, fromFrame) {
     return out;
 }
 
-/** 跑完整的一把，回傳每根軸的逐幀紀錄。 */
-function runOneSpin(grid, { spinBeforeResult = 0.42, style = 'direct', ranks = null } = {}) {
+/**
+ * 跑完整的一把，回傳每根軸的逐幀紀錄。
+ *
+ * `slamAfter` 是「起轉後第幾秒按下停」。它可以落在結果**之前**——那是最要緊的一種情況：
+ * 那一刻 client 手上沒有落點，什麼都不能停（見 Reel.slam）。
+ */
+function runOneSpin(grid, { spinBeforeResult = 0.42, style = 'direct', ranks = null, tempo = 'normal', slamAfter = null } = {}) {
     clock.reset();
 
     const reels = [];
@@ -124,21 +129,37 @@ function runOneSpin(grid, { spinBeforeResult = 0.42, style = 'direct', ranks = n
         for (let i = 0; i < REELS; i++) {
             const before = reels[i].offset;
             reels[i].update(DT);
-            trace[i].push({ offset: reels[i].offset, phase: reels[i].phase, moved: Math.abs(reels[i].offset - before) });
+            trace[i].push({
+                offset: reels[i].offset,
+                phase: reels[i].phase,
+                moved: Math.abs(reels[i].offset - before),
+                // 落點與現在位置的距離。滑行剛開始的那一幀，這個差就是「改寫的三格離可視窗多遠」
+                gap: reels[i].snapTarget - reels[i].offset,
+            });
             if (settledAt[i] < 0 && !reels[i].isSpinning() && frame > 0) settledAt[i] = frame;
         }
         frame++;
     };
 
-    for (const r of reels) r.spin(style);
-    for (let f = 0; f < Math.round(spinBeforeResult / DT); f++) step();
-
-    const resultFrame = frame;
     const useRanks = ranks ?? stopRanks('left', REELS);
-    reels.forEach((reel, i) => reel.stopAt(grid[i], useRanks[i] * STOP_STAGGER));
-    for (let f = 0; f < 600 && settledAt.some((s) => s < 0); f++) step();
+    // 錯開的間隔跟著快慢檔縮，跟 games/slot/index.ts 的 playResult 一致
+    const stagger = STOP_STAGGER * TEMPO[tempo].time;
+    const resultAt = Math.round(spinBeforeResult / DT);
+    const slamAt = slamAfter === null ? -1 : Math.round(slamAfter / DT);
 
-    return { reels, trace, settledAt, resultFrame, ranks: useRanks };
+    for (const r of reels) r.spin(style, tempo);
+
+    let resultFrame = -1;
+    for (let f = 0; f < 900 && settledAt.some((s) => s < 0); f++) {
+        if (frame === resultAt) {
+            resultFrame = frame;
+            reels.forEach((reel, i) => reel.stopAt(grid[i], useRanks[i] * stagger));
+        }
+        if (frame === slamAt) for (const r of reels) r.slam();
+        step();
+    }
+
+    return { reels, trace, settledAt, resultFrame, ranks: useRanks, totalSec: Math.max(...settledAt) * DT };
 }
 
 /**
@@ -466,6 +487,106 @@ async function main() {
             const got = visibleCells(reels[i]);
             check(`軸 ${i} 落點正確`, got.join() === grid[i].join(), `期望 [${grid[i]}] 實得 [${got}]`);
         }
+    }
+
+    // ---- 落點的改寫窗口：所有模式都不能讓那三格在改寫時已經看得見 ----
+    console.log('\n== 改寫落點時，那三格必須還在可視窗外 ==');
+    {
+        // 這是壓縮滑行距離時唯一會穿幫的地方：距離短到落點已經進了可視窗，
+        // 玩家就會看到符號當場換掉。快速模式與按停都在壓這段距離，所以四種都要驗。
+        const modes = [
+            ['標準', { tempo: 'normal' }],
+            ['快速', { tempo: 'turbo' }],
+            ['結果到了才按停', { slamAfter: 0.5 }],
+            ['結果還沒到就按停', { spinBeforeResult: 0.6, slamAfter: 0.1 }],
+        ];
+        for (const [name, opts] of modes) {
+            const { trace } = runOneSpin(grid, opts);
+            let worst = Infinity;
+            let checked = 0;
+            for (const rows of trace) {
+                for (let f = 1; f < rows.length; f++) {
+                    // 進入滑行的那一幀，落點剛算定、帶子剛被改寫
+                    if (rows[f].phase === 'coasting' && rows[f - 1].phase !== 'coasting') {
+                        worst = Math.min(worst, rows[f].gap);
+                        checked++;
+                    }
+                }
+            }
+            check(`${name}：五根軸都量到了`, checked === REELS, `只量到 ${checked} 根`);
+            check(`${name}：改寫時落點在 ${ROWS} 格之外`, worst >= ROWS, `最近只有 ${worst.toFixed(2)} 格`);
+        }
+    }
+
+    // ---- 快速模式 ----
+    console.log('\n== 快速模式 ==');
+    {
+        const normal = runOneSpin(grid, { style: 'windup' });
+        const turbo = runOneSpin(grid, { style: 'windup', tempo: 'turbo' });
+
+        console.log(`  標準 ${normal.totalSec.toFixed(2)}s → 快速 ${turbo.totalSec.toFixed(2)}s`);
+        check('快速模式確實比較快', turbo.totalSec < normal.totalSec * 0.75,
+            `${turbo.totalSec.toFixed(2)}s vs ${normal.totalSec.toFixed(2)}s`);
+
+        const stalls = stallFrames(turbo.trace, turbo.resultFrame);
+        check('快速模式下轉軸不會站著不動', stalls.length === 0, `${stalls.length} 幀靜止`);
+
+        for (let i = 0; i < REELS; i++) {
+            const got = visibleCells(turbo.reels[i]);
+            check(`快速：軸 ${i} 落點正確`, got.join() === grid[i].join(), `期望 [${grid[i]}] 實得 [${got}]`);
+        }
+
+        // 逐軸揭曉是這一檔刻意保留的東西（見 i18n 的 arcade.tempo 註解）——
+        // 全部同時停的話這個測試會抓到
+        const firsts = turbo.settledAt.slice().sort((a, b) => a - b);
+        check('快速模式仍然是逐根停，不是五根一起停', firsts[REELS - 1] - firsts[0] >= 6,
+            `頭尾只差 ${firsts[REELS - 1] - firsts[0]} 幀`);
+    }
+
+    // ---- 按停 ----
+    console.log('\n== 按停 ==');
+    {
+        const base = runOneSpin(grid, { spinBeforeResult: 0.42 });
+        const slammed = runOneSpin(grid, { spinBeforeResult: 0.42, slamAfter: 0.5 });
+
+        console.log(`  不按 ${base.totalSec.toFixed(2)}s → 按停 ${slammed.totalSec.toFixed(2)}s`);
+        check('按停確實提早結束', slammed.totalSec < base.totalSec,
+            `${slammed.totalSec.toFixed(2)}s vs ${base.totalSec.toFixed(2)}s`);
+
+        for (let i = 0; i < REELS; i++) {
+            const got = visibleCells(slammed.reels[i]);
+            check(`按停：軸 ${i} 落點仍然正確`, got.join() === grid[i].join(), `期望 [${grid[i]}] 實得 [${got}]`);
+        }
+    }
+
+    // ---- 最要緊的一種：結果還沒回來就按停 ----
+    console.log('\n== 結果還沒回來就按停 ==');
+    {
+        // 起轉 0.1 秒就按停，但結果 0.6 秒才到。這 0.5 秒裡 client 沒有落點，
+        // **它必須繼續轉**——不能自己挑一組符號先停下來
+        const { reels, trace, resultFrame, totalSec } = runOneSpin(grid, {
+            spinBeforeResult: 0.6,
+            slamAfter: 0.1,
+        });
+
+        let stoppedEarly = 0;
+        for (const rows of trace) {
+            for (let f = 0; f < resultFrame; f++) if (rows[f].phase === 'idle') stoppedEarly++;
+        }
+        check('結果到之前沒有任何一根軸停下來', stoppedEarly === 0, `${stoppedEarly} 幀已經是 idle`);
+
+        const stalls = stallFrames(trace, Math.round(0.1 / DT));
+        check('等結果的期間仍在轉，不是停著等', stalls.length === 0, `${stalls.length} 幀靜止`);
+
+        for (let i = 0; i < REELS; i++) {
+            const got = visibleCells(reels[i]);
+            check(`軸 ${i} 落點是 server 給的那一組`, got.join() === grid[i].join(), `期望 [${grid[i]}] 實得 [${got}]`);
+        }
+
+        // 落點一到就該立刻收尾，不必再等錯開
+        const afterResult = totalSec - resultFrame * DT;
+        console.log(`  結果到達後 ${afterResult.toFixed(2)}s 內全部停穩`);
+        check('落點一到就立刻收尾', afterResult < 0.6, `花了 ${afterResult.toFixed(2)}s`);
     }
 
     console.log(`\n通過 ${pass} 項，失敗 ${fail} 項\n`);

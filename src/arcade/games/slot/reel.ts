@@ -68,6 +68,39 @@ const SNAP_CELLS = 1;
 const SNAP_TIME = 0.42;
 
 /**
+ * 滑行距離的**下限**（格）。
+ *
+ * 落點的三格是在滑行開始的當下改寫的（見 beginCoast），所以那一刻它們必須還在可視窗外，
+ * 不然玩家會當場看到符號憑空換掉。可視窗高 ROWS 格，再留半格的餘裕。
+ * **快速模式與按停都會壓縮這段距離，這個下限就是它們壓不下去的那條線。**
+ */
+const MIN_COAST_CELLS = ROWS + 0.5;
+
+/**
+ * 轉動快慢。玩法逐把傳進來，轉軸整把沿用同一檔——中途切換不會讓這一把改到一半。
+ *
+ * 時間與距離**兩個都要縮**：只縮時間、不縮滑行距離的話，同一段路要在更短的時間走完，
+ * 速度會飆到看不出符號是什麼。那不是「快」，是「糊」。
+ */
+export type SpinTempo = 'normal' | 'turbo';
+
+export const TEMPO: Record<SpinTempo, { time: number; coast: number }> = {
+    normal: { time: 1, coast: 1 },
+    turbo: { time: 0.33, coast: 0.33 },
+};
+
+/**
+ * 玩家按停之後，剩下的滑行只走這麼多格。壓到不能再壓——就是上面那條線。
+ */
+const SLAM_COAST_CELLS = MIN_COAST_CELLS;
+
+/** 按停之後的回彈時長。回彈仍要有：一格都不彈會像畫面凍住，而不是像停住。 */
+const SLAM_SNAP_TIME = 0.12;
+
+/** 按停時若已經在回彈，就把那段緩動加速幾倍播完，而不是硬切到終點。 */
+const SLAM_SETTLE_SCALE = 3;
+
+/**
  * 起轉的兩種演法。玩法可以逐把切換（面板上的開關），轉軸本身不記得上一把用哪種。
  *
  *   - `direct`：按下去就往主方向加速。乾淨俐落。
@@ -142,6 +175,20 @@ export class Reel extends Container {
     /** 停穩時要 resolve 的那個 Promise。跨越好幾幀，只能存起來。 */
     private resolveStop: (() => void) | null = null;
 
+    /** 這一把的快慢檔。spin() 時決定，整把不變。 */
+    private tempo: SpinTempo = 'normal';
+
+    /** 玩家這一把按過停沒有。滑行距離與回彈時長都看它。 */
+    private slammed = false;
+
+    /**
+     * server 給的落點，`stopAt` 存下來的。
+     *
+     * `slam()` 需要它：玩家按停的那一刻若結果還沒回來，這裡是 null，**那就什麼都不能做**——
+     * client 沒有落點就沒有停下來的權利，只能記著旗標等結果進來（見 stopAt）。
+     */
+    private pendingSymbols: Sym[] | null = null;
+
     constructor(opts: ReelOptions) {
         super();
         this.frames = opts.frames;
@@ -205,10 +252,15 @@ export class Reel extends Container {
      * `windup` 會先往反方向拉一小段再衝。蓄力這段是**位置驅動**（直接 tween offset），
      * 不是靠 speed——這段要走的距離不到半格，用速度去湊反而難控制它停在哪。
      */
-    public spin(style: SpinStyle = 'direct'): void {
+    public spin(style: SpinStyle = 'direct', tempo: SpinTempo = 'normal'): void {
         this.killTweens();
         this.speed = 0;
-        this.spinUpLeft = (style === 'windup' ? WINDUP_TIME : 0) + SPIN_UP;
+        this.tempo = tempo;
+        this.slammed = false;
+        this.pendingSymbols = null;
+
+        const t = TEMPO[tempo].time;
+        this.spinUpLeft = (style === 'windup' ? WINDUP_TIME * t : 0) + SPIN_UP * t;
 
         if (style !== 'windup') {
             this.accelerate();
@@ -219,7 +271,7 @@ export class Reel extends Container {
         // offset 是主方向的進度，所以「往回拉」就是讓它變小，不必管主方向朝上還朝下
         this.spinTween = gsap.to(this, {
             offset: this.offset - WINDUP_CELLS,
-            duration: WINDUP_TIME,
+            duration: WINDUP_TIME * t,
             ease: 'power2.out',
             onUpdate: () => this.layout(),
             onComplete: () => this.accelerate(),
@@ -229,7 +281,7 @@ export class Reel extends Container {
     /** 加速到等速。蓄力結束後也走這裡。 */
     private accelerate(): void {
         this.phase = 'spinning';
-        this.spinTween = gsap.to(this, { speed: SPIN_SPEED, duration: SPIN_UP, ease: 'power1.in' });
+        this.spinTween = gsap.to(this, { speed: SPIN_SPEED, duration: SPIN_UP * TEMPO[this.tempo].time, ease: 'power1.in' });
     }
 
     /**
@@ -254,6 +306,14 @@ export class Reel extends Container {
         return new Promise((resolve) => {
             this.resolveStop?.(); // 上一把若還懸著（理論上不會），先放掉免得呼叫端等不到
             this.resolveStop = resolve;
+            this.pendingSymbols = symbols;
+
+            // 玩家在結果回來之前就按了停。那一刻 slam() 無事可做（沒有落點），
+            // 旗標就留到這裡兌現：不等錯開、也不等加速完，落點一到直接進滑行
+            if (this.slammed) {
+                this.beginCoast(symbols);
+                return;
+            }
 
             const wait = Math.max(0, this.spinUpLeft) + delay;
             if (wait > 0) {
@@ -265,6 +325,37 @@ export class Reel extends Container {
                 this.beginCoast(symbols);
             }
         });
+    }
+
+    /**
+     * 玩家按了停：把還沒走完的段落全部壓到最短。已經停穩的軸不受影響。
+     *
+     * **這裡不會挑符號。** 落點永遠來自 server：還沒收到結果時，這個方法只留下一個旗標，
+     * 等 `stopAt` 帶著落點進來才兌現。反過來做——client 先挑一組符號停住、等結果到了再修正
+     * ——會讓畫面出現一組不是 server 給的盤面，那正好推翻這一頁在證明的事。
+     * 代價是按下停之後偶爾還要等一下下，而那個等待就是網路延遲本身。
+     */
+    public slam(): void {
+        if (this.phase === 'idle') return;
+        this.slammed = true;
+
+        // 還在等錯開的排程就不必等了
+        this.stopDelay?.kill();
+        this.stopDelay = null;
+
+        switch (this.phase) {
+            case 'winding':
+            case 'spinning':
+                if (this.pendingSymbols) this.beginCoast(this.pendingSymbols);
+                break;
+            case 'coasting':
+                this.beginSnap();
+                break;
+            case 'settling':
+                // 已經在回彈了，硬切到終點會少掉那個「壓下去又彈起來」的收尾，加速播完就好
+                this.settleTween?.timeScale(SLAM_SETTLE_SCALE);
+                break;
+        }
     }
 
     /**
@@ -283,7 +374,13 @@ export class Reel extends Container {
         // 用當下速度接續，而不是假設已經到等速；下限擋住「才剛起轉就要停」的情況
         this.coastStartSpeed = Math.max(this.speed, COAST_END_SPEED);
 
-        this.snapTarget = Math.ceil(this.offset + COAST_CELLS + SNAP_CELLS);
+        // 按停最短、快速模式次之，但誰都不能低於 MIN_COAST_CELLS——低於它，
+        // 待會要改寫的那三格此刻已經在可視窗裡，玩家會看到符號當場換掉
+        const coastCells = this.slammed
+            ? SLAM_COAST_CELLS
+            : Math.max(MIN_COAST_CELLS, COAST_CELLS * TEMPO[this.tempo].coast);
+
+        this.snapTarget = Math.ceil(this.offset + coastCells + SNAP_CELLS);
         this.coastFrom = this.offset;
         this.coastTo = this.snapTarget - SNAP_CELLS;
 
@@ -307,7 +404,7 @@ export class Reel extends Container {
         this.phase = 'settling';
         this.settleTween = gsap.to(this, {
             offset: this.snapTarget,
-            duration: SNAP_TIME,
+            duration: this.slammed ? SLAM_SNAP_TIME : SNAP_TIME * TEMPO[this.tempo].time,
             ease: 'back.out(1.6)',
             onUpdate: () => this.layout(),
             onComplete: () => {

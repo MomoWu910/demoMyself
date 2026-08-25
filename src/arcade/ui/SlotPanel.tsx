@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BETS, SPIN_STYLES, STOP_ORDERS, useSlotStore } from '../games/slot/store';
+import { AUTO_COUNTS, BETS, SPIN_STYLES, SPIN_TEMPOS, STOP_ORDERS, useSlotStore } from '../games/slot/store';
 import { useArcadeStore } from '../store';
 import { useT } from '../../i18n/useT';
 
@@ -18,6 +18,16 @@ import { useT } from '../../i18n/useT';
  * 這一支完全不需要知道 Pixi 那側是誰、有沒有掛載——SPIN 鍵呼叫的是 store 裡的 handler，
  * 玩法卸載時 handler 變 null，按鈕自動失效。
  */
+
+/** 主按鈕在三種身分下各顯示什麼。 */
+const LABEL = {
+    spin: 'arcade.spin',
+    stop: 'arcade.stopSpin',
+    stopping: 'arcade.stopping',
+} as const;
+
+/** 撐寬度用的候選字串——就是 LABEL 的全部值（見按鈕那段註解）。 */
+const SIZER_KEYS = Object.values(LABEL);
 
 function BetPicker() {
     const t = useT();
@@ -116,6 +126,72 @@ function StopOrderPicker() {
     );
 }
 
+function TempoPicker() {
+    const value = useSlotStore((s) => s.spinTempo);
+    const onPick = useSlotStore((s) => s.setSpinTempo);
+    return (
+        <StylePicker
+            label="arcade.tempo"
+            options={SPIN_TEMPOS}
+            value={value}
+            onPick={onPick}
+            tKey="arcade.speed"
+        />
+    );
+}
+
+/**
+ * 自動轉動的次數。
+ *
+ * 跟其他選項不同，這一個**按下去就會開始送注**，所以它要自己擋連線與 handler；
+ * 其他幾個純表演的選項按了只是改一個字串，掛載與否都無所謂。
+ *
+ * 沒有「無限」那一檔（見 store 的 AUTO_COUNTS）。剩餘次數直接寫在標題上而不是
+ * 高亮某一顆：玩家關心的是「還剩幾把」，不是「當初選的是 25 還是 50」。
+ */
+function AutoPicker() {
+    const t = useT();
+    const remaining = useSlotStore((s) => s.autoRemaining);
+    const setAuto = useSlotStore((s) => s.setAuto);
+    const consumeAuto = useSlotStore((s) => s.consumeAuto);
+    const spinning = useSlotStore((s) => s.spinning);
+    const spinHandler = useSlotStore((s) => s.spinHandler);
+    const connection = useArcadeStore((s) => s.connection);
+
+    const start = (n: number): void => {
+        if (!spinHandler || connection !== 'open') return;
+        setAuto(n);
+        // 正在轉的話就不用推第一把——這一把停穩後流程自己會接上（見 index.ts 的 playResult）
+        if (!spinning) {
+            consumeAuto();
+            spinHandler();
+        }
+    };
+
+    return (
+        <div className="style">
+            <span className="cap">
+                {t('arcade.auto')}
+                {remaining > 0 ? ` · ${remaining}` : ''}
+            </span>
+            <div className="style-row">
+                <button
+                    type="button"
+                    className={`chip${remaining === 0 ? ' on' : ''}`}
+                    onClick={() => setAuto(0)}
+                >
+                    {t('arcade.auto.off')}
+                </button>
+                {AUTO_COUNTS.map((n) => (
+                    <button key={n} type="button" className="chip" onClick={() => start(n)}>
+                        {n}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 /** 讀數插槽：跟殼的餘額排在同一行。 */
 export function SlotReadouts() {
     const t = useT();
@@ -143,6 +219,8 @@ export function SlotOptions() {
         <>
             <SpinStylePicker />
             <StopOrderPicker />
+            <TempoPicker />
+            <AutoPicker />
         </>
     );
 }
@@ -152,11 +230,35 @@ export function SlotControls() {
     const t = useT();
     const connection = useArcadeStore((s) => s.connection);
     const spinning = useSlotStore((s) => s.spinning);
+    const stopRequested = useSlotStore((s) => s.stopRequested);
+    const autoRemaining = useSlotStore((s) => s.autoRemaining);
     const spinHandler = useSlotStore((s) => s.spinHandler);
+    const stopHandler = useSlotStore((s) => s.stopHandler);
 
-    const canSpin = !!spinHandler && !spinning && connection === 'open';
+    /**
+     * 同一顆按鈕的三種身分。
+     *
+     * `stopping` 那一檔是必要的：按下停之後畫面不一定馬上停（落點可能還在路上，
+     * 見 Reel.slam），沒有這個狀態的話按鈕會維持在「停」，玩家以為沒按到而狂點。
+     *
+     * 自動轉的空檔（上一把停穩、下一把還沒起轉）也算 `stop`——那零點幾秒裡按鈕若跳回
+     * 「轉」，按下去等於在自動轉之上再疊一把。
+     */
+    const mode: 'spin' | 'stop' | 'stopping' = stopRequested
+        ? 'stopping'
+        : spinning || autoRemaining > 0
+          ? 'stop'
+          : 'spin';
 
-    // 空白鍵也能轉——長時間玩的人不會一直去點按鈕
+    const connected = connection === 'open';
+    const canSpin = mode === 'spin' && !!spinHandler && connected;
+    const canStop = mode === 'stop' && !!stopHandler && connected;
+    const act = (): void => {
+        if (canSpin) spinHandler?.();
+        else if (canStop) stopHandler?.();
+    };
+
+    // 空白鍵也能轉——長時間玩的人不會一直去點按鈕。轉動中按下去就是停，跟按鈕同一套語意
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             if (e.code !== 'Space' || e.repeat) return;
@@ -164,28 +266,33 @@ export function SlotControls() {
             // 焦點在按鈕上時讓瀏覽器原生行為處理，否則會觸發兩次
             if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement) return;
             e.preventDefault();
-            if (canSpin) spinHandler?.();
+            act();
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [canSpin, spinHandler]);
+    }, [canSpin, canStop, spinHandler, stopHandler]);
 
     return (
         <>
             <BetPicker />
 
             {/*
-                按鈕的寬度必須跟「現在顯示哪一串字」脫鉤。SPIN 換成 SPINNING… 只多了六個字元，
+                按鈕的寬度必須跟「現在顯示哪一串字」脫鉤。SPIN 換成 STOPPING… 多了六個字元，
                 但這顆按鈕在 .dock 的 grid 裡佔 auto 欄，它一變寬，中間 1fr 的籌碼列就被擠到
-                換行——面板長高，canvas 那側收到新的 dockInset 就把整個盤面縮一號。轉完再縮回去。
-                所以疊一個隱形的 sizer 永遠撐著最長的那串字，真正的文字疊在它上面。
-                用文字本身撐而不是寫死 px：中英文最長的那串不一樣，寫死的數字換個語言就失準。
+                換行——面板長高，canvas 那側收到新的 dockInset 就把整個盤面縮一號。
+
+                所以把**每一種**候選文字都疊進來當 sizer（全部 grid-area: 1/1，最寬的撐開容器），
+                真正要顯示的那個疊在最上面。列舉而不是寫死 px：哪一串最長跟語言有關，
+                中文的「停止自動」與英文的 STOPPING… 不會是同一個贏家。
+                加新狀態時記得把它的字串也加進這個陣列，否則面板又會開始抖。
             */}
-            <button type="button" className="spin" disabled={!canSpin} onClick={() => spinHandler?.()}>
-                <span className="spin-sizer" aria-hidden="true">
-                    {t('arcade.spinning')}
-                </span>
-                <span>{spinning ? t('arcade.spinning') : t('arcade.spin')}</span>
+            <button type="button" className="spin" disabled={!canSpin && !canStop} onClick={act}>
+                {SIZER_KEYS.map((k) => (
+                    <span key={k} className="spin-sizer" aria-hidden="true">
+                        {t(k)}
+                    </span>
+                ))}
+                <span>{t(LABEL[mode])}</span>
             </button>
         </>
     );

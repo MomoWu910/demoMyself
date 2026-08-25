@@ -5,7 +5,7 @@ import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import type { SlotS2C, WinLine } from '../../net/games/slot';
 import { arcadeState, useArcadeStore } from '../../store';
-import { Reel } from './reel';
+import { Reel, TEMPO } from './reel';
 import { PAYLINES, REELS, ROWS, type Sym } from './rules';
 import { slotState, useSlotStore } from './store';
 import { stopRanks } from './stopOrder';
@@ -42,6 +42,16 @@ const STOP_STAGGER = 0.22;
 const BIG_WIN_MULT = 10;
 
 /**
+ * 自動轉動時，這一把停穩到下一把起轉之間的空檔（秒）。
+ *
+ * **這段空檔是玩家唯一能看清這一把中了什麼的時間**，不能省。中獎那把留得久一點，
+ * 因為有連線與贏分數字要看；沒中的話畫面上沒有東西需要停留。
+ * 兩個值都會再乘上快慢檔——開了快速模式還等一樣久的話，加速的感覺會被空檔吃掉一半。
+ */
+const AUTO_GAP = 0.35;
+const AUTO_GAP_WIN = 0.9;
+
+/**
  * 贏分數字佔的位置：中心離盤面底幾格，以及字本身要留多高（半個字高，因為它是置中錨點）。
  *
  * 拆成「幾格」與「幾 px」兩個量而不是一個比例，是因為它們的行為不同——間距要跟著格子縮放，
@@ -66,6 +76,9 @@ export class SlotModule implements GameModule {
 
     /** 中獎演出的 tween，換下一把前要全部收掉 */
     private fx: gsap.core.Tween[] = [];
+
+    /** 自動轉動排下一把的計時器。離桌時一定要 kill——見 queueAutoSpin。 */
+    private autoTimer: gsap.core.Tween | null = null;
 
     public async mount(ctx: ModuleContext): Promise<void> {
         this.ctx = ctx;
@@ -109,8 +122,9 @@ export class SlotModule implements GameModule {
         this.socket = socket;
         ctx.onDispose(() => socket.close());
 
-        // ---- 接上 React 的 SPIN 按鈕 ----
+        // ---- 接上 React 的按鈕 ----
         useSlotStore.getState().setSpinHandler(() => this.requestSpin());
+        useSlotStore.getState().setStopHandler(() => this.requestStop());
         // 離桌時把這張桌的狀態整份清掉（押注、轉動中、上一把的贏分），
         // 下次進來才不會看到上一輪的殘影
         ctx.onDispose(() => useSlotStore.getState().reset());
@@ -130,11 +144,27 @@ export class SlotModule implements GameModule {
         });
         ctx.onDispose(unsubDock);
 
+        // ---- 斷線就把自動轉停掉 ----
+        // 不停的話，重連之後會突然補送好幾把出去；而且斷線期間按鈕還顯示著「自動 12」，
+        // 那個數字已經沒有任何東西在推進它了
+        const unsubConn = useArcadeStore.subscribe((s, prev) => {
+            if (s.connection !== prev.connection && s.connection !== 'open') {
+                slotState().setAuto(0);
+            }
+        });
+        ctx.onDispose(unsubConn);
+
         ctx.onResize((w, h) => this.layout(w, h));
         this.layout(ctx.screen.width, ctx.screen.height);
 
         // 中獎演出的 tween 不歸 ctx 管（它們是短命的），但卸載時要確保沒有殘留
         ctx.onDispose(() => this.clearFx());
+
+        // 自動轉的計時器同理，而且更要緊：它醒過來會直接送出下一把 spin
+        ctx.onDispose(() => {
+            this.autoTimer?.kill();
+            this.autoTimer = null;
+        });
     }
 
     /** 送出 spin。按鈕已經在 React 那側上鎖，這裡再擋一次是為了鍵盤等其他觸發路徑。 */
@@ -146,6 +176,9 @@ export class SlotModule implements GameModule {
         // server 那邊仍會擋（見 slotServer.spin），這裡只是讓回饋即時。
         if (slot.bet > shell.balance) {
             shell.setError('insufficient_balance');
+            // 自動轉一定要在這裡停掉。不停的話 autoRemaining 還掛著，但沒有任何一把會
+            // 真的送出去——面板顯示「自動 37」而畫面一動也不動，看起來像當掉
+            slot.setAuto(0);
             return;
         }
 
@@ -154,14 +187,40 @@ export class SlotModule implements GameModule {
         if (this.winText) this.winText.alpha = 0;
 
         slot.setSpinning(true);
+        slot.setStopRequested(false);
         slot.setResult(0, []);
         shell.setError(null);
 
         // 先起轉再送封包：真的機台就是這個順序，玩家按下去的當下轉軸就該動，
         // 不是等網路回來才動——那會有一段莫名其妙的延遲。
         // 起轉演法每把重讀，所以面板上切換完下一把就生效，不必重載玩法。
-        for (const r of this.reels) r.spin(slot.spinStyle);
+        for (const r of this.reels) r.spin(slot.spinStyle, slot.spinTempo);
         this.socket?.send({ type: 'spin', bet: slot.bet });
+    }
+
+    /**
+     * 玩家按了停。
+     *
+     * 兩件事分開做：`slam()` 是**表演層**的請求（每根軸各自把剩下的段落壓到最短），
+     * `stopRequested` 是**狀態層**的記錄，面板靠它把按鈕換成「停止中」。
+     * 兩者要分開，是因為落點還沒回來時 slam 什麼都做不了，但按鈕必須立刻有反應——
+     * 否則玩家會以為沒按到而連點，而連點在這裡是沒有意義的（見 Reel.slam）。
+     */
+    private requestStop(): void {
+        const slot = slotState();
+
+        // 取消自動要放在 spinning 的判斷**之前**：自動轉的空檔裡沒有一根軸在轉，
+        // 但按鈕那時顯示的是「停」，按下去必須有反應
+        slot.setAuto(0);
+        this.autoTimer?.kill();
+        this.autoTimer = null;
+
+        // 分成兩顆按鈕（停這把／停自動）在真機上有，但在這裡只會讓人按錯：
+        // **玩家按停的意思幾乎都是「不要再轉了」**，停完這把又自己轉起來反而像沒停成功
+        if (!slot.spinning || slot.stopRequested) return;
+
+        slot.setStopRequested(true);
+        for (const r of this.reels) r.slam();
     }
 
     private onPacket(p: SlotS2C): void {
@@ -191,14 +250,39 @@ export class SlotModule implements GameModule {
     private async playResult(grid: number[][], wins: WinLine[], totalWin: number, balance: number): Promise<void> {
         // 順序演法每把重讀，跟起轉演法一樣，面板上切換完下一把就生效
         const ranks = stopRanks(slotState().stopOrder, this.reels.length);
-        await Promise.all(this.reels.map((reel, i) => reel.stopAt(grid[i] as Sym[], ranks[i] * STOP_STAGGER)));
+        // 錯開的間隔也要跟著快慢檔縮，不然快速模式下五根軸之間會拉出比滑行本身還長的空檔
+        const stagger = STOP_STAGGER * TEMPO[slotState().spinTempo].time;
+        await Promise.all(this.reels.map((reel, i) => reel.stopAt(grid[i] as Sym[], ranks[i] * stagger)));
 
         const slot = slotState();
         arcadeState().setBalance(balance);
         slot.setResult(totalWin, wins);
         slot.setSpinning(false);
+        slot.setStopRequested(false);
 
         if (wins.length > 0) this.showWins(wins, totalWin, slot.bet);
+
+        if (slot.autoRemaining > 0) this.queueAutoSpin();
+    }
+
+    /**
+     * 自動轉的下一把。
+     *
+     * 中間要留一段空檔，不能停穩就立刻起轉：**那個空檔是玩家唯一能看清這一把中了什麼的
+     * 時間**。中獎時留得比較久，因為有連線與贏分要看。
+     *
+     * 排程存起來是為了離桌時取消——`gsap.delayedCall` 活在自己的全域 ticker 上，
+     * 玩法都卸載了它照樣會醒過來，然後對著已經 destroy 的轉軸送出下一把。
+     */
+    private queueAutoSpin(): void {
+        this.autoTimer?.kill();
+        const gap = slotState().lastWin > 0 ? AUTO_GAP_WIN : AUTO_GAP;
+        this.autoTimer = gsap.delayedCall(gap * TEMPO[slotState().spinTempo].time, () => {
+            this.autoTimer = null;
+            if (slotState().autoRemaining <= 0) return;
+            slotState().consumeAuto();
+            this.requestSpin();
+        });
     }
 
     /** 畫中獎線、讓中獎的格子脈動、跳出贏分數字。 */

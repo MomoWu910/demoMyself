@@ -741,6 +741,20 @@ button.back { cursor: pointer; font-weight: inherit; }
     /* 剩下的空間全部堆在這裡，把抽屜與 SPIN 壓到面板底部 */
     .drawer, .options { margin-top: auto; }
 
+    /*
+     * 展開的抽屜也要能自己縮並捲，理由跟 .bet 一樣——但它更容易爆：**選項是會愈加愈多的**。
+     * 這個高度下四組選項疊起來就超過面板，而抽屜若照內容高度撐開，被擠出面板底部的
+     * 會是 SPIN，也就是唯一非按不可的那顆。上限用 vh 而不是固定 px，因為橫放的機型
+     * 高度差很多（390 到 480 都有）。
+     */
+    .drawer { min-height: 0; display: flex; flex-direction: column; }
+    .drawer-body {
+        min-height: 0;
+        max-height: 46vh;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
     .spin { width: 100%; padding: 11px; font-size: 0.86rem; }
     .table-status { width: 100%; padding: 8px 14px; }
     .table-status .clock { font-size: 1.2rem; }

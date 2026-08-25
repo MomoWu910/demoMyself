@@ -560,6 +560,10 @@ export const DICT: Record<string, Entry> = {
     'arcade.win': { en: 'Last win', zh: '上一把' },
     'arcade.spin': { en: 'SPIN', zh: 'SPIN' },
     'arcade.spinning': { en: 'SPINNING…', zh: '轉動中…' },
+    // 轉動中同一顆按鈕就是「停」。按下之後畫面不一定馬上停——落點可能還在路上，
+    // 所以要有一個「停止中」讓玩家知道請求收到了，不然他會以為沒按到而狂點
+    'arcade.stopSpin': { en: 'STOP', zh: '停止' },
+    'arcade.stopping': { en: 'STOPPING…', zh: '停止中…' },
     'arcade.connecting': { en: 'connecting', zh: '連線中' },
     'arcade.online': { en: 'online', zh: '已連線' },
     'arcade.offline': { en: 'offline', zh: '已斷線' },
@@ -578,6 +582,14 @@ export const DICT: Record<string, Entry> = {
     'arcade.order.left': { en: 'Left to right', zh: '由左到右' },
     'arcade.order.center': { en: 'Centre out', zh: '中間先停' },
     'arcade.order.random': { en: 'Random', zh: '隨機' },
+    // 轉速：也是純表演。快速模式把時序與滑行距離一起壓（只壓時間會讓符號糊成一團），
+    // 但五根軸仍然逐根停——那個「差一格就中了」的張力是這款玩法的重點，不能為了快而砍掉
+    'arcade.tempo': { en: 'Speed', zh: '轉速' },
+    'arcade.speed.normal': { en: 'Standard', zh: '標準' },
+    'arcade.speed.turbo': { en: 'Turbo', zh: '快速' },
+    // 自動轉動。沒有「無限」那一檔：無限自動只會讓分頁在背景默默跑到餘額見底
+    'arcade.auto': { en: 'Auto', zh: '自動' },
+    'arcade.auto.off': { en: 'Off', zh: '關' },
     // 這一頁最該讓人知道的一件事：輸贏不是前端算的。寫在面板上而不是藏在 README 裡，
     // 因為它同時解釋了「為什麼按下去要等一下」——那個延遲是刻意模擬的 RTT，不是卡頓。
     'arcade.serverNote': {
