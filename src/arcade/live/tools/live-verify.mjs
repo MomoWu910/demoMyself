@@ -117,7 +117,7 @@ const cmp = await page.evaluate(async () => {
     };
     const before = phaseNow();
     const status = document.querySelector('.table-status')?.textContent ?? '';
-    const readouts = [...document.querySelectorAll('.readout')].map((el) => el.textContent);
+    const readouts = [...document.querySelectorAll('.stat')].map((el) => el.textContent);
     const after = phaseNow();
     return { before, after, status, readouts };
 });
@@ -187,7 +187,7 @@ await page.waitForFunction(() => {
 }, null, { timeout: 45000 });
 
 const readAt = (i) => page.evaluate((n) => {
-    const list = [...document.querySelectorAll('.readout')].map((el) => el.textContent);
+    const list = [...document.querySelectorAll('.stat')].map((el) => el.textContent);
     return list[n] ?? '';
 }, i);
 
@@ -213,7 +213,7 @@ await page.screenshot({ path: `${SHOTS}/02b-bet.png` });
 
 // 結算。牌在影片裡翻完才會送 settle，所以這裡要等的是**畫面**演到結果那一刻
 await page.waitForFunction(() => {
-    const list = [...document.querySelectorAll('.readout')].map((el) => el.textContent);
+    const list = [...document.querySelectorAll('.stat')].map((el) => el.textContent);
     return list[5] && !list[5].includes('—');
 }, null, { timeout: 45000 });
 const net = await readAt(NET_IDX);
@@ -232,7 +232,7 @@ if (segBtns.length >= 2) {
     const pub = await page.evaluate(() => {
         const v = document.querySelector('video');
         return {
-            readouts: [...document.querySelectorAll('.readout')].map(el => el.textContent),
+            readouts: [...document.querySelectorAll('.stat')].map(el => el.textContent),
             w: v?.videoWidth ?? 0, h: v?.videoHeight ?? 0, ct: v?.currentTime ?? 0,
         };
     });

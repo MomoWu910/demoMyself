@@ -2,6 +2,7 @@ import { CHIP_VALUES, chipLabel } from '../common/chips/atlas';
 import { BET_SPOTS } from '../games/baccarat/rules';
 import { liveState, useLiveStore } from '../games/baccaratLive/store';
 import type { SourceKind } from '../common/video/sources';
+import { useIsCompact } from './useIsCompact';
 import { useT } from '../../i18n/useT';
 
 /**
@@ -71,66 +72,98 @@ function BetControls() {
                     {t('arcade.bac.repeat')}
                 </button>
             </div>
+
         </div>
     );
 }
 
-export function LiveReadouts() {
+/**
+ * 串流讀數：延遲、緩衝、倍速、卡頓。
+ *
+ * 一般播放器把這些藏起來當實作細節，但在視訊博弈裡**延遲是產品規格**（它決定下注
+ * 截止要提前幾秒），而追趕策略有沒有在動也只有看倍速才知道。所以它們攤在檯面上。
+ *
+ * 窄畫面只留延遲那一格，其餘三格跟著說明進抽屜——**面板每多一列，畫布那側就少一列**，
+ * 而手機直式要在同一個畫面裡排下路圖、視訊、座位與兩列注區。留延遲是因為它是主角，
+ * 也是唯一會影響玩家決定的那一個。
+ */
+function StreamStats({ full }: { full: boolean }) {
     const t = useT();
     const stats = useLiveStore((s) => s.stats);
+
+    // 四秒是視訊桌台開始不能接受的線——下注只剩幾秒時，畫面慢四秒等於閉著眼睛押
+    const hot = stats.latency > 4;
+
+    return (
+        <>
+            <div className="stat">
+                <span className="cap">{t('arcade.live.latency')}</span>
+                <strong className="val" style={{ color: hot ? 'var(--banker, #c2454f)' : undefined }}>
+                    {stats.latency.toFixed(2)}s
+                </strong>
+            </div>
+            {full && (
+                <>
+                    <div className="stat">
+                        <span className="cap">{t('arcade.live.buffered')}</span>
+                        <strong className="val">{stats.buffered.toFixed(1)}s</strong>
+                    </div>
+                    <div className="stat">
+                        <span className="cap">{t('arcade.live.rate')}</span>
+                        <strong className="val">{stats.playbackRate.toFixed(2)}×</strong>
+                    </div>
+                    <div className="stat">
+                        <span className="cap">{t('arcade.live.stalls')}</span>
+                        <strong className="val">
+                            {stats.stalls} / {stats.jumps}
+                        </strong>
+                    </div>
+                </>
+            )}
+        </>
+    );
+}
+
+/**
+ * 讀數插槽：串流那組，加上跟數位桌台一樣的本局押注與上一局輸贏。
+ *
+ * 後兩格用的是面板既有的 `.stat` / `.cap` / `.val`，不是自己一套 class——
+ * **同一種桌子的讀數不該長得不一樣**，而且沒有樣式的裸 class 在窄畫面會用預設字級
+ * 排成一長串，把整塊面板撐到佔掉六成畫面。
+ */
+export function LiveReadouts() {
+    const t = useT();
+    const compact = useIsCompact();
     const status = useLiveStore((s) => s.status);
     const error = useLiveStore((s) => s.error);
     const myTotal = useLiveStore((s) => s.myTotal);
     const lastNet = useLiveStore((s) => s.lastNet);
     const played = useLiveStore((s) => s.played);
 
-    // 延遲是這一頁的主角，所以它自己一格而且會變色。四秒是視訊桌台開始不能接受的線——
-    // 下注只剩幾秒時，畫面慢四秒等於閉著眼睛押
-    const hot = stats.latency > 4;
-
     return (
         <>
-            <div className="readout">
-                <span className="label">{t('arcade.live.latency')}</span>
-                <span className="value" style={{ color: hot ? 'var(--banker, #c2454f)' : undefined }}>
-                    {stats.latency.toFixed(2)}s
-                </span>
+            <StreamStats full={!compact} />
+            <div className="stat">
+                <span className="cap">{t('arcade.bac.totalBet')}</span>
+                <strong className="val">{myTotal.toLocaleString()}</strong>
             </div>
-            <div className="readout">
-                <span className="label">{t('arcade.live.buffered')}</span>
-                <span className="value">{stats.buffered.toFixed(1)}s</span>
-            </div>
-            <div className="readout">
-                <span className="label">{t('arcade.live.rate')}</span>
-                <span className="value">{stats.playbackRate.toFixed(2)}×</span>
-            </div>
-            <div className="readout">
-                <span className="label">{t('arcade.live.stalls')}</span>
-                <span className="value">
-                    {stats.stalls} / {stats.jumps}
-                </span>
-            </div>
-            <div className="readout">
-                <span className="label">{t('arcade.bac.totalBet')}</span>
-                <span className="value">{myTotal.toLocaleString()}</span>
-            </div>
-            <div className="readout">
-                <span className="label">{t('arcade.bac.net')}</span>
+            <div className="stat">
+                <span className="cap">{t('arcade.bac.net')}</span>
                 {/* 還沒押過任何一局時顯示破折號，而不是 0——0 會被誤讀成「押了但平手」 */}
-                <span className="value" style={{ color: played && lastNet > 0 ? 'var(--gold, #d9b871)' : undefined }}>
+                <strong className={`val${played && lastNet > 0 ? ' hit' : ''}`}>
                     {!played ? '—' : lastNet > 0 ? `+${lastNet.toLocaleString()}` : lastNet.toLocaleString()}
-                </span>
+                </strong>
             </div>
             {status !== 'playing' && (
-                <div className="readout">
-                    <span className="label">·</span>
-                    <span className="value">
+                <div className="stat">
+                    <span className="cap">·</span>
+                    <strong className="val">
                         {error
                             ? t('arcade.live.statusFailed')
                             : status === 'stalled'
                               ? t('arcade.live.statusStalled')
                               : t('arcade.live.statusLoading')}
-                    </span>
+                    </strong>
                 </div>
             )}
         </>
@@ -150,9 +183,13 @@ export function LiveControls() {
         <>
             <BetControls />
 
+            {/*
+                線路切換自己一行（面板 grid 的 `controls` 列）。它是這一頁最值得按的
+                一顆按鈕，不能跟著沒有具名區域的東西被自動排到說明抽屜底下去
+            */}
             <div className="control-group">
                 <span className="group-label">{t('arcade.live.source')}</span>
-                <div className="segmented">
+                <div className="segmented" role="group" aria-label={t('arcade.live.source')}>
                     {SOURCES.map(({ kind, key }) => (
                         <button
                             key={kind}
@@ -187,9 +224,21 @@ export function LiveControls() {
 
 export function LiveOptions() {
     const t = useT();
+    const compact = useIsCompact();
     // 說明文字本來就該歸 React：要翻譯、要能被選取、不必每幀重畫。
     //
     // 併成一段是版面逼出來的：**這塊面板每多一行，畫布那側就少一行**，而視訊桌台
     // 要在同一個畫面裡塞下視訊、路圖與兩列注區，是整站最吃高度的一頁
-    return <p className="hint">{t('arcade.live.caption')}</p>;
+    return (
+        <>
+            {/* 窄畫面時串流讀數的另外三格搬進來（見 StreamStats）。抽屜本來就是
+                「想看才看」的地方，而它們在手機上正好是那種東西 */}
+            {compact && (
+                <div className="readouts">
+                    <StreamStats full />
+                </div>
+            )}
+            <p className="hint">{t('arcade.live.caption')}</p>
+        </>
+    );
 }

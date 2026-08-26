@@ -430,6 +430,7 @@ button.back { cursor: pointer; font-weight: inherit; }
     grid-template-columns: auto 1fr auto;
     grid-template-areas:
         'readouts bet spin'
+        'controls controls controls'
         'options options options'
         'note note note';
     align-items: center;
@@ -446,6 +447,59 @@ button.back { cursor: pointer; font-weight: inherit; }
 /* 視訊桌台的讀數多兩欄（串流四個 + 下注兩個）。760 會把籌碼擠成直排，
    而那一欄一直排整塊面板就長高一百多 px（見 Hud.tsx 的場景 class） */
 .dock--baccaratLive { width: calc(min(1040px, calc(100vw - 32px)) * var(--ui-scale)); }
+
+/*
+ * 分段控制項自己一列。目前只有視訊桌台的線路切換用得到——**沒有內容時這一列會自己
+ * 塌成 0 高**，所以其他玩法的面板一點都沒變。
+ *
+ * 它需要一個具名區域的理由很實際：面板的 grid 只有 readouts / bet / spin 三塊，
+ * 沒有 grid-area 的元素會被自動排到最後一行，也就是說明抽屜的底下——而這是這一頁
+ * 最值得按的一顆按鈕。塞進 bet 那一欄也不行：那一欄是 auto 寬度，多塞東西會把
+ * 五顆籌碼擠成直排，整塊面板跟著長高一百多 px。
+ */
+.control-group {
+    grid-area: controls;
+    display: flex;
+    align-items: center;
+    gap: calc(10px * var(--ui-scale));
+    flex-wrap: wrap;
+}
+
+.group-label {
+    font-family: var(--mono);
+    font-size: calc(0.6rem * var(--ui-scale));
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+/* 兩個互斥選項連成一條，中間只有一道分隔線——**它們是同一個開關的兩端**，
+   做成兩顆分開的按鈕會看起來像兩個獨立的動作 */
+.segmented {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: calc(8px * var(--ui-scale));
+    overflow: hidden;
+}
+
+.seg {
+    font-family: var(--mono);
+    font-size: calc(0.68rem * var(--ui-scale));
+    letter-spacing: 0.06em;
+    padding: calc(6px * var(--ui-scale)) calc(14px * var(--ui-scale));
+    border: none;
+    border-right: 1px solid var(--border);
+    background: var(--well);
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease;
+}
+.seg:last-child { border-right: none; }
+.seg:hover { color: var(--text); }
+.seg.on {
+    background: color-mix(in srgb, var(--gold) 22%, transparent);
+    color: var(--gold-bright);
+}
 
 /* wrap 是必要的而不是保險：讀數的欄數由玩法決定（視訊桌台有六欄），
    不換行的話窄畫面上它會直接撐破面板、整列跑到畫面外 */
@@ -678,6 +732,7 @@ button.back { cursor: pointer; font-weight: inherit; }
         grid-template-areas:
             'readouts'
             'bet'
+            'controls'
             'options'
             'spin';
     }
@@ -714,12 +769,18 @@ button.back { cursor: pointer; font-weight: inherit; }
         padding: 10px 12px;
     }
 
-    /* DOM 順序是 readouts → bet → spin → 抽屜，視覺要的是 SPIN 在最底，所以重排 */
+    /* DOM 順序是 readouts → bet → spin → 抽屜，視覺要的是 SPIN 在最底，所以重排。
+       沒有 order 的東西預設是 0，會排到所有人前面——線路切換一度就這樣跑到面板最上面去 */
     .readouts { order: 1; }
     .bet { order: 2; }
-    .drawer, .options { order: 3; }
-    .spin { order: 4; }
-    .table-status { order: 4; }
+    .control-group { order: 3; }
+    .drawer, .options { order: 4; }
+    .spin { order: 5; }
+    .table-status { order: 5; }
+
+    /* 這一欄只有 170~208px 寬，分段控制項的字要跟著收才不會換行成兩層 */
+    .control-group { flex-direction: column; align-items: stretch; gap: 4px; }
+    .seg { padding: 5px 8px; font-size: 0.62rem; flex: 1; }
 
     /* 讀數改兩欄：直排四個（百家樂的餘額／本局／上局／牌靴）會吃掉 144px，
        這個高度下那是整面板的四成 */

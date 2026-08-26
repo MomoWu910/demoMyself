@@ -1,8 +1,18 @@
 import type { GameServer } from './gameServer';
-import type { BaccaratLiveC2S, BaccaratLiveS2C, LiveBet, LiveDealt, LiveSnapshot } from '../net/games/baccaratLive';
+import type { BaccaratLiveC2S, BaccaratLiveS2C, LiveDealt, LiveSnapshot } from '../net/games/baccaratLive';
+import { ONLINE_SEAT, type SeatInfo, type SeatResult } from '../net/games/baccarat';
 import type { RoadRound } from '../games/baccarat/roadmap';
 import { BET_SPOTS, settleBets, type BetSpot, type Bets } from '../games/baccarat/rules';
-import { applyTotals, emptyTotals, onlineBets } from './baccaratCrowd';
+import {
+    applyTotals,
+    emptyTotals,
+    onlineBets,
+    seatBets,
+    spawnSeat,
+    toSeatInfo,
+    SEAT_COUNT,
+    type CrowdSeat,
+} from './baccaratCrowd';
 import { Wallet, sessionWallet } from './wallet';
 import {
     BETTING_DURATION,
@@ -47,6 +57,9 @@ const HISTORY_LEN = 42;
 /** 多久推一次別人的注（秒）。跟數位桌台同頻——每秒一批，畫面上才有持續的籌碼流 */
 const BET_TICK = 1;
 
+/** 空位每一局有多少機率來新客人。跟數位桌台同一個值——同一種桌子該有同一種呼吸 */
+const SEAT_CHURN = 0.34;
+
 export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratLiveS2C> {
     readonly id = 'baccaratLive' as const;
 
@@ -62,10 +75,20 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
     /** 上一次推播時畫面演到哪。用來判斷「有沒有新的事情發生」 */
     private last = { round: -1, phase: '' as LivePhase | '', dealt: 0, revealed: false, settled: false };
 
-    /** 這一局各注區的總押注（含我自己與所有散客） */
+    /** 這一局各注區的總押注（含我自己、椅子上的人與所有散客） */
     private totals = emptyTotals();
     /** 我這一局押了什麼 */
     private myBets: Bets = {};
+    /**
+     * 六張椅子。`null` = 空著。
+     *
+     * 跟數位桌台同一套（連 `baccaratCrowd` 都是共用的）：**一張沒有別人的百家樂桌
+     * 看起來像壞掉了**，而視訊桌台更需要這件事成立——畫面裡只有一個荷官，
+     * 桌上有沒有人全靠介面講。
+     */
+    private readonly seats: Array<CrowdSeat | null> = [];
+    /** 散客整團這一局押了什麼。結算時要知道有沒有錢往畫面邊緣飛回去 */
+    private crowdBets: Bets = {};
     /** 上一次推散客注是在局內第幾秒。每局重來 */
     private lastBetTick = -1;
 
@@ -75,6 +98,7 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
     constructor(cuesUrl: string, wallet: Wallet = new Wallet(), random: () => number = Math.random) {
         this.wallet = wallet;
         this.random = random;
+        for (let i = 0; i < SEAT_COUNT; i++) this.seats.push(spawnSeat(i, random));
         void this.load(cuesUrl);
     }
 
@@ -236,7 +260,9 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
             // 那段時間注區上該留著剛才的數字給人看完自己押了多少
             this.totals = emptyTotals();
             this.myBets = {};
+            this.crowdBets = {};
             this.lastBetTick = -1;
+            this.rotateSeats();
         }
 
         if (phase !== this.last.phase) {
@@ -275,10 +301,10 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
     }
 
     /**
-     * 這一秒的散客注量。
+     * 這一秒桌上的人押了什麼——六張椅子加上一整群沒有座位的線上散客。
      *
-     * 視訊桌台沒有座位可以歸屬（畫面被荷官佔滿，見協定裡 `LiveBet` 的說明），所以
-     * 只用得上散客那一半——桌上的注全部來自「同時在線的一群人」這個匯總來源。
+     * 兩層都要：椅子上的人有頭像、有脾氣、押得比較重，是「這桌今天押莊的人特別多」
+     * 這種局面的來源；散客沒有位置，但桌上大部分的注量與畫面上大部分的籌碼都是他們的。
      *
      * `heat` 是下注期的進度：剛開盤零星幾筆，倒數最後幾秒衝一波。那個節奏是真桌
      * 最有辨識度的一段，平均分布做不出來。
@@ -289,10 +315,48 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
         this.lastBetTick = tick;
 
         const heat = Math.min(1, local / Math.max(0.001, cue.lockAt));
-        const bets = onlineBets(heat, this.random) as LiveBet[];
-        applyTotals(this.totals, bets.map((b) => ({ ...b, seat: -1 })));
+        const seated = seatBets(this.seats.filter((s): s is CrowdSeat => s !== null), this.random);
+        const online = onlineBets(heat, this.random);
 
+        // 散客沒有餘額可以記帳，但整團的注要留著——結算時得知道有沒有錢往邊緣飛回去
+        for (const bet of online) {
+            const amount = bet.chip * bet.count;
+            this.crowdBets[bet.spot] = (this.crowdBets[bet.spot] ?? 0) + amount;
+        }
+
+        const bets = [...seated, ...online];
+        applyTotals(this.totals, bets);
         this.emit({ type: 'bets', bets, totals: { ...this.totals } });
+    }
+
+    /**
+     * 換局時的座位輪替：待夠的人走、空位有機會來新人。
+     *
+     * **座位要會換人**——一整晚都是同六個名字的桌子看久了會露餡，換人也順帶讓
+     * 「有人剛贏了一大筆就跑」這種真實桌上的戲碼自己發生。
+     */
+    private rotateSeats(): void {
+        let changed = false;
+        for (let i = 0; i < this.seats.length; i++) {
+            const seat = this.seats[i];
+            if (seat) {
+                seat.bets = {};
+                seat.staying--;
+                // 待夠了就走。空著幾局再來人，桌子才有呼吸
+                if (seat.staying <= 0) {
+                    this.seats[i] = null;
+                    changed = true;
+                }
+            } else if (this.random() < SEAT_CHURN) {
+                this.seats[i] = spawnSeat(i, this.random);
+                changed = true;
+            }
+        }
+        if (changed) this.emit({ type: 'seats', seats: this.seatInfos() });
+    }
+
+    private seatInfos(): SeatInfo[] {
+        return this.seats.filter((s): s is CrowdSeat => s !== null).map(toSeatInfo);
     }
 
     /**
@@ -307,6 +371,23 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
         const totalReturn = BET_SPOTS.reduce((sum, spot) => sum + (payouts[spot] ?? 0), 0);
         this.wallet.credit(totalReturn);
 
+        // 椅子上的人各自算一份。他們的餘額是自己記的（不走錢包——錢包是**我的**帳號）
+        const seatResults: SeatResult[] = [];
+        for (const seat of this.seats) {
+            if (!seat) continue;
+            const staked = sum(seat.bets);
+            if (staked === 0) continue;
+            const back = sum(settleBets(seat.bets, cue.round) as Bets);
+            seat.balance += back;
+            seatResults.push({ seat: seat.seat, delta: back - staked, balance: seat.balance });
+        }
+
+        // 散客整團算成一筆。他們沒有餘額，但畫面上要知道有沒有錢往邊緣飛回去
+        const crowdBack = sum(settleBets(this.crowdBets, cue.round) as Bets);
+        if (crowdBack > 0) {
+            seatResults.push({ seat: ONLINE_SEAT, delta: crowdBack - sum(this.crowdBets), balance: 0 });
+        }
+
         this.emit({
             type: 'settle',
             round: cue.round,
@@ -314,6 +395,7 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
             payouts,
             totalReturn,
             balance: this.wallet.get(),
+            seats: seatResults,
         });
     }
 
@@ -356,6 +438,7 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
             })),
             history: this.history(now),
             openRound: local >= cue.resultAt ? cue.round : undefined,
+            seats: this.seatInfos(),
             totals: { ...this.totals },
             myBets: { ...this.myBets },
             balance: this.wallet.get(),
@@ -385,6 +468,11 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
     private emit(p: BaccaratLiveS2C): void {
         for (const fn of this.listeners) fn(p);
     }
+}
+
+/** 一份注加總起來多少。`Bets` 是稀疏的，所以不能直接 Object.values */
+function sum(bets: Bets): number {
+    return BET_SPOTS.reduce((n, spot) => n + (bets[spot] ?? 0), 0);
 }
 
 function toDealt(d: ReturnType<typeof dealtBy>[number]): LiveDealt {

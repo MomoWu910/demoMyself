@@ -196,6 +196,13 @@ export function Hud() {
     // 留在外面等於用 210px 的畫面去講一件玩家隨時可以展開來看的事
     const note = <p className="note">{t('arcade.serverNote')}</p>;
 
+    // 視訊桌台的說明**不管畫面多寬都收進抽屜**。
+    //
+    // 抽屜原本只是窄畫面的補救（見 OptionsDrawer），但這一頁在寬螢幕上一樣需要它：
+    // 它是整站最吃畫面高度的一頁——路圖、視訊、座位、兩列注區要在同一個畫面裡排下來，
+    // 而面板每高一行，畫布那側就少一行。說明是「想看才看」的東西，不該一直佔著位置。
+    const alwaysDrawer = scene === 'baccaratLive';
+
     return (
         <div className="hud">
             <TopBar />
@@ -218,7 +225,7 @@ export function Hud() {
 
                     <GameControls />
 
-                    {compact ? (
+                    {compact || alwaysDrawer ? (
                         <OptionsDrawer>
                             <GameOptions />
                             {note}

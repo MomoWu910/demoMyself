@@ -1,5 +1,5 @@
 import type { CommonC2S, CommonS2C } from '../protocol';
-import type { ChipValue } from '../../common/chips/atlas';
+import type { OtherBet, SeatInfo, SeatResult } from './baccarat';
 import type { BetSpot, Bets, Round } from '../../games/baccarat/rules';
 import type { RoadRound } from '../../games/baccarat/roadmap';
 import type { LivePhase } from '../../live/schedule';
@@ -27,12 +27,15 @@ import type { LivePhase } from '../../live/schedule';
  * 這裡沒有這個問題——**牌是影片裡翻的**，server 說結算的那一刻，畫面上的牌就是翻好的。
  * 少掉一整段「等演出」的狀態，是把演出權交出去換來的。
  *
- * ### 3. 別人的注沒有座位
+ * ### 3. 座位、注量、輸贏全部沿用數位桌台的型別
  *
- * 數位桌台看得到六張椅子，誰押了什麼都有頭像可以對應。視訊桌台的畫面被荷官佔滿，
- * **沒有別人的位置**——真實的 live casino 也是如此，你只看得到注區上的總額。
- * 所以這裡的 `LiveBet` 比數位版的 `OtherBet` 少一個 `seat` 欄位，籌碼一律從畫面
- * 邊緣飛進來。少一個欄位不是簡化，是這個媒介真的給不出那個資訊。
+ * `SeatInfo`、`OtherBet`、`SeatResult` 直接從 `./baccarat` 借過來，不在這裡重新
+ * 宣告一份長得一樣的。**桌上有誰、誰押了什麼、誰贏了多少，跟牌是畫的還是拍的無關**——
+ * 兩份各寫一次的話，改動時漏掉一邊就會變成「編譯過了但欄位對不上」，那是最難查的一種錯。
+ *
+ * 這一版一度把座位拿掉過，理由是「視訊桌台的畫面被荷官佔滿，看不到別人」。那個說法
+ * 對半邊：畫面裡確實沒有別人，但**桌台介面裡有**——亞洲市場的 live casino 都會在
+ * 視訊旁邊列出同桌玩家與他們的注量，那是這類產品熱度感的主要來源。
  */
 
 /** 桌況快照。中途進桌要能立刻對齊——視訊本來就是接在半路上的 */
@@ -50,6 +53,8 @@ export interface LiveSnapshot {
     history: RoadRound[];
     /** 已經開完的話，整局的牌在這裡 */
     openRound?: Round;
+    /** 桌上有誰。座位是**位置**不是身分，所以整份替換而不是送差異 */
+    seats: SeatInfo[];
     /** 各注區目前的總押注（含所有人） */
     totals: Record<BetSpot, number>;
     /** 我自己這一局押了多少 */
@@ -67,18 +72,6 @@ export interface LiveDealt {
     rank: number;
     /** 這張牌在畫面上翻開了沒。前四張要等荷官一起攤 */
     faceUp: boolean;
-}
-
-/**
- * 一筆別人的下注：押哪、什麼面額、幾顆。
- *
- * 送顆數而不是金額，理由跟數位桌台一樣：畫面上要飛的是一顆一顆的籌碼，
- * 金額 client 乘得出來，顆數反推不回去（3000 可以是三顆 1000 也可以是六顆 500）。
- */
-export interface LiveBet {
-    spot: BetSpot;
-    chip: ChipValue;
-    count: number;
 }
 
 export type BaccaratLiveC2S =
@@ -119,7 +112,7 @@ export type BaccaratLiveS2C =
      * `totals` 一起帶是刻意的**冗餘**：注區上的總額直接照它顯示，不要 client 自己
      * 把每一筆加起來。累加的版本只要漏收一則封包就會永遠偏掉，而且偏了不會有人發現。
      */
-    | { type: 'bets'; bets: LiveBet[]; totals: Record<BetSpot, number> }
+    | { type: 'bets'; bets: OtherBet[]; totals: Record<BetSpot, number> }
     /** 我自己的注被接受了。餘額在這裡才扣——server 說了算 */
     | { type: 'betOk'; myBets: Bets; totals: Record<BetSpot, number>; balance: number }
     /**
@@ -139,4 +132,8 @@ export type BaccaratLiveS2C =
           /** 這一局總共拿回多少。押注時已經扣款，所以這是**入帳額**不是淨輸贏 */
           totalReturn: number;
           balance: number;
-      };
+          /** 桌上其他人的輸贏，用來演籌碼飛回誰面前 */
+          seats: SeatResult[];
+      }
+    /** 有人坐下或離開。座位是位置不是身分，所以整份重送而不是送差異 */
+    | { type: 'seats'; seats: SeatInfo[] };

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { ChipValue } from '../../common/chips/atlas';
 import type { SourceKind } from '../../common/video/sources';
 import type { VideoStats, VideoStatus } from '../../common/video/types';
+import type { SeatInfo } from '../../net/games/baccarat';
 import type { LivePhase } from '../../live/schedule';
 import type { RoadRound } from '../baccarat/roadmap';
 import { BET_SPOTS, type BetSpot, type Bets, type Round } from '../baccarat/rules';
@@ -50,6 +51,8 @@ export interface LiveState {
     myTotal: number;
     /** 各注區的總押注（桌上所有人）。注區角落顯示的就是它 */
     totals: Record<BetSpot, number>;
+    /** 桌上有誰。座位是位置不是身分，所以整份替換 */
+    seats: SeatInfo[];
 
     /** 上一局淨賺多少（拿回來的減掉押出去的）。負數就是輸 */
     lastNet: number;
@@ -90,6 +93,7 @@ const FRESH = {
     roundNo: 0,
     result: null,
     history: [] as RoadRound[],
+    seats: [] as SeatInfo[],
     myBets: {} as Bets,
     myTotal: 0,
     lastNet: 0,
