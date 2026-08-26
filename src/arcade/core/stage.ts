@@ -2,6 +2,7 @@ import { Application, Container, FillGradient, Graphics } from 'pixi.js';
 import { ModuleHost, type GameModule, type ModuleId } from './module';
 import { SlotModule } from '../games/slot';
 import { BaccaratModule } from '../games/baccarat';
+import { BaccaratLiveModule } from '../games/baccaratLive';
 import { LobbyModule } from '../lobby';
 import { useArcadeStore } from '../store';
 import { sessionWallet } from '../server/wallet';
@@ -35,6 +36,21 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
     const app = new Application();
     await app.init({
         background: BG,
+        /**
+         * 畫布是**透明的**，底色由 CSS 那層的 `.stage` 提供（同一個 `--bg` 值，
+         * 所以看起來完全一樣）。
+         *
+         * 這不是排版偏好，是視訊桌台的硬需求：那一頁把 `<video>` 沉在畫布**底下**，
+         * 靠畫布透明才透得上來（見 common/video/VideoLayer.ts）。而**這件事只能在
+         * 這裡做**——Pixi 是照 `backgroundAlpha` 決定要不要跟瀏覽器要一個帶 alpha 的
+         * WebGL context 的，context 一旦以 `alpha: false` 建好，之後再怎麼改
+         * `renderer.background.alpha` 都沒有用：背景色是清成透明了，但那塊畫布本身
+         * 依然不透光。
+         *
+         * 症狀很難認：`background.alpha` 讀回來是 0、`<video>` 的位置尺寸 z-index 全對，
+         * 畫面上就是一片底色。要看 `gl.getContextAttributes().alpha` 才知道。
+         */
+        backgroundAlpha: 0,
         resizeTo: container,
         preference,
         antialias: true,
@@ -88,7 +104,11 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
     };
     pushScale(app.screen.width, app.screen.height);
 
-    const host = new ModuleHost(app);
+    // 背景層的開關交給玩法自己宣告（見 ModuleContext.setBackdrop）。視訊桌台會關掉它——
+    // 它的背景是沉在畫布底下的那塊視訊，這層漸層畫上去就是一張蓋住視訊的黑紙
+    const host = new ModuleHost(app, (visible) => {
+        bg.visible = visible;
+    });
 
     // ---- 尺寸 ----
     // 用 ResizeObserver 而不是只靠 window resize：iOS 轉向時 resize 事件發出的當下
@@ -134,6 +154,8 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
                 return new SlotModule();
             case 'baccarat':
                 return new BaccaratModule();
+            case 'baccaratLive':
+                return new BaccaratLiveModule();
         }
     };
 

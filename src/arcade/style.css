@@ -59,8 +59,11 @@ html, body {
 
 canvas { display: block; touch-action: none; }
 
-/* canvas 鋪滿；HUD 疊在上面 */
-.stage { position: fixed; inset: 0; }
+/* canvas 鋪滿；HUD 疊在上面。
+   底色畫在這一層而不是交給 canvas：畫布是透明的（見 core/stage.ts 的 backgroundAlpha），
+   視訊桌台的 <video> 就沉在它底下。背景屬於元素自己，繪製順序在所有子元素之前，
+   所以擋不到那塊視訊 */
+.stage { position: fixed; inset: 0; background: var(--bg); }
 
 /* z-index 要比語言鈕（#lang-slot 的 5）高，資源核對展開的說明才蓋得過它。
    這一層自己是 pointer-events: none，所以疊在上面不會擋住底下任何東西的點擊 */
@@ -440,7 +443,13 @@ button.back { cursor: pointer; font-weight: inherit; }
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
 }
 
-.readouts { grid-area: readouts; display: flex; gap: calc(18px * var(--ui-scale)); }
+/* 視訊桌台的讀數多兩欄（串流四個 + 下注兩個）。760 會把籌碼擠成直排，
+   而那一欄一直排整塊面板就長高一百多 px（見 Hud.tsx 的場景 class） */
+.dock--baccaratLive { width: calc(min(1040px, calc(100vw - 32px)) * var(--ui-scale)); }
+
+/* wrap 是必要的而不是保險：讀數的欄數由玩法決定（視訊桌台有六欄），
+   不換行的話窄畫面上它會直接撐破面板、整列跑到畫面外 */
+.readouts { grid-area: readouts; display: flex; flex-wrap: wrap; gap: calc(18px * var(--ui-scale)); }
 .stat { display: flex; flex-direction: column; gap: 2px; }
 .cap {
     font-family: var(--mono);
@@ -815,4 +824,43 @@ button.back { cursor: pointer; font-weight: inherit; }
     #lang-slot { left: 300px; }
     .lobby-foot { bottom: max(8px, env(safe-area-inset-bottom)); height: 34px; }
     .foot-note { display: none; }
+}
+
+/* ---- 視訊桌台 -------------------------------------------------------------
+
+   視訊是一塊疊在畫布上的 DOM，不是畫進畫布裡的貼圖（理由見 common/video/VideoLayer.ts）。
+   所以位置由模組算好、用 transform 推過來，跟 Pixi 的 screen 座標共用同一套單位。 */
+
+.live-video {
+    position: absolute;
+    left: 0;
+    top: 0;
+    /* **沉在 canvas 底下。** 疊層（倒數、延遲區、結果、注區、路圖）全部畫在 Pixi 裡，
+       因為它們用的是 common/chips 與 common/roadmap 那套現成元件（見 VideoLayer.ts）。
+       視訊在這一頁就是背景，沒有任何東西需要鑽到它下面 */
+    z-index: 0;
+    /* 整層不吃指標事件：注區的點擊要落在上面那層 canvas 上 */
+    pointer-events: none;
+}
+
+/* canvas 提到視訊之上。Pixi 的背景在進視訊桌台時會被設成透明，
+   所以「上面那層」蓋住的只有它自己畫的東西（見 games/baccaratLive/index.ts） */
+.stage canvas { position: relative; z-index: 1; }
+
+.live-video__frame {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1.5px solid rgba(138, 106, 51, 0.55);
+    background: #0d1512;
+}
+
+/* 等比填滿而不是完整放進去：視訊桌台寧可裁邊也不要黑邊——
+   黑邊會讓整塊面板看起來像播放器，而裁掉的是桌面邊緣，本來就不帶資訊 */
+.live-video__el {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }

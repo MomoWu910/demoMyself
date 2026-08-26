@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useArcadeStore } from '../store';
 import { SlotControls, SlotOptions, SlotReadouts } from './SlotPanel';
 import { BaccaratControls, BaccaratOptions, BaccaratReadouts } from './BaccaratPanel';
+import { LiveControls, LiveOptions, LiveReadouts } from './LivePanel';
 import { useDockSide, useIsCompact } from './useIsCompact';
 import { LobbyChrome } from './LobbyChrome';
 import { TopBar } from './TopBar';
@@ -66,6 +67,8 @@ function GameReadouts() {
             return <SlotReadouts />;
         case 'baccarat':
             return <BaccaratReadouts />;
+        case 'baccaratLive':
+            return <LiveReadouts />;
         case 'lobby':
         case null:
             return null;
@@ -79,6 +82,8 @@ function GameControls() {
             return <SlotControls />;
         case 'baccarat':
             return <BaccaratControls />;
+        case 'baccaratLive':
+            return <LiveControls />;
         case 'lobby':
         case null:
             return null;
@@ -93,6 +98,8 @@ function GameOptions() {
             return <SlotOptions />;
         case 'baccarat':
             return <BaccaratOptions />;
+        case 'baccaratLive':
+            return <LiveOptions />;
         case 'lobby':
         case null:
             return null;
@@ -197,8 +204,14 @@ export function Hud() {
 
             <Toast />
 
+            {/*
+                面板帶一個場景 class，讓某一款玩法微調自己的尺寸。目前只有視訊桌台用到：
+                它的讀數比別款多兩欄（串流的四個 + 下注的兩個），760px 會把籌碼那一欄
+                擠成直排，而直排的五顆籌碼會把整塊面板撐高一百多 px——**面板每高一 px，
+                畫布那側就少一 px**，那正是這一頁最缺的東西
+            */}
             {inGame && (
-                <footer className="dock" ref={dockRef as React.RefObject<HTMLElement>}>
+                <footer className={`dock dock--${scene}`} ref={dockRef as React.RefObject<HTMLElement>}>
                     <div className="readouts">
                         <GameReadouts />
                     </div>

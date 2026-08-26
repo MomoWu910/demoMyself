@@ -630,6 +630,47 @@ export const DICT: Record<string, Entry> = {
     'arcade.lobby.baccarat': { en: 'Baccarat', zh: '百家樂' },
     'arcade.lobby.baccaratDesc': { en: 'Five roadmaps · 8-deck shoe', zh: '五張路圖 · 八副牌靴' },
     // 還沒做的那幾款。名字用真實桌台的叫法，因為它們是接下來要做的東西，不是佔位的假名
+    'arcade.lobby.baccaratLive': { en: 'Live Baccarat', zh: '視訊百家樂' },
+    'arcade.lobby.baccaratLiveDesc': { en: 'Real video stream · sub-second latency', zh: '真實視訊串流 · 延遲不到一秒' },
+
+    // 視訊桌台
+    'arcade.live.caption': {
+        en: 'The dealer feed is a real stream: fMP4 segments fed to MediaSource by hand, position decided by wall clock, so everyone sees the same frame. Public live swaps in hls.js on a real CDN — the red slice on the countdown is time your feed still shows but the table has already closed.',
+        zh: '荷官畫面是真的串流：fMP4 片段自己餵給 MediaSource，位置由牆鐘決定，所有人看同一格。切成公開直播就換 hls.js 接真實 CDN——倒數條上那截紅色，是你的畫面還在演、但桌上已經停止下注的那段。',
+    },
+    'arcade.live.playerWins': { en: 'PLAYER WINS', zh: '閒家勝' },
+    'arcade.live.bankerWins': { en: 'BANKER WINS', zh: '莊家勝' },
+    'arcade.live.tie': { en: 'TIE', zh: '和局' },
+    'arcade.live.source': { en: 'Feed', zh: '線路' },
+    'arcade.live.sourceDealer': { en: 'Dealer', zh: '荷官桌' },
+    'arcade.live.sourcePublic': { en: 'Public live', zh: '公開直播' },
+    'arcade.live.latency': { en: 'Latency', zh: '延遲' },
+    'arcade.live.buffered': { en: 'Buffer', zh: '緩衝' },
+    'arcade.live.rate': { en: 'Rate', zh: '倍速' },
+    'arcade.live.stalls': { en: 'Stalls', zh: '卡頓' },
+    'arcade.live.jumps': { en: 'Jumps', zh: '跳轉' },
+    'arcade.live.round': { en: 'Round', zh: '局數' },
+    'arcade.live.statusLoading': { en: 'connecting…', zh: '連線中…' },
+    'arcade.live.statusStalled': { en: 'buffering…', zh: '緩衝中…' },
+    'arcade.live.statusFailed': { en: 'feed unavailable', zh: '線路中斷' },
+
+    // 視訊桌台自己的階段字。跟數位桌台分開一組是因為它少了換靴、多了收牌——
+    // 那兩段的差別正是「牌是誰在處理」：一邊是程式換一副新牌，一邊是有人把牌收走
+    'arcade.live.phase.betting': { en: 'Place your bets', zh: '下注中' },
+    'arcade.live.phase.dealing': { en: 'Dealing', zh: '開牌中' },
+    'arcade.live.phase.result': { en: 'Paying out', zh: '結算中' },
+    'arcade.live.phase.clearing': { en: 'Clearing table', zh: '收牌中' },
+
+    // 延遲吃掉下注時間的兩句提示。`{s}` 由呼叫端換成秒數——
+    // 下注期間講「你少了幾秒」，截止之後講「你看到的那段已經過去了」
+    'arcade.live.lagAhead': {
+        en: 'your feed is {s}s behind',
+        zh: '你的畫面慢 {s} 秒',
+    },
+    'arcade.live.lagLocked': {
+        en: 'Feed is {s}s behind — betting already closed',
+        zh: '畫面落後 {s} 秒，已停止下注',
+    },
     'arcade.lobby.dragontiger': { en: 'Dragon Tiger', zh: '龍虎' },
     'arcade.lobby.sicbo': { en: 'Sic Bo', zh: '骰寶' },
     'arcade.lobby.roulette': { en: 'Roulette', zh: '輪盤' },

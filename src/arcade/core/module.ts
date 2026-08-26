@@ -57,6 +57,19 @@ export interface ModuleContext {
     track<T extends Disposable>(obj: T, destroyOptions?: DestroyOptions): T;
     /** 登記一個任意的收尾動作（清 timer、關 socket、kill tween）。 */
     onDispose(fn: () => void): void;
+
+    /**
+     * 關掉舞台那層一直在的背景漸層——**「我自己帶背景」**。
+     *
+     * 幾乎所有玩法都靠那層墊底，唯一的例外是視訊桌台：它的背景是一塊沉在畫布底下的
+     * `<video>`，而那層漸層是不透明的，畫在畫布上就等於一張蓋在視訊上的黑紙
+     * （見 games/baccaratLive/index.ts）。
+     *
+     * 做成玩法自己宣告而不是讓舞台去認 id：**舞台不必知道有哪些玩法**，
+     * 而「這一款自己帶背景」是玩法的性質，寫在玩法裡才找得到。
+     * 卸載時自動還原，玩法不必記得關。
+     */
+    setBackdrop(visible: boolean): void;
 }
 
 /**
@@ -94,8 +107,11 @@ export class ModuleHost {
     private ctx: InternalContext | null = null;
     private lastReport: DisposeReport | null = null;
 
-    constructor(app: Application) {
+    private readonly setBackdrop: (visible: boolean) => void;
+
+    constructor(app: Application, setBackdrop: (visible: boolean) => void = () => undefined) {
         this.app = app;
+        this.setBackdrop = setBackdrop;
     }
 
     public getCurrent(): GameModule | null {
@@ -113,7 +129,11 @@ export class ModuleHost {
     public async switchTo(next: GameModule): Promise<void> {
         if (this.current) this.disposeCurrent();
 
-        const ctx = new InternalContext(this.app);
+        // 每次換場都先把背景層開回來。玩法要關的話它自己會在 mount 裡說——
+        // 靠卸載時還原的話，順序會反過來：新的 mount 已經跑完，舊的 dispose 才把它打開
+        this.setBackdrop(true);
+
+        const ctx = new InternalContext(this.app, this.setBackdrop);
         this.app.stage.addChild(ctx.root);
         this.ctx = ctx;
         this.current = next;
@@ -152,9 +172,16 @@ class InternalContext implements ModuleContext {
     private disposers: Array<() => void> = [];
     private disposed = false;
 
-    constructor(app: Application) {
+    private readonly backdrop: (visible: boolean) => void;
+
+    constructor(app: Application, backdrop: (visible: boolean) => void) {
         this.app = app;
+        this.backdrop = backdrop;
         this.screen = { width: app.screen.width, height: app.screen.height };
+    }
+
+    public setBackdrop(visible: boolean): void {
+        if (!this.disposed) this.backdrop(visible);
     }
 
     public frame(fn: (t: Ticker) => void): void {

@@ -19,7 +19,7 @@
  */
 
 /** 遊樂場裡有哪些玩法。大廳的清單、socket 的路由、store 的目前玩法都認這個。 */
-export type GameId = 'slot' | 'baccarat';
+export type GameId = 'slot' | 'baccarat' | 'baccaratLive';
 
 /** 每款玩法都會送的指令 */
 export type CommonC2S = { type: 'hello' };

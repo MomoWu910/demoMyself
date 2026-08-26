@@ -12,7 +12,10 @@
     "check:baccarat": "node src/arcade/server/baccarat-check.mjs",
     "check:cards": "node src/arcade/common/cards/card-check.mjs",
     "check:chips": "node src/arcade/common/chips/chips-check.mjs",
-    "check:road": "node src/arcade/games/baccarat/roadmap-check.mjs"
+    "check:road": "node src/arcade/games/baccarat/roadmap-check.mjs",
+    "check:video": "node src/arcade/common/video/video-check.mjs",
+    "build:stream": "node src/arcade/live/tools/build-stream.mjs",
+    "check:live": "node src/arcade/live/tools/live-verify.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "8.2.0",
@@ -22,6 +25,7 @@
     "esbuild": "^0.25.9",
     "esbuild-loader": "^4.3.0",
     "gsap": "^3.13.0",
+    "hls.js": "^1.7.1",
     "lil-gui": "^0.21.0",
     "pixi.js": "^8.14.3",
     "react": "^19.2.7",

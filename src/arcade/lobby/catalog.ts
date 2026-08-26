@@ -57,8 +57,9 @@ export const CATALOG: LobbyEntry[] = [
     // 明度本身就在說「哪些是現在進得去的」
     { key: 'slot', category: 'electronic', color: METAL.gold, playable: true, gameId: 'slot', badge: 'hot' },
     { key: 'baccarat', category: 'table', color: METAL.champagne, playable: true, gameId: 'baccarat', badge: 'new' },
-    { key: 'dragontiger', category: 'table', color: METAL.rose, playable: false },
-    { key: 'sicbo', category: 'table', color: METAL.steel, playable: false },
+    { key: 'baccaratLive', category: 'table', color: METAL.rose, playable: true, gameId: 'baccaratLive', badge: 'new' },
+    { key: 'dragontiger', category: 'table', color: METAL.steel, playable: false },
+    { key: 'sicbo', category: 'table', color: METAL.pewter, playable: false },
     { key: 'roulette', category: 'table', color: METAL.copper, playable: false },
     { key: 'ox28', category: 'card', color: METAL.bronze, playable: false },
     { key: 'paigow', category: 'card', color: METAL.oldGold, playable: false },
