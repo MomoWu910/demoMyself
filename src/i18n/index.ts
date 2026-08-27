@@ -579,6 +579,9 @@ export const DICT: Record<string, Entry> = {
     // 窄畫面把表演選項與說明收進抽屜的那一行（見 arcade/ui/Hud.tsx 的 OptionsDrawer）。
     // 用「更多」而不是「設定」：抽屜裡沒有任何會改變輸贏或會被記住的東西
     'arcade.moreOptions': { en: 'More', zh: '更多' },
+    // 語言切換在牌桌上收進了那顆齒輪裡（見 games/baccarat/index.ts 的 menuSections）：
+    // 桌上每一格都在跟「這一手要押多少」搶位置，而語言是一場只會按一次的東西
+    'arcade.language': { en: 'Language', zh: '語言' },
     'arcade.order.left': { en: 'Left to right', zh: '由左到右' },
     'arcade.order.center': { en: 'Centre out', zh: '中間先停' },
     'arcade.order.random': { en: 'Random', zh: '隨機' },
@@ -622,6 +625,13 @@ export const DICT: Record<string, Entry> = {
     'arcade.bac.betClosed': { en: 'Betting is closed for this hand', zh: '這一局已經封盤了' },
     'arcade.bac.net': { en: 'Last hand', zh: '上一局' },
     'arcade.bac.shoe': { en: 'Shoe', zh: '牌靴' },
+    // 籌碼設置：從十種面額裡挑手邊那五顆，收在右上角的「更多」裡。
+    // 真實桌台的籌碼架就那麼大，你挑常用的放上去——全部攤出來反而找不到要的那顆
+    'arcade.bac.chipSet': { en: 'Chip tray', zh: '籌碼設置' },
+    'arcade.bac.chipSetHint': {
+        en: 'Pick up to five denominations to keep at the table.',
+        zh: '挑最多五種面額擺在桌邊，其餘收進池子裡。',
+    },
     'arcade.error.no_bet': { en: 'Place a bet first', zh: '請先下注' },
 
     // ---- 大廳與資源核對 ----
@@ -639,6 +649,9 @@ export const DICT: Record<string, Entry> = {
         zh: '荷官畫面是真的串流：fMP4 片段自己餵給 MediaSource，位置由牆鐘決定，所有人看同一格。切成公開直播就換 hls.js 接真實 CDN——倒數條上那截紅色，是你的畫面還在演、但桌上已經停止下注的那段。',
     },
     'arcade.live.source': { en: 'Feed', zh: '線路' },
+    // 更多選單裡串流讀數那一區的標題。不能跟線路切換共用 'Feed'——兩區疊在一起時
+    // 會出現兩個一模一樣的標題，看起來像同一區被畫了兩次
+    'arcade.live.stream': { en: 'Stream', zh: '串流' },
     'arcade.live.sourceDealer': { en: 'Dealer', zh: '荷官桌' },
     'arcade.live.sourcePublic': { en: 'Public live', zh: '公開直播' },
     'arcade.live.latency': { en: 'Latency', zh: '延遲' },

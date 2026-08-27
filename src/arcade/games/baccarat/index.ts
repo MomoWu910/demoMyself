@@ -5,14 +5,21 @@ import { CardView } from '../../common/cards/CardView';
 import { bakeChipAtlas, CHIP_VALUES, type ChipAtlas, type ChipValue } from '../../common/chips/atlas';
 import { BetSpotView } from '../../common/chips/BetSpotView';
 import { FlyingChips } from '../../common/chips/FlyingChips';
+import { DealSpots } from '../../common/table/DealSpots';
 import { PhaseBanner } from '../../common/table/PhaseBanner';
+import { computeTableLayout, type Rect, type TableLayout } from '../../common/table/tableLayout';
+import { placeRoads } from '../../common/roadmap/placeRoads';
 import { ScrollableRoad } from '../../common/roadmap/ScrollableRoad';
-import { topBarH, uiScale } from '../../core/layout';
+import { ChipRail } from '../../common/ui/ChipRail';
+import { MoreMenu, type MenuSection } from '../../common/ui/MoreMenu';
+import { MySeat } from '../../common/ui/MySeat';
+import { StatStrip } from '../../common/ui/StatStrip';
+import { TableButton } from '../../common/ui/TableButton';
 import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import { ONLINE_SEAT, type BaccaratS2C, type OtherBet, type Phase, type SeatInfo } from '../../net/games/baccarat';
 import { arcadeState, useArcadeStore } from '../../store';
-import { onLangChange, t } from '../../../i18n';
+import { getLang, onLangChange, setLang, t, type Lang } from '../../../i18n';
 import { buildBigRoad } from './roadmap';
 import { beadMarks, bigRoadMarks, derivedMarks, ROAD_ROWS } from './roadView';
 import { OnlineBadge, SeatView } from './seatView';
@@ -34,30 +41,13 @@ import { BANKER, PLAYER, TIE } from '../../theme';
  */
 
 /**
- * 路圖區佔畫面高度的比例與上限。
+ * 牌能長到多寬。
  *
- * 這兩個數字是量出來的：在 1512×716 的視窗裡，原本的 0.3／210 會讓路圖吃掉 29% 的高度，
- * 牌區只剩 18%，牌被壓到 42px 寬——點數根本看不清。路圖是**參考資訊**，牌才是主角，
- * 所以讓路圖先讓步。
+ * 上限是**貼圖的解析度**決定的：牌面烘在 96×134 的格子裡（見 cards/atlas.ts），
+ * 在 DPR 2 的螢幕上剛好對應 192 實體像素，再放大就開始糊。改版後中央區拿到了
+ * 上半部整片，這個上限第一次真的碰得到——改版前它是 76，因為路圖與注區把高度吃掉了。
  */
-const ROAD_RATIO = 0.26;
-const ROAD_MAX = 172;
-
-/**
- * 路圖讓步的底線。
- *
- * 六列的格子在這個高度大約 6px 見方——還看得出紅藍與拖尾的走向。再低就只剩一片網格，
- * 那時它已經不是資訊了，留著只是在佔位置。
- */
-const ROAD_MIN = 64;
-
-/**
- * 牌「看得清點數」的寬度，也是路圖讓步的目標。
- *
- * 不是隨手抓的：牌角的點數字級跟著牌寬縮放，低於這個寬度時在手機上要湊近才讀得出來。
- * 排版反過來從它推算路圖能佔多高（見 layout 的 roadForComfort）。
- */
-const CARD_COMFORT_W = 64;
+const CARD_MAX_W = 96;
 
 /** 發牌的間隔。太快看不出是一張一張發的，太慢會拖 */
 const DEAL_GAP = 0.16;
@@ -74,8 +64,6 @@ const SETTLE_WAIT_MAX = 3;
 /** 牌下方那行點數要留多高。字級固定，所以這是常數而不是比例（見 layout） */
 const TOTAL_LABEL_H = 34;
 
-/** 階段膠囊與座位列各要留多高。兩者都是固定字級，所以是常數 */
-const BANNER_H = 32;
 /**
  * 桌面的疊法。
  *
@@ -90,23 +78,14 @@ const BANNER_H = 32;
  */
 const Z = {
     ROAD: 10,
+    /** 桌面上印著的牌位框。壓在路圖之上、注區之下——它是檯面的一部分，不是介面 */
+    FELT: 15,
     TABLE: 20,
     SEAT: 30,
     CARD: 40,
     CHIP: 50,
     UI: 60,
 } as const;
-
-/**
- * 座位列要留多高。
- *
- * 這是**整組**的高度，不只是頭像那顆圓：圓下面還有名字與餘額兩行。給不夠的話溢出來的
- * 不是圓而是最底下那行餘額，它會疊到階段膠囊與線上人數上——兩邊都是深色小字，疊在
- * 一起看起來像字糊掉，不像版面壞掉，所以很容易被當成沒事。
- */
-const SEAT_H = 84;
-/** 窄畫面只有頭像與名字，不留餘額那一行 */
-const SEAT_H_COMPACT = 38;
 
 /**
  * 一批下注最多演幾顆籌碼——**多人桌最重要的那個上限**。
@@ -126,6 +105,17 @@ const PER_SPOT_PER_TICK = 5;
 
 /** 中途進桌時，每個注區最多補幾顆「已經在桌上」的籌碼 */
 const SNAPSHOT_CHIPS_PER_SPOT = 7;
+
+/**
+ * 我自己的籌碼在飛幣層裡用哪個座位編號。
+ *
+ * 不能跟散客（`ONLINE_SEAT`）共用。飛幣層只認編號，結算時照編號把贏的籌碼送回押注的人
+ * 面前（見 FlyingChips.recycle）——共用的話，我贏的那幾顆會飛去線上人數的膠囊上，
+ * 而不是回到我自己的座位。改版前沒有這個問題，因為改版前桌上沒有我。
+ *
+ * 取負數是因為**真實座位的編號是 0..5**，負數不會跟任何一張椅子撞到。
+ */
+const MY_SEAT = -2;
 
 // 紅莊藍閒是牌桌的通用語言，**不因為換配色而改**——改了路圖上的紅藍就跟全世界的
 // 百家樂桌對不起來。能做的是壓飽和度，讓它們在黑金裡不刺眼（見 theme.ts）
@@ -155,6 +145,8 @@ export class BaccaratModule implements GameModule {
     private chips: ChipAtlas | null = null;
 
     private readonly roadLayer = new Container();
+    /** 桌面印刷：閒／莊兩個牌位。沒發牌的時候它讓那塊地方仍然看得出是一張桌子 */
+    private readonly feltLayer = new DealSpots();
     private readonly tableLayer = new Container();
     /** 散落的籌碼。夾在注區與牌之間——壓在注區上面，但不擋牌 */
     private chipLayer: FlyingChips | null = null;
@@ -175,6 +167,21 @@ export class BaccaratModule implements GameModule {
     private banner: PhaseBanner | null = null;
     private badge: OnlineBadge | null = null;
 
+    // ---- 改版後搬進畫布的那一組介面 ----
+    // 它們原本是 DOM 的操作面板（見 ui/BaccaratPanel.tsx）。搬進來的理由不是「Pixi 比較
+    // 潮」，而是**版面**：面板貼在畫面底時，桌上每一塊都得先讓開它量出來的高度，
+    // 於是路單只能擠在最上面。介面跟桌子在同一個座標系之後，位置才由桌子自己說了算
+    /** 桌邊的籌碼架。手邊那五顆，可捲 */
+    private chipRail: ChipRail | null = null;
+    /** 我自己的座位（左偏下）。籌碼從這裡飛出去 */
+    private readonly mySeat = new MySeat();
+    /** 讀數（左偏上）：本局押注、上一局、牌靴 */
+    private readonly stats = new StatStrip();
+    /** 右上角的更多，收著籌碼設置與說明 */
+    private more: MoreMenu | null = null;
+    /** 重複下注。它是**動作**不是選項，所以用虛線邊框那種樣式 */
+    private repeatBtn: TableButton | null = null;
+
     private playerCards: CardView[] = [];
     private bankerCards: CardView[] = [];
     private playerTotal: Text | null = null;
@@ -182,7 +189,7 @@ export class BaccaratModule implements GameModule {
 
     /** 牌從哪裡飛出來。排版時算好，發牌動畫直接用 */
     private shoeAt = { x: 0, y: 0 };
-    /** 我自己的籌碼從哪裡飛出來。我沒有座位（是路過的），所以從操作面板那一側上來 */
+    /** 我自己的籌碼從哪裡飛出來。改版後這裡有我的座位了（見 mySeat） */
     private myOrigin = { x: 0, y: 0 };
     /** 輸掉的籌碼往哪裡收。桌面正中央＝莊家的位置 */
     private houseAt = { x: 0, y: 0 };
@@ -242,18 +249,21 @@ export class BaccaratModule implements GameModule {
         // 疊放順序寫在 Z 裡，這裡只負責掛上去。開 sortableChildren 之後掛的順序就不重要了
         ctx.root.sortableChildren = true;
         this.roadLayer.zIndex = Z.ROAD;
+        this.feltLayer.zIndex = Z.FELT;
         this.tableLayer.zIndex = Z.TABLE;
         this.seatLayer.zIndex = Z.SEAT;
         this.cardLayer.zIndex = Z.CARD;
         this.chipLayer.zIndex = Z.CHIP;
         this.uiLayer.zIndex = Z.UI;
-        ctx.root.addChild(this.roadLayer, this.tableLayer, this.seatLayer, this.cardLayer, this.chipLayer, this.uiLayer);
+        ctx.root.addChild(this.roadLayer, this.feltLayer, this.tableLayer, this.seatLayer, this.cardLayer, this.chipLayer, this.uiLayer);
 
         for (const road of Object.values(this.roads)) this.roadLayer.addChild(road);
 
         this.buildSpots();
+        this.feltLayer.setLabels(t('arcade.bac.player'), t('arcade.bac.banker'));
         this.buildTotals();
         this.buildSeats();
+        this.buildDeck();
 
         // ---- 連線 ----
         // 進桌要的桌況在收到 welcome 之後才要（見 onPacket）——寫在 onOpen 裡的話
@@ -270,19 +280,64 @@ export class BaccaratModule implements GameModule {
         useBaccaratStore.getState().setBetHandler((spot, amount) => this.sendBet(spot, amount));
         ctx.onDispose(() => useBaccaratStore.getState().reset());
 
-        // ---- 倒數 ----
-        // 每幀重算而不是每秒 setInterval：分頁被節流時 interval 會漂，而每幀重算是
-        // 從 endsAt 反推的，切回來第一幀就對了（見 net/games/baccarat.ts 的 phase 封包）
-        ctx.frame((ticker) => this.tickClock(ticker));
+        /**
+         * 驗證用的狀態入口，跟 `__ARCADE__` 與 `__PIXI_APP__` 同一個用途
+         * （見 core/stage.ts）。
+         *
+         * 這一版非有不可：桌台的介面整組搬進了畫布之後，**端對端腳本再也不能靠
+         * `document.querySelector` 讀狀態**——倒數、延遲、本局押注全都是 Pixi 的 Text，
+         * DOM 裡什麼都沒有。與其讓腳本去遍歷場景樹用文字比對（那會綁死在字串與語言上），
+         * 不如把權威來源直接開一個口（見 live/tools/live-verify.mjs）。
+         */
+        (globalThis as unknown as { __TABLE__?: () => unknown }).__TABLE__ = () => baccaratState();
+        ctx.onDispose(() => {
+            delete (globalThis as unknown as { __TABLE__?: () => unknown }).__TABLE__;
+        });
 
-        // ---- 面板高度變了就重排 ----
-        // 換語言、換玩法都可能讓面板長高或變矮，canvas 這側得跟著讓位（見 store 的 dockHeight）
-        const unsubDock = useArcadeStore.subscribe((s, prev) => {
-            if (s.dockInset !== prev.dockInset && !this.dead) {
-                this.layout(ctx.screen.width, ctx.screen.height);
+        // ---- 倒數與捲動 ----
+        // 每幀重算而不是每秒 setInterval：分頁被節流時 interval 會漂，而每幀重算是
+        // 從 endsAt 反推的，切回來第一幀就對了（見 net/games/baccarat.ts 的 phase 封包）。
+        //
+        // 籌碼架的慣性也在這裡推——**捲動器自己不碰 ticker**，那是模組契約的要求
+        // （見 InertiaScroller 的說明）：元件自己抓 ticker 就等於多一條沒人回收的生命週期
+        ctx.frame((ticker) => {
+            this.tickClock(ticker);
+            const dt = ticker.deltaMS / 1000;
+            this.chipRail?.update(dt);
+        });
+
+        // ---- 桌況變了就更新讀數 ----
+        // 比對的是**會顯示出來的那幾個欄位**，不是整份 state：倒數秒數每秒都在寫，
+        // 跟著它重畫的話讀數一秒重建一次，而那三格數字一局才變兩三次
+        const unsubTable = useBaccaratStore.subscribe((st, prev) => {
+            if (this.dead) return;
+            if (
+                st.myTotal !== prev.myTotal ||
+                st.lastNet !== prev.lastNet ||
+                st.played !== prev.played ||
+                st.shoe !== prev.shoe ||
+                st.phase !== prev.phase ||
+                st.chip !== prev.chip ||
+                st.lastBets !== prev.lastBets
+            ) {
+                this.syncReadouts();
             }
         });
-        ctx.onDispose(unsubDock);
+        ctx.onDispose(unsubTable);
+
+        // ---- 餘額與籌碼設置 ----
+        // 餘額寫在我自己的座位上（改版前它只在頂列與底部面板）。籌碼設置改了要換整排籌碼，
+        // 而且**選中的那顆可能剛好被換掉**——alignChip 負責那件事
+        const unsubShell = useArcadeStore.subscribe((st, prev) => {
+            if (this.dead) return;
+            if (st.balance !== prev.balance) this.mySeat.setBalance(st.balance);
+            if (st.chipSet !== prev.chipSet) {
+                this.chipRail?.setChips(st.chipSet);
+                this.refreshMenu();
+                this.alignChip();
+            }
+        });
+        ctx.onDispose(unsubShell);
 
         // ---- 語言切換時重畫珠盤路上的字 ----
         onLangChange(() => {
@@ -297,7 +352,12 @@ export class BaccaratModule implements GameModule {
         ctx.onResize((w, h) => this.layout(w, h));
         this.layout(ctx.screen.width, ctx.screen.height);
 
-        ctx.onDispose(() => this.cleanupAnimations());
+        ctx.onDispose(() => {
+            this.cleanupAnimations();
+            // gsap 的 tween 與捲動慣性都不在場景樹上，destroy 收不到它們
+            this.chipRail?.stop();
+            this.mySeat.stop();
+        });
     }
 
     // ---- 建場 ----
@@ -344,9 +404,158 @@ export class BaccaratModule implements GameModule {
         this.uiLayer.addChild(this.banner);
     }
 
+    /**
+     * 桌邊那一組介面：我的座位、籌碼架、重複下注、讀數、更多。
+     *
+     * 全部掛在 `uiLayer`——它壓在飛幣之上（見 Z）。這件事在改版後變得重要：籌碼從
+     * 我的座位飛出去，起點就在籌碼架旁邊，沒有壓過去的話那顆籌碼會從介面底下鑽出來。
+     */
+    private buildDeck(): void {
+        const shell = arcadeState();
+        this.mySeat.setPlayer(shell.player.name, shell.player.tint);
+        this.mySeat.setBalance(shell.balance);
+        this.uiLayer.addChild(this.mySeat, this.stats);
+
+        if (this.chips) {
+            this.chipRail = new ChipRail({
+                atlas: this.chips,
+                // 只寫玩法自己的 store。籌碼面額是**選中的偏好**，不是一個動作，
+                // 所以這裡直接寫入，不像下注要繞一趟 server
+                onPick: (value) => baccaratState().setChip(value),
+            });
+            this.chipRail.setChips(shell.chipSet);
+            this.chipRail.setSelected(baccaratState().chip);
+            this.uiLayer.addChild(this.chipRail);
+
+            this.more = new MoreMenu({
+                atlas: this.chips,
+                onChipSetChange: (values) => arcadeState().setChipSet(values),
+            });
+            this.more.setChipSet(shell.chipSet);
+            this.uiLayer.addChild(this.more);
+        }
+
+        this.repeatBtn = new TableButton({
+            label: t('arcade.bac.repeat'),
+            variant: 'ghost',
+            onTap: () => this.repeatBets(),
+        });
+        this.uiLayer.addChild(this.repeatBtn);
+
+        this.refreshDeckLabels();
+        this.refreshMenu();
+        this.alignChip();
+        this.syncReadouts();
+    }
+
+    /**
+     * 重複上一局的注——**一注一注重送**，不是送一包「重複」指令。
+     *
+     * server 那邊就只認得單筆下注，少一種封包就少一條要維護的路徑。這段邏輯原本住在
+     * React 面板裡（見 ui/BaccaratPanel.tsx 的 BetControls），跟著按鈕一起搬過來。
+     */
+    private repeatBets(): void {
+        const st = baccaratState();
+        if (st.phase !== 'betting') {
+            arcadeState().setNotice('arcade.bac.betClosed');
+            return;
+        }
+        for (const spot of BET_SPOTS) {
+            const amount = st.lastBets[spot] ?? 0;
+            if (amount > 0) this.sendBet(spot, amount);
+        }
+    }
+
+    /**
+     * 讀數與更多選單的內容。
+     *
+     * 每次 store 動了就整組重寫。看起來很浪費，但這裡總共不到十個 `Text`，而
+     * **省下的是一整套「哪一格該更新」的判斷**——那種判斷漏一格不會壞掉，只會顯示
+     * 一個舊數字，是最難發現的一種錯。
+     */
+    private syncReadouts(): void {
+        const st = baccaratState();
+        this.stats.setStats([
+            { label: t('arcade.bac.totalBet'), value: st.myTotal.toLocaleString() },
+            {
+                label: t('arcade.bac.net'),
+                // 還沒押過任何一局時顯示破折號，而不是 0——0 會被誤讀成「這局平手」
+                value: !st.played ? '—' : st.lastNet > 0 ? `+${st.lastNet.toLocaleString()}` : st.lastNet.toLocaleString(),
+                hot: st.played && st.lastNet > 0,
+            },
+            { label: t('arcade.bac.shoe'), value: st.shoe ? String(st.shoe.remaining) : '—' },
+        ]);
+
+        const betting = st.phase === 'betting';
+        this.chipRail?.setEnabled(betting);
+        this.chipRail?.setSelected(st.chip);
+        this.repeatBtn?.setEnabled(betting && Object.keys(st.lastBets).length > 0);
+    }
+
+    /**
+     * 重畫更多選單。
+     *
+     * 跟讀數分開的理由是**更新頻率差三個數量級**：讀數每次下注都要跟著動，選單只有
+     * 換語言或改籌碼設置時才變。混在一起的話，選單展開著的時候每押一注都會重建一次
+     * 面板上的文字，看起來就是閃一下。
+     */
+    private refreshMenu(): void {
+        this.more?.setSections(this.menuSections());
+        this.more?.setChipSet(arcadeState().chipSet);
+    }
+
+    /** 更多選單裡有什麼。數位桌台只有籌碼設置與那段說明——它沒有串流可調 */
+    private menuSections(): MenuSection[] {
+        return [
+            {
+                kind: 'chips',
+                title: t('arcade.bac.chipSet'),
+                hint: t('arcade.bac.chipSetHint'),
+            },
+            {
+                kind: 'segmented',
+                title: t('arcade.language'),
+                options: [
+                    { key: 'en', label: 'EN' },
+                    { key: 'zh', label: '中' },
+                ],
+                value: getLang(),
+                // 換語言會觸發 onLangChange，那裡會把整組介面重畫一次（含這張選單），
+                // 所以這裡不必自己重排
+                onPick: (key) => setLang(key as Lang),
+            },
+            { kind: 'note', text: t('arcade.serverNote') },
+        ];
+    }
+
+    private refreshDeckLabels(): void {
+        this.more?.setLabel(t('arcade.moreOptions'));
+        this.repeatBtn?.setLabel(t('arcade.bac.repeat'));
+    }
+
     private refreshLabels(): void {
         for (const [spot, view] of this.spots) view.setLabels(t(`arcade.bac.${spot}`), oddsLabel(spot));
+        this.feltLayer.setLabels(t('arcade.bac.player'), t('arcade.bac.banker'));
         this.applyPhaseLabel(baccaratState().phase);
+        this.refreshDeckLabels();
+        this.refreshMenu();
+        this.alignChip();
+        this.syncReadouts();
+    }
+
+    /**
+     * 讓選中的面額對齊手邊那五顆。
+     *
+     * 進桌時與改籌碼設置後都要跑一次：`chip` 是上一次選的（存在玩法 store 裡），
+     * 而手邊那五顆是外殼 store 的偏好，兩者各自存在。沒對齊的話籌碼架上不會有任何一顆
+     * 是亮的，但點注區照樣押得出去——**畫面說我沒選面額，實際上有**，那比按不動更糟。
+     */
+    private alignChip(): void {
+        const set = arcadeState().chipSet;
+        if (set.length === 0) return;
+        const st = baccaratState();
+        if (!set.includes(st.chip)) st.setChip(set[set.length - 1]);
+        this.chipRail?.setSelected(baccaratState().chip);
     }
 
     // ---- 互動 ----
@@ -388,7 +597,7 @@ export class BaccaratModule implements GameModule {
             return;
         }
 
-        this.flyChip(nearestChip(amount), spot, ONLINE_SEAT, this.myOrigin, 0);
+        this.flyChip(nearestChip(amount), spot, MY_SEAT, this.myOrigin, 0);
         this.socket?.send({ type: 'bet', spot, amount });
     }
 
@@ -619,6 +828,7 @@ export class BaccaratModule implements GameModule {
 
     /** 某個座位的籌碼從哪裡飛出來。沒有座位的散客走線上人數膠囊（見 seatView.ts） */
     private originOf(seat: number): { x: number; y: number } {
+        if (seat === MY_SEAT) return this.myOrigin;
         if (seat === ONLINE_SEAT) return this.badge?.originPoint() ?? this.houseAt;
         return this.seatViews[seat]?.originPoint() ?? this.houseAt;
     }
@@ -745,12 +955,19 @@ export class BaccaratModule implements GameModule {
             if (result.seat === ONLINE_SEAT) continue;
             this.seatViews[result.seat]?.flashDelta(result.delta);
         }
+        // 我自己的輸贏也飄一個。改版前這個數字只出現在底部面板的「上一局」那一格，
+        // 而視線在開牌的那幾秒是釘在桌上的——**結果揭曉的地方應該就是看牌的地方**
+        this.mySeat.flashDelta(net);
 
         // 籌碼回收。贏的飛回押注的人面前，輸的往桌心收——**這一段是多人桌最有感的演出**，
         // 它讓「別人的注」從畫面裝飾變成真的有輸有贏的錢
         this.chipLayer?.recycle(
             (spot) => winners.has(spot),
-            (seat) => (seat === ONLINE_SEAT ? (this.badge?.originPoint() ?? null) : (this.seatViews[seat]?.originPoint() ?? null)),
+            (seat) => {
+                if (seat === MY_SEAT) return this.mySeat.originPoint();
+                if (seat === ONLINE_SEAT) return this.badge?.originPoint() ?? null;
+                return this.seatViews[seat]?.originPoint() ?? null;
+            },
             this.houseAt,
             () => {
                 /* 收完就沒事了。下一局的清場在 phase betting 那裡 */
@@ -892,285 +1109,120 @@ export class BaccaratModule implements GameModule {
     // ---- 排版 ----
 
     /**
-     * 兩套版面，依畫面形狀分派。
+     * 整張桌子的排版。
      *
-     * 手機橫放（矮且寬）**不能只是把直式的比例調小**：那裡扣掉頂列與一條橫躺的操作面板
-     * 只剩 173px，要塞牌、五個注區、五張路單，三段疊著放在數學上就是不夠。
-     * 所以那個尺寸整個換一套——面板直立到右側（見 style.css 的橫版區塊），
-     * 路單橫躺到最底，中間留給注區，上方整片留給發牌。
-     *
-     * 判準跟 CSS 與 ui/useIsCompact.ts 的 LANDSCAPE_DOCK_QUERY 是同一組數字。
-     * 用畫面比例判斷而不是等面板回報 inset，第一次排版就會走對分支。
+     * 位置全部由 `computeTableLayout` 算——**這支檔案不再有自己的一套比例**。改版前
+     * 這裡有兩套版面（直式與橫放）各自寫死一組數字，而視訊桌台又各複製了一份，
+     * 同一個「注區要多高」的決定散在四個地方。現在它只剩「把算好的座標套上去」。
      */
     private layout(w: number, h: number): void {
-        if (h <= 560 && w >= h) this.layoutLandscape(w, h);
-        else this.layoutStacked(w, h);
-    }
+        // 中央區給到牌用得完的高度就好，多的轉給路單——牌最大就是 CARD_MAX_W，
+        // 再高的中央區只是讓那四張牌浮在一片空地中間（見 tableLayout 的 stageMax）
+        const L = computeTableLayout(w, h, { stageMax: CARD_MAX_W * 3 + TOTAL_LABEL_H });
 
-    /**
-     * 直式與桌面：路圖在上、牌在中、座位與階段膠囊夾在中間、注區在下、操作面板貼底。
-     */
-    private layoutStacked(w: number, h: number): void {
-        // 「窄」與「矮」是**兩件不同的事**，各自要縮的東西也不同：窄要縮字與注區寬度，
-        // 矮要縮注區高度。原本只有一個 `narrow` 同時管兩者，於是手機直式（窄但一點都不矮）
-        // 被套上了為橫放設計的矮版注區，白白把垂直空間讓掉
-        const narrow = w < 760;
-        const short = h < 560;
-        const portrait = h > w * 1.15;
-
-        // ---- 下注區 ----
-        // **先算它**，因為它是唯一位置固定的一段：從畫面底往上長，只跟操作面板的高度有關，
-        // 不受上面兩段影響。有了它的上緣，才知道路圖與牌區總共能分多少（見下面的 roadH）
-        const betW = Math.min(w * 0.94, 720);
-        const betX = (w - betW) / 2;
-        const gap = 8;
-        // 縮高度看的是**矮**不是窄：手機直式再窄，垂直方向也有的是空間，
-        // 把注區壓矮只會讓最常被點的兩區變得難點
-        const smallH = short ? 44 : 54;
-        const bigH = short ? 58 : 72;
-        // 讓開畫面下緣的操作面板。高度是 HUD 那側**實測**回報的（見 store 的 dockHeight）——
-        // 面板高度會隨語言、玩法、視窗寬度變，寫死的話總有一種組合會讓莊閒兩個大注區
-        // 被蓋掉一半，而它們正是最常被點的兩區。store 還沒回報時退回一個保守值
-        const dock = arcadeState().dockInset.bottom || (narrow ? 250 : 180);
-        const betBottom = h - dock - 10;
-        const bigY = betBottom - bigH;
-        const smallY = bigY - smallH - gap;
-
-        this.placeBets(betX, betW, smallY, bigY, smallH, bigH, gap);
-        this.chipPx = Math.max(15, Math.min(24, smallH * 0.42));
+        this.placeBets(L.bets);
+        // 桌面上散落的籌碼跟著注區的大小走。注區放大之後這些也要跟著大，
+        // 不然一疊籌碼會縮在角落像撒了一把沙
+        this.chipPx = Math.max(15, Math.min(26, L.bets.smallH * 0.42));
         this.chipLayer?.setChipSize(this.chipPx);
         this.relayoutChips();
 
-        // 我沒有座位（是路過的），籌碼從操作面板那一側上來
-        this.myOrigin = { x: w / 2, y: betBottom + 34 };
-        this.houseAt = { x: w / 2, y: smallY - 40 };
+        this.banner?.setBoxSize(L.banner.w, L.banner.h);
+        this.banner?.position.set(L.banner.x, L.banner.y);
 
-        // ---- 階段膠囊 ----
-        // 貼在注區正上方。它是玩家**每一秒都要瞄一眼**的東西，放在注區旁邊才不必來回移動視線
-        const bannerY = smallY - BANNER_H - 8;
-        const bannerW = Math.min(210, betW * 0.46);
-        this.banner?.setBoxSize(bannerW, BANNER_H);
-        this.banner?.position.set(betX + (betW - bannerW) / 2, bannerY);
-        this.badge?.position.set(betX + 2, bannerY + (BANNER_H - 22) / 2);
-
-        // ---- 路圖區 ----
-        // 豎屏時右上角有語言鈕，路圖得整個往下讓——不讓的話被壓住的正好是最右邊那幾欄，
-        // 而那是最新的幾局，也就是最常被看的部分
-        const roadY = portrait ? topBarH(uiScale(w, h)) + 24 : 12;
-
-        // 「路圖是參考資訊，牌才是主角，所以路圖先讓步」——這句話原本只寫在 ROAD_RATIO 的
-        // 註解裡，實際的程式卻是路圖照比例吃滿、牌撿剩下的。豎屏就是這個落差爆出來的地方：
-        // 垂直空間要分給三段，路圖照橫屏的比例吃完，牌只剩 47px，點數根本讀不出來。
-        //
-        // 所以改成**先問牌**：算出「要讓牌長到看得清點數，路圖最多能佔多高」，路圖就縮到那裡。
-        const roadIdeal = Math.min((h - roadY) * ROAD_RATIO, ROAD_MAX);
-        // 由牌區的高度公式反解，再扣掉階段膠囊那一條
-        const roadForComfort = bannerY - roadY - 28 - TOTAL_LABEL_H - CARD_COMFORT_W * 2.5;
-        // 讓步有底線：格子小到看不出顏色與拖尾，路圖就不再是資訊而只是一片網格
-        const roadH = Math.max(ROAD_MIN, Math.min(roadIdeal, roadForComfort));
-        const roadW = Math.min(w - 24, 900);
-        const roadX = (w - roadW) / 2;
-
-        // 上排（珠盤路 + 大路）拿六成高度，下排三張衍生路分剩下的
-        const topH = roadH * 0.58;
-        const botH = roadH - topH - 6;
-        const beadW = Math.min(roadW * 0.3, (topH / ROAD_ROWS) * 12);
-
-        this.roads.bead.setViewport(topH / ROAD_ROWS, beadW, topH);
-        this.roads.bead.position.set(roadX, roadY);
-        this.roads.big.setViewport(topH / ROAD_ROWS, roadW - beadW - 8, topH);
-        this.roads.big.position.set(roadX + beadW + 8, roadY);
-
-        const derivedW = (roadW - 12) / 3;
-        const derivedY = roadY + topH + 6;
-        this.roads.bigEye.setViewport(botH / ROAD_ROWS, derivedW, botH);
-        this.roads.bigEye.position.set(roadX, derivedY);
-        this.roads.small.setViewport(botH / ROAD_ROWS, derivedW, botH);
-        this.roads.small.position.set(roadX + derivedW + 6, derivedY);
-        this.roads.cockroach.setViewport(botH / ROAD_ROWS, derivedW, botH);
-        this.roads.cockroach.position.set(roadX + (derivedW + 6) * 2, derivedY);
-
+        this.placeSeats(L);
+        placeRoads(this.roads, L.roads, ROAD_ROWS);
         this.updateRoads();
+        this.placeDeck(L);
+        this.placeCards(L.stage);
 
-        // ---- 牌區與座位 ----
-        const cardTop = roadY + roadH + 14;
-        const cardSpace = bannerY - cardTop - 10;
-
-        // 寬且高的畫面才排得下「環繞」：三張椅子在左、三張在右，牌夾在中間。
-        // 窄畫面退回一列橫排——**這是「六席環繞」這個選擇要付的 RWD 代價**，
-        // 硬要在 390px 寬的手機上塞側邊座位，只會讓牌被擠到 40px
-        const canFlank = w >= 880 && cardSpace >= 210;
-        if (canFlank) {
-            this.placeCards(cardTop, cardSpace, w, 92);
-            this.placeSeatsFlanking(w, cardTop, cardSpace);
-        } else {
-            const seatH = short || narrow ? SEAT_H_COMPACT : SEAT_H;
-            this.placeSeatsRow(betX, betW, bannerY - seatH - 6, seatH, short || narrow);
-            this.placeCards(cardTop, cardSpace - seatH - 6, w, 0);
-        }
+        // 輸掉的籌碼往桌心收。桌心＝中央區的正中間，也就是荷官站的地方
+        this.houseAt = { x: L.stage.x + L.stage.w / 2, y: L.stage.y + L.stage.h / 2 };
     }
 
     /**
-     * 手機橫放：面板直立在右側，所以底部整條空了出來給路單。
+     * 底下那一條與四個角落：我的座位、籌碼架、重複下注、線上人數、讀數、更多鈕。
      *
-     * 由下往上疊：路單 → 注區 → 座位列 → 牌。牌拿到最上面那一整塊，因為它是這一局
-     * 唯一會動、也最需要被看清楚的東西；路單與注區各自壓到還能用的最小高度。
+     * 這些東西改版前全都在 DOM 的操作面板裡。搬上桌之後它們跟著同一套版面計算走，
+     * 於是**再也不會有「面板長高一行，盤面就少一行」這件事**——那是改版前每加一個
+     * 讀數格都要重新權衡的代價（見 ui/Hud.tsx 的 useDockMeasure）。
      */
-    private layoutLandscape(w: number, h: number): void {
-        const availW = w - arcadeState().dockInset.right;
-        // 橫版的頂列只有一列——核對數字在這個尺寸下藏起來、語言鈕移到左上（見 style.css），
-        // 所以不必像直式那樣讓開兩列
-        const top = 50;
-        const bottom = h - 12;
+    private placeDeck(L: TableLayout): void {
+        this.mySeat.position.set(L.mySeat.x, L.mySeat.y);
+        this.mySeat.setBoxSize(L.mySeat.w, L.mySeat.h, L.seatCompact || L.variant === 'row');
+        // 我的籌碼從自己的頭像飛出去。改版前它從畫面下緣冒出來，因為那時候桌上沒有我
+        this.myOrigin = this.mySeat.originPoint();
 
-        // ---- 路單：貼底橫躺，五張並列 ----
-        // 高度給到能讓格子有 12px 上下就夠——它現在可以往旁邊捲，不必靠變寬來裝下整靴
-        const roadH = Math.max(ROAD_MIN, Math.min(76, (bottom - top) * 0.24));
-        const roadY = bottom - roadH;
-        this.placeRoadStrip(availW, roadY, roadH);
-        this.updateRoads();
+        this.chipRail?.position.set(L.chipRail.x, L.chipRail.y);
+        this.chipRail?.setViewport(L.chipRail.w, L.chipRail.h);
 
-        // ---- 注區 ----
-        // 比直式的矮版再矮一階：這裡連「矮版」都還是太高。40px 仍然點得到，
-        // 而每省 10px 牌就大 4px
-        const gap = 6;
-        const smallH = 30;
-        const bigH = 40;
-        const betW = Math.min(availW * 0.96, 720);
-        const betX = (availW - betW) / 2;
-        const bigY = roadY - 8 - bigH;
-        const smallY = bigY - smallH - gap;
-        this.placeBets(betX, betW, smallY, bigY, smallH, bigH, gap);
-        this.chipPx = 15;
-        this.chipLayer?.setChipSize(this.chipPx);
-        this.relayoutChips();
+        this.repeatBtn?.position.set(L.repeat.x, L.repeat.y);
+        this.repeatBtn?.setBoxSize(L.repeat.w, L.repeat.h);
 
-        this.myOrigin = { x: availW, y: (smallY + bigY) / 2 };
-        this.houseAt = { x: availW / 2, y: smallY - 24 };
+        this.badge?.position.set(L.online.x, L.online.y);
 
-        // ---- 階段膠囊：橫躺在注區左上，跟座位共用一列 ----
-        const stripY = smallY - SEAT_H_COMPACT - 4;
-        const bannerW = 150;
-        this.banner?.setBoxSize(bannerW, 26);
-        this.banner?.position.set(betX, stripY + 6);
-        this.badge?.position.set(betX + bannerW + 8, stripY + 8);
+        this.stats.visible = L.showStats;
+        this.stats.position.set(L.stats.x, L.stats.y);
+        this.stats.setScale$(L.scale);
 
-        // 座位擠在膠囊右邊那一段
-        const seatsX = betX + bannerW + 100;
-        this.placeSeatsRow(seatsX, betX + betW - seatsX, stripY, SEAT_H_COMPACT, true);
-
-        // ---- 牌區：頂列到座位列之間整片 ----
-        this.placeCards(top, stripY - top - 6, availW, 0);
+        this.more?.place(L.more.x, L.more.y, this.ctx?.screen.width ?? 0, this.ctx?.screen.height ?? 0, L.scale);
     }
 
-    /** 五張路並排成一條，各自是一個獨立的捲動視窗。 */
-    private placeRoadStrip(availW: number, y: number, roadH: number): void {
-        const cell = roadH / ROAD_ROWS;
-        const gapX = 6;
-        const pad = 6;
-        // 珠盤與衍生路給固定的可視欄數，剩下的寬度全給大路——它是看的人最常盯著的那張，
-        // 也是唯一會長到幾十欄的。看不到的部分往旁邊捲
-        const beadW = 6 * cell;
-        const derivedW = 7 * cell;
-        // 兩側的留白要**先扣掉再分**。只在定位時用 `max(pad, …)` 補左邊距的話，
-        // 這一排的總寬仍然是整個 availW，右緣就會頂出去壓到面板
-        const bigW = Math.max(8 * cell, availW - pad * 2 - beadW - derivedW * 3 - gapX * 4);
+    /** 五個注區：三個小的一排、莊閒兩個大的一排。 */
+    private placeBets(bets: TableLayout['bets']): void {
+        const { x, width, gap } = bets;
+        const third = (width - gap * 2) / 3;
+        this.place('playerPair', x, bets.smallY, third, bets.smallH);
+        this.place('tie', x + third + gap, bets.smallY, third, bets.smallH);
+        this.place('bankerPair', x + (third + gap) * 2, bets.smallY, third, bets.smallH);
 
-        let x = Math.max(pad, (availW - (beadW + bigW + derivedW * 3 + gapX * 4)) / 2);
-        const put = (road: ScrollableRoad, width: number): void => {
-            road.setViewport(cell, width, roadH);
-            road.position.set(x, y);
-            x += width + gapX;
-        };
-        put(this.roads.bead, beadW);
-        put(this.roads.big, bigW);
-        put(this.roads.bigEye, derivedW);
-        put(this.roads.small, derivedW);
-        put(this.roads.cockroach, derivedW);
+        const half = (width - gap) / 2;
+        this.place('player', x, bets.bigY, half, bets.bigH);
+        this.place('banker', x + half + gap, bets.bigY, half, bets.bigH);
     }
 
-    /** 五個注區：三個小的一排、莊閒兩個大的一排。兩套版面共用。 */
-    private placeBets(x: number, betW: number, smallY: number, bigY: number, smallH: number, bigH: number, gap: number): void {
-        const third = (betW - gap * 2) / 3;
-        this.place('playerPair', x, smallY, third, smallH);
-        this.place('tie', x + third + gap, smallY, third, smallH);
-        this.place('bankerPair', x + (third + gap) * 2, smallY, third, smallH);
-
-        const half = (betW - gap) / 2;
-        this.place('player', x, bigY, half, bigH);
-        this.place('banker', x + half + gap, bigY, half, bigH);
-    }
-
-    /**
-     * 座位排成一列。窄畫面與橫放走這條。
-     *
-     * 六張椅子**平均分佈在整條寬度上**而不是靠攏在中間：靠攏的話它們會跟正中央的牌
-     * 疊在一起，而分開之後左右兩端的椅子剛好落在牌的兩側，還是有一點「圍著桌子」的感覺。
-     */
-    private placeSeatsRow(x: number, width: number, y: number, seatH: number, compact: boolean): void {
-        const count = this.seatViews.length;
-        const slot = width / count;
-        for (let i = 0; i < count; i++) {
-            const view = this.seatViews[i];
-            view.setSeatSize(Math.min(slot * 0.86, compact ? 72 : 80), compact);
-            view.position.set(x + slot * (i + 0.5), y + seatH * 0.42);
-        }
-    }
-
-    /**
-     * 座位分左右兩排夾住牌區——**真正的「環繞」只在寬螢幕上成立**。
-     *
-     * 左三右三、上下錯開，中間留給牌。錯開是為了讓三張椅子看起來像沿著桌沿排列，
-     * 而不是釘在一條直線上。
-     */
-    private placeSeatsFlanking(w: number, top: number, space: number): void {
-        const seatW = 84;
-        const step = Math.min(84, space / 3);
-        const startY = top + (space - step * 2) / 2;
-
+    /** 六張椅子照版面給的座標擺。左三右三或一列橫排的決定在 tableLayout 裡 */
+    private placeSeats(L: TableLayout): void {
         for (let i = 0; i < this.seatViews.length; i++) {
-            const view = this.seatViews[i];
-            const left = i < 3;
-            const row = left ? i : i - 3;
-            view.setSeatSize(seatW, false);
-            // 中間那張往外推一點，三張連起來是一條弧而不是一條線
-            const bulge = row === 1 ? 14 : 0;
-            const x = left ? 54 - bulge : w - 54 + bulge;
-            view.position.set(x, startY + step * row);
+            const at = L.seats[i];
+            if (!at) continue;
+            // 手機橫放整列不畫——**藏的是頭像不是座位**，籌碼照樣從這個座標飛出來
+            this.seatViews[i].visible = L.showSeats;
+            this.seatViews[i].setSeatSize(L.seatSize, L.seatCompact);
+            this.seatViews[i].position.set(at.x, at.y);
         }
     }
 
     /**
-     * 牌區：算牌多大、莊閒兩堆擺哪、點數標在哪。兩套版面共用。
+     * 牌區：算牌多大、莊閒兩堆擺哪、點數標在哪。
      *
-     * `space` 是這塊區域的高度，`availW` 是扣掉右側面板之後的可用寬度，
-     * `sideInset` 是左右各要讓開多少（有側邊座位時才不是 0）。
+     * 牌寬取三個上限裡最小的：
+     *
+     * 1. `CARD_MAX_W` —— 牌面是烘出來的貼圖，再放大只會糊。
+     * 2. 垂直：要塞得下三段——上方的橫放補牌（1.1 倍牌寬）、原牌本身（1.4 倍牌寬）、
+     *    底下的點數。點數的字級是固定的，所以先扣掉再除；按比例算的話，牌一小就會
+     *    替一行固定高度的字保留過多空間，牌又更小。
+     * 3. 橫向：莊閒兩堆各偏離中線 1.85 倍牌寬，一堆本身寬 1.12 倍，合計 4.82 倍，
+     *    留一成的邊 → 約 stage.w * 0.19。
      */
-    private placeCards(top: number, space: number, availW: number, sideInset: number): void {
-        const usableW = availW - sideInset * 2;
-
-        // 牌寬取三個上限裡最小的：
-        //
-        // 1. 76 —— 牌面是烘出來的貼圖，再放大只會糊。
-        // 2. 垂直：要塞得下三段——上方的橫放補牌（1.1 倍牌寬）、原牌本身（1.4 倍牌寬）、
-        //    底下的點數。點數的字級是固定的，所以先扣掉再除；按比例算的話，牌一小就會
-        //    替一行固定高度的字保留過多空間，牌又更小。
-        // 3. 橫向：莊閒兩堆各偏離中線 1.85 倍牌寬，一堆本身寬 1.12 倍，合計 4.82 倍，
-        //    留一成的邊 → 約 usableW * 0.19。
-        this.cardW = Math.max(40, Math.min(76, (space - TOTAL_LABEL_H) / 2.5, usableW * 0.19));
+    private placeCards(stage: Rect): void {
+        this.cardW = Math.max(40, Math.min(CARD_MAX_W, (stage.h - TOTAL_LABEL_H) / 2.5, stage.w * 0.19));
 
         // 牌組（補牌 + 原牌）總高 2.5 倍牌寬，剩下的空間上下平分；
         // 牌的中心在補牌那段之下 1.8 倍處。不能直接取牌區正中間——
         // 上方要放補牌、下方只放一行點數，兩邊需求不對稱
-        const slack = Math.max(0, space - TOTAL_LABEL_H - this.cardW * 2.5);
-        const centreY = top + slack / 2 + this.cardW * 1.8;
+        const slack = Math.max(0, stage.h - TOTAL_LABEL_H - this.cardW * 2.5);
+        const centreX = stage.x + stage.w / 2;
+        const centreY = stage.y + slack / 2 + this.cardW * 1.8;
         this.sideAt = {
-            player: { x: availW / 2 - this.cardW * 1.85, y: centreY },
-            banker: { x: availW / 2 + this.cardW * 1.85, y: centreY },
+            player: { x: centreX - this.cardW * 1.85, y: centreY },
+            banker: { x: centreX + this.cardW * 1.85, y: centreY },
         };
 
-        // 牌靴在右上角，牌從那裡發出來
-        this.shoeAt = { x: availW - 40, y: top + 10 };
+        this.feltLayer.place(this.sideAt.player, this.sideAt.banker, this.cardW);
+
+        // 牌靴在中央區右上角，牌從那裡發出來
+        this.shoeAt = { x: stage.x + stage.w - 40, y: stage.y + 10 };
 
         if (this.playerTotal) this.playerTotal.position.set(this.sideAt.player.x, centreY + this.cardW * 0.95);
         if (this.bankerTotal) this.bankerTotal.position.set(this.sideAt.banker.x, centreY + this.cardW * 0.95);

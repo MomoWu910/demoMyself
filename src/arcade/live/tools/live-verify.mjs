@@ -100,7 +100,10 @@ console.log('\n== 桌況跟畫面對得上 ==');
 //
 // 前後各算一次：讀畫面要花時間，跨到下一階段的那一瞬間比對必定失敗，
 // 而那是取樣的問題不是對齊的問題
-const PHASE_TEXT = { betting: 'Place your bets', dealing: 'Dealing', result: 'Paying out', clearing: 'Clearing table' };
+//
+// 狀態一律從 `window.__TABLE__()` 讀，不從 DOM。桌台的介面在這一版整組搬進了畫布
+// （見 games/baccaratLive/index.ts 的 buildDeck），`.table-status` 與 `.stat` 都不存在了——
+// 而遍歷場景樹用文字比對會綁死在語言上，換個語系整支腳本就掛
 const cmp = await page.evaluate(async () => {
     const cues = await (await fetch('public/live/table01/cues.json')).json();
     const ROUND = 22;
@@ -116,24 +119,21 @@ const cmp = await page.evaluate(async () => {
         };
     };
     const before = phaseNow();
-    const status = document.querySelector('.table-status')?.textContent ?? '';
-    const readouts = [...document.querySelectorAll('.stat')].map((el) => el.textContent);
+    const table = window.__TABLE__?.() ?? null;
     const after = phaseNow();
-    return { before, after, status, readouts };
+    return { before, after, phase: table?.phase ?? null, latency: table?.stats?.latency ?? 0 };
 });
 console.log('   cues 算出來的真相:', JSON.stringify(cmp.before), '→', JSON.stringify(cmp.after));
-console.log('   面板顯示:', JSON.stringify(cmp.status), JSON.stringify(cmp.readouts));
+console.log('   桌台狀態:', JSON.stringify({ phase: cmp.phase, latency: cmp.latency }));
 if (cmp.before.phase === cmp.after.phase) {
-    ok(`階段對得上（cues 說 ${cmp.before.phase}）`, cmp.status.includes(PHASE_TEXT[cmp.before.phase]),
-        `(面板顯示 ${JSON.stringify(cmp.status)})`);
+    ok(`階段對得上（cues 說 ${cmp.before.phase}）`, cmp.phase === cmp.before.phase,
+        `(桌台說 ${JSON.stringify(cmp.phase)})`);
 } else {
     // 剛好跨界。這不是失敗，但也不算驗過——記一筆讓人知道這一輪沒驗到
     console.log('   （取樣時跨階段，這一項跳過）');
 }
 
-const shown = { readouts: cmp.readouts };
-const latencyText = shown.readouts.find(r => r.includes('s')) ?? '';
-const latency = Number((latencyText.match(/([\d.]+)s/) ?? [])[1]);
+const latency = cmp.latency;
 console.log(`   延遲讀數: ${latency}s`);
 // 門檻取 DEFAULT_CATCH_UP.catchUpAt（2.5），也就是「開始追趕」那條線——超過它才代表
 // 沒維持住設計的延遲。原本寫 2 比設計值還嚴：實測 2.02 落在 target(1.5)~catchUpAt(2.5)
@@ -182,75 +182,107 @@ ok(`注區畫出來了（找到 ${spotCount} / 3 個可辨識的）`, spotCount 
 // 等一個還有幾秒可用的下注期。門檻不能太高：下注期 11 秒，等「還剩 5 秒以上」
 // 每局只有 6 秒的窗口，跟 6 秒的進桌等待撞在一起時會整輪錯過
 await page.waitForFunction(() => {
-    const el = document.querySelector('.table-status .clock');
-    return el && Number(el.textContent) >= 4;
+    const t = window.__TABLE__?.();
+    return t && t.phase === 'betting' && t.secondsLeft >= 4;
 }, null, { timeout: 45000 });
 
-const readAt = (i) => page.evaluate((n) => {
-    const list = [...document.querySelectorAll('.stat')].map((el) => el.textContent);
-    return list[n] ?? '';
-}, i);
+const myTotal = () => page.evaluate(() => window.__TABLE__?.().myTotal ?? -1);
+const lastNet = () => page.evaluate(() => {
+    const t = window.__TABLE__?.();
+    return t?.played ? t.lastNet : null;
+});
 
-// 讀數的順序在 ui/LivePanel.tsx 裡：延遲、緩衝、倍速、卡頓、**本局押注**、**上一局**、局數
-const BET_IDX = 4, NET_IDX = 5;
-const betBefore = await readAt(BET_IDX);
+const betBefore = await myTotal();
 const player = await page.evaluate(() => window.__spotRect('1 : 1'));
 await page.mouse.click(player.x + player.w / 2, player.y + player.h / 2);
 await wait(900);
-const betAfter = await readAt(BET_IDX);
-console.log(`   本局押注: ${JSON.stringify(betBefore)} → ${JSON.stringify(betAfter)}`);
-ok('點閒家注區押得進去（本局押注變成預設面額 100）', /(^|\D)100(\D|$)/.test(betAfter) && betBefore !== betAfter);
+const betAfter = await myTotal();
+console.log(`   本局押注: ${betBefore} → ${betAfter}`);
+ok('點閒家注區押得進去（本局押注變成預設面額 100）', betAfter === betBefore + 100);
 
 // 截止之後再點一次：**押出去不能撤，沒押進去也不能補**。server 認的是畫面的時間
-await page.waitForFunction(() => document.querySelector('.table-status .clock') == null,
-    null, { timeout: 45000 });
-const lockedBefore = await readAt(BET_IDX);
+await page.waitForFunction(() => window.__TABLE__?.().phase !== 'betting', null, { timeout: 45000 });
+const lockedBefore = await myTotal();
 await page.mouse.click(player.x + player.w / 2, player.y + player.h / 2);
 await wait(900);
-const lockedAfter = await readAt(BET_IDX);
+const lockedAfter = await myTotal();
 ok('停止下注之後點不進去（金額沒變）', lockedBefore === lockedAfter, `(${lockedBefore} → ${lockedAfter})`);
 await page.screenshot({ path: `${SHOTS}/02b-bet.png` });
 
 // 結算。牌在影片裡翻完才會送 settle，所以這裡要等的是**畫面**演到結果那一刻
-await page.waitForFunction(() => {
-    const list = [...document.querySelectorAll('.stat')].map((el) => el.textContent);
-    return list[5] && !list[5].includes('—');
-}, null, { timeout: 45000 });
-const net = await readAt(NET_IDX);
-console.log(`   上一局輸贏: ${JSON.stringify(net)}`);
-ok('結算有算到我頭上（上一局不再是破折號）', !net.includes('—'));
+await page.waitForFunction(() => window.__TABLE__?.().played === true, null, { timeout: 45000 });
+const net = await lastNet();
+console.log(`   上一局輸贏: ${net}`);
+ok('結算有算到我頭上（上一局有數字了）', net !== null);
 
 const balanceMoved = await page.evaluate(() => window.__ARCADE__ != null);
 ok('結算走完沒把桌台弄掉', balanceMoved);
 
 console.log('\n== 切到公開真 live ==');
-const segBtns = await page.$$('.seg');
-console.log(`   找到 ${segBtns.length} 顆線路按鈕`);
-if (segBtns.length >= 2) {
-    await segBtns[1].click();
+// 線路切換這一版收進了右上角的「更多」（見 games/baccaratLive/index.ts 的 menuSections），
+// 所以要先把選單點開。按鈕在畫布裡，用文字找節點再點它的中心——跟注區同一招
+await page.evaluate(() => {
+    // **只找看得見的**。收起來的選單裡那些按鈕仍然在場景樹上，`getBounds()` 也照樣
+    // 回傳座標——照著點會點在一片空白上，然後整段驗證靜靜地驗了個寂寞
+    const shown = (node) => {
+        for (let n = node; n; n = n.parent) if (!n.visible) return false;
+        return true;
+    };
+    window.__nodeAt = (text) => {
+        const hit = (node) => {
+            if (node.children?.some((c) => c.text === text) && shown(node)) return node;
+            for (const c of node.children ?? []) { const r = hit(c); if (r) return r; }
+            return null;
+        };
+        const found = hit(window.__PIXI_APP__.stage);
+        if (!found) return null;
+        const b = found.getBounds();
+        return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    };
+});
+// 那顆鈕現在是齒輪，沒有看得見的文字——改用場景樹上的 `label` 找它
+const moreAt = await page.evaluate(() => {
+    const hit = (n) => { if (n.label === 'more-menu') return n; for (const c of n.children ?? []) { const r = hit(c); if (r) return r; } return null; };
+    const menu = hit(window.__PIXI_APP__.stage);
+    if (!menu) return null;
+    const b = menu.children[0].getBounds();
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+});
+ok('找得到設置鈕', moreAt != null);
+if (moreAt) {
+    await page.mouse.click(moreAt.x, moreAt.y);
+    await wait(700);
+    await page.screenshot({ path: `${SHOTS}/03a-menu.png` });
+}
+const segAt = await page.evaluate(() => window.__nodeAt('Public live'));
+console.log('   線路按鈕:', JSON.stringify(segAt));
+if (segAt) {
+    await page.mouse.click(segAt.x, segAt.y);
     await wait(9000);
     const pub = await page.evaluate(() => {
         const v = document.querySelector('video');
-        return {
-            readouts: [...document.querySelectorAll('.stat')].map(el => el.textContent),
-            w: v?.videoWidth ?? 0, h: v?.videoHeight ?? 0, ct: v?.currentTime ?? 0,
-        };
+        const t = window.__TABLE__?.();
+        return { latency: t?.stats?.latency ?? 0, source: t?.source ?? null,
+                 w: v?.videoWidth ?? 0, h: v?.videoHeight ?? 0, ct: v?.currentTime ?? 0 };
     });
     console.log('   公開直播:', JSON.stringify(pub));
     await page.screenshot({ path: `${SHOTS}/03-public.png` });
     ok('切過去有拿到影像', pub.w > 0 && pub.h > 0, `(${pub.w}×${pub.h})`);
-    const pubLat = Number(((pub.readouts.find(r => r.includes('s')) ?? '').match(/([\d.]+)s/) ?? [])[1]);
-    console.log(`   公開直播延遲 ${pubLat}s vs 自製流 ${latency}s`);
-    ok(`公開 HLS 的延遲明顯較高（${pubLat}s > ${latency}s）`, pubLat > latency);
+    ok(`公開 HLS 的延遲明顯較高（${pub.latency}s > ${latency}s）`, pub.latency > latency);
 
-    // 延遲大到會吃掉下注時間時，面板要明講。沒有這行字的話，玩家看到的是
-    // 倒數還有十秒但注區按不動——那看起來就只是壞了
+    // 延遲大到會吃掉下注時間時，畫面要明講。沒有這行字的話，玩家看到的是
+    // 倒數還有十秒但注區按不動——那看起來就只是壞了。
+    // 這一版那行字疊在視訊上（lagText），是 Pixi 的 Text
     const warned = await page.evaluate(() => {
-        const el = document.querySelector('.table-status');
-        return el ? el.textContent : '';
+        const out = [];
+        const walk = (n) => { if (typeof n.text === 'string' && n.visible && n.text.length > 4) out.push(n.text);
+                              for (const c of n.children ?? []) walk(c); };
+        walk(window.__PIXI_APP__.stage);
+        return out;
     });
-    console.log('   下注列顯示:', JSON.stringify(warned));
-    ok('面板講出畫面落後幾秒', /\d+(\.\d+)?/.test(warned) && warned.length > 4);
+    const lagLine = warned.find((t) => /\d+(\.\d+)?\s*s/.test(t) && t.length > 8) ?? '';
+    console.log('   畫面上的落後提示:', JSON.stringify(lagLine));
+    ok('畫面講出落後幾秒', lagLine.length > 8);
 } else {
     ok('找得到線路切換按鈕', false);
 }

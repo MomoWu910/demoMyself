@@ -421,8 +421,9 @@ button.back { cursor: pointer; font-weight: inherit; }
     left: 50%;
     transform: translateX(-50%);
     bottom: calc(max(18px, env(safe-area-inset-bottom)) * var(--ui-scale));
-    /* 760 而不是 680：百家樂的讀數比老虎機多兩欄（本局押注、牌靴），680 的中間欄
-       擠到讓五顆籌碼換行——換行後那一列會長高，canvas 那側就得多讓一截出來。
+    /* 760 是量出來的：這塊面板現在只剩老虎機在用（兩張百家樂桌台的介面搬進了畫布，
+       見 games/baccarat/index.ts 的 buildDeck），而老虎機的讀數加上五顆籌碼在 680 會換行——
+       換行後那一列會長高，canvas 那側就得多讓一截出來。
        面板整組跟著 --ui-scale 放大：**高度是實測回報給 canvas 的**（見 Hud.tsx 的
        useDockMeasure），所以放大之後盤面會自己讓位，不必在兩邊各維護一份數字 */
     width: calc(min(760px, calc(100vw - 32px)) * var(--ui-scale));
@@ -442,63 +443,6 @@ button.back { cursor: pointer; font-weight: inherit; }
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
-}
-
-/* 視訊桌台的讀數多兩欄（串流四個 + 下注兩個）。760 會把籌碼擠成直排，
-   而那一欄一直排整塊面板就長高一百多 px（見 Hud.tsx 的場景 class） */
-.dock--baccaratLive { width: calc(min(1040px, calc(100vw - 32px)) * var(--ui-scale)); }
-
-/*
- * 分段控制項自己一列。目前只有視訊桌台的線路切換用得到——**沒有內容時這一列會自己
- * 塌成 0 高**，所以其他玩法的面板一點都沒變。
- *
- * 它需要一個具名區域的理由很實際：面板的 grid 只有 readouts / bet / spin 三塊，
- * 沒有 grid-area 的元素會被自動排到最後一行，也就是說明抽屜的底下——而這是這一頁
- * 最值得按的一顆按鈕。塞進 bet 那一欄也不行：那一欄是 auto 寬度，多塞東西會把
- * 五顆籌碼擠成直排，整塊面板跟著長高一百多 px。
- */
-.control-group {
-    grid-area: controls;
-    display: flex;
-    align-items: center;
-    gap: calc(10px * var(--ui-scale));
-    flex-wrap: wrap;
-}
-
-.group-label {
-    font-family: var(--mono);
-    font-size: calc(0.6rem * var(--ui-scale));
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-}
-
-/* 兩個互斥選項連成一條，中間只有一道分隔線——**它們是同一個開關的兩端**，
-   做成兩顆分開的按鈕會看起來像兩個獨立的動作 */
-.segmented {
-    display: flex;
-    border: 1px solid var(--border);
-    border-radius: calc(8px * var(--ui-scale));
-    overflow: hidden;
-}
-
-.seg {
-    font-family: var(--mono);
-    font-size: calc(0.68rem * var(--ui-scale));
-    letter-spacing: 0.06em;
-    padding: calc(6px * var(--ui-scale)) calc(14px * var(--ui-scale));
-    border: none;
-    border-right: 1px solid var(--border);
-    background: var(--well);
-    color: var(--muted);
-    cursor: pointer;
-    transition: background 140ms ease, color 140ms ease;
-}
-.seg:last-child { border-right: none; }
-.seg:hover { color: var(--text); }
-.seg.on {
-    background: color-mix(in srgb, var(--gold) 22%, transparent);
-    color: var(--gold-bright);
 }
 
 /* wrap 是必要的而不是保險：讀數的欄數由玩法決定（視訊桌台有六欄），
@@ -562,8 +506,8 @@ button.back { cursor: pointer; font-weight: inherit; }
     font-weight: 700;
 }
 .chip:disabled { opacity: 0.4; cursor: not-allowed; }
-/* 清除／重複：跟籌碼面額同一區塊，但它們是**動作**不是「選一個」，永遠不會有 .on 狀態。
-   虛線邊框把這個差別講出來，省下一個標籤的高度（見 BaccaratPanel 的 BetControls） */
+/* 動作類的 chip（不是「選一個」的那種），永遠不會有 .on 狀態。
+   虛線邊框把這個差別講出來，省下一個標籤的高度 */
 .chip.ghost { border-style: dashed; }
 
 .spin {
@@ -594,51 +538,6 @@ button.back { cursor: pointer; font-weight: inherit; }
     opacity: 0.5;
     cursor: not-allowed;
     box-shadow: none;
-}
-
-/*
- * 多人桌的階段儀表——**站在原本發牌按鈕的位置上**。
- *
- * 刻意長得不像按鈕：沒有金色漸層、沒有 hover、沒有陰影。那個位置在老虎機與單機版
- * 百家樂上都是「按這裡」，所以這裡最重要的事是讓人一眼看出**這個不能按**，
- * 否則玩家會一直戳它，然後以為桌子壞了。
- */
-.table-status {
-    grid-area: spin;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: calc(10px * var(--ui-scale));
-    padding: calc(12px * var(--ui-scale)) calc(20px * var(--ui-scale));
-    border-radius: calc(12px * var(--ui-scale));
-    border: 1px solid var(--border);
-    background: var(--well);
-    /* 倒數每秒換一個數字，寬度會跳。等寬數字讓整塊儀表定住 */
-    font-variant-numeric: tabular-nums;
-}
-.table-status .cap { color: var(--muted); }
-.table-status .clock {
-    font-family: var(--mono);
-    font-size: calc(1.5rem * var(--ui-scale));
-    font-weight: 700;
-    line-height: 1;
-    color: var(--gold-bright);
-}
-/* 最後五秒。跟 canvas 裡那顆膠囊同一個門檻，兩邊要一起變才不會互相矛盾 */
-.table-status.urgent {
-    border-color: color-mix(in srgb, var(--hot) 60%, transparent);
-}
-.table-status.urgent .clock {
-    color: var(--hot);
-    animation: table-urgent 1s ease-in-out infinite;
-}
-@keyframes table-urgent {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.12); }
-}
-/* 會動的東西要尊重系統設定。倒數靠顏色仍然讀得出來，脈動只是加強 */
-@media (prefers-reduced-motion: reduce) {
-    .table-status.urgent .clock { animation: none; }
 }
 
 .note {
@@ -738,7 +637,6 @@ button.back { cursor: pointer; font-weight: inherit; }
     }
     .readouts { justify-content: space-between; gap: 10px; }
     .spin { width: 100%; padding: 13px; font-size: 0.9rem; }
-    .table-status { width: 100%; padding: 10px 16px; }
 }
 
 /*
@@ -770,20 +668,13 @@ button.back { cursor: pointer; font-weight: inherit; }
     }
 
     /* DOM 順序是 readouts → bet → spin → 抽屜，視覺要的是 SPIN 在最底，所以重排。
-       沒有 order 的東西預設是 0，會排到所有人前面——線路切換一度就這樣跑到面板最上面去 */
+       沒有 order 的東西預設是 0，會排到所有人前面 */
     .readouts { order: 1; }
     .bet { order: 2; }
-    .control-group { order: 3; }
     .drawer, .options { order: 4; }
     .spin { order: 5; }
-    .table-status { order: 5; }
 
-    /* 這一欄只有 170~208px 寬，分段控制項的字要跟著收才不會換行成兩層 */
-    .control-group { flex-direction: column; align-items: stretch; gap: 4px; }
-    .seg { padding: 5px 8px; font-size: 0.62rem; flex: 1; }
-
-    /* 讀數改兩欄：直排四個（百家樂的餘額／本局／上局／牌靴）會吃掉 144px，
-       這個高度下那是整面板的四成 */
+    /* 讀數改兩欄：直排四個會吃掉 144px，這個高度下那是整面板的四成 */
     .readouts {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -826,8 +717,6 @@ button.back { cursor: pointer; font-weight: inherit; }
     }
 
     .spin { width: 100%; padding: 11px; font-size: 0.86rem; }
-    .table-status { width: 100%; padding: 8px 14px; }
-    .table-status .clock { font-size: 1.2rem; }
     .drawer-toggle { padding: 5px 10px; }
     .cap { font-size: 0.55rem; }
     .val { font-size: 0.92rem; }

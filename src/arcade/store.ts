@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { CHIP_SLOTS, CHIP_VALUES, DEFAULT_CHIP_SET, type ChipValue } from './common/chips/atlas';
 import type { DisposeReport, ModuleId } from './core/module';
 import type { SocketState } from './net/fakeSocket';
 import type { LobbyTab } from './lobby/catalog';
@@ -42,6 +43,17 @@ export interface ArcadeState {
      * 頭像就只是裝飾；記得住才像個帳號。
      */
     player: { name: string; tint: string };
+
+    /**
+     * 玩家挑出來擺在桌邊的那五個面額（由小到大）。
+     *
+     * 放在**外殼** store 而不是某一張桌子的 store，理由跟餘額一樣：它屬於這個人，
+     * 不屬於這張桌。從數位百家樂換到視訊桌台時，手邊的籌碼不該被換掉。
+     *
+     * 跟著存進 localStorage——籌碼設置是那種「調一次用很久」的偏好，每次進站重設等於
+     * 那個設置畫面白做（見 loadChipSet）。
+     */
+    chipSet: ChipValue[];
 
     /** 目前掛著的是哪一個模組（含大廳）。HUD 靠它決定要掛哪一組面板。 */
     scene: ModuleId | null;
@@ -105,6 +117,8 @@ export interface ArcadeState {
     setError: (msg: string | null) => void;
     setNotice: (key: string | null) => void;
     setScene: (s: ModuleId | null) => void;
+    /** 換掉手邊的籌碼。傳進來的順序不重要，這裡會排好並存檔 */
+    setChipSet: (values: ChipValue[]) => void;
     setLobbyTab: (tab: LobbyTab) => void;
     /** 記一次卸載的結果，並把該場景的對照值更新成這次的數字。 */
     recordDispose: (scene: ModuleId, report: DisposeReport) => void;
@@ -146,12 +160,41 @@ function loadPlayer(): { name: string; tint: string } {
     return player;
 }
 
+const CHIP_SET_KEY = 'arcade.chipSet';
+
+/**
+ * 讀回上次挑的籌碼。
+ *
+ * 每一筆都要**驗證是不是還在面額池裡**，不是讀到陣列就照用：池子會改（這一版就從
+ * 五種擴到十種），而 localStorage 裡躺著的是上一版的資料。存著一個已經不存在的面額，
+ * 桌邊就會出現一顆沒有貼圖的籌碼——那種錯不會丟例外，只會靜靜地少畫一顆。
+ */
+function loadChipSet(): ChipValue[] {
+    try {
+        const raw = window.localStorage.getItem(CHIP_SET_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw) as unknown;
+            if (Array.isArray(parsed)) {
+                const valid = parsed.filter((v): v is ChipValue => CHIP_VALUES.includes(v as ChipValue));
+                // 去重之後還要夠五顆才算數。少了就整組退回預設——補齊會補出一組
+                // 玩家沒挑過的組合，比直接給他認得的那五顆更費解
+                const unique = [...new Set(valid)];
+                if (unique.length === CHIP_SLOTS) return unique.sort((a, b) => a - b);
+            }
+        }
+    } catch {
+        /* 讀不到就用預設那五顆 */
+    }
+    return [...DEFAULT_CHIP_SET];
+}
+
 export const useArcadeStore = create<ArcadeState>((set) => ({
     connection: 'connecting',
     balance: 0,
     error: null,
     notice: null,
     player: loadPlayer(),
+    chipSet: loadChipSet(),
     lobbyTab: 'all',
     scene: null,
     lastDispose: null,
@@ -167,6 +210,15 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
     setError: (error) => set({ error, notice: null }),
     setNotice: (notice) => set({ notice, error: null }),
     setScene: (scene) => set({ scene }),
+    setChipSet: (values) => {
+        const chipSet = [...new Set(values)].sort((a, b) => a - b);
+        try {
+            window.localStorage.setItem(CHIP_SET_KEY, JSON.stringify(chipSet));
+        } catch {
+            /* 存不了也沒關係，這一輪還是換得動 */
+        }
+        set({ chipSet });
+    },
     setLobbyTab: (lobbyTab) => set({ lobbyTab }),
     recordDispose: (scene, report) =>
         set((s) => ({

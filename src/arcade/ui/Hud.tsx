@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useArcadeStore } from '../store';
 import { SlotControls, SlotOptions, SlotReadouts } from './SlotPanel';
-import { BaccaratControls, BaccaratOptions, BaccaratReadouts } from './BaccaratPanel';
-import { LiveControls, LiveOptions, LiveReadouts } from './LivePanel';
 import { useDockSide, useIsCompact } from './useIsCompact';
 import { LobbyChrome } from './LobbyChrome';
 import { TopBar } from './TopBar';
@@ -19,6 +17,10 @@ import { useT } from '../../i18n/useT';
  *
  * 底部面板留了兩個插槽——讀數與控制——由目前玩法填。殼不知道那些插槽裡是什麼，
  * 玩法也不知道自己被放在哪，兩邊只認 store 裡的 `scene`。
+ *
+ * **這塊面板現在只剩老虎機在用。** 兩張百家樂桌台把整組介面搬進了畫布——牌桌要在
+ * 同一個畫面裡排下路單、發牌區、注區與六個座位，而貼在畫面底的面板每長高一行，
+ * 盤面就少一行。轉軸沒有這個問題（它只需要中間一塊），所以它留在原地。
  */
 
 /**
@@ -59,6 +61,10 @@ function Toast() {
  * 用 switch 而不是查表，是為了讓 `GameId` 加一款而這裡忘了補時**編譯就失敗**——
  * 查表可以寫成 `map[game] ?? null`，漏了一款會靜默地顯示空面板，那種錯只有在
  * 手動點進去玩的時候才會發現。
+ *
+ * 目前只剩老虎機在用這三個插槽。兩張百家樂桌台把介面搬進了畫布——**桌上的東西
+ * 應該由桌子自己排版**，貼在畫面底的面板每長高一行，盤面就少一行，而那一頁最缺的
+ * 就是垂直空間（見 common/table/tableLayout.ts）。
  */
 function GameReadouts() {
     const scene = useArcadeStore((s) => s.scene);
@@ -66,9 +72,11 @@ function GameReadouts() {
         case 'slot':
             return <SlotReadouts />;
         case 'baccarat':
-            return <BaccaratReadouts />;
         case 'baccaratLive':
-            return <LiveReadouts />;
+            // 兩張百家樂桌台的介面**整組住在畫布裡**（見 games/baccarat/index.ts 的
+            // buildDeck）。留著 case 而不是從 switch 拿掉，是為了保持窮盡——
+            // 加第四款玩法時忘了處理會編譯就失敗
+            return null;
         case 'lobby':
         case null:
             return null;
@@ -81,9 +89,11 @@ function GameControls() {
         case 'slot':
             return <SlotControls />;
         case 'baccarat':
-            return <BaccaratControls />;
         case 'baccaratLive':
-            return <LiveControls />;
+            // 兩張百家樂桌台的介面**整組住在畫布裡**（見 games/baccarat/index.ts 的
+            // buildDeck）。留著 case 而不是從 switch 拿掉，是為了保持窮盡——
+            // 加第四款玩法時忘了處理會編譯就失敗
+            return null;
         case 'lobby':
         case null:
             return null;
@@ -97,9 +107,11 @@ function GameOptions() {
         case 'slot':
             return <SlotOptions />;
         case 'baccarat':
-            return <BaccaratOptions />;
         case 'baccaratLive':
-            return <LiveOptions />;
+            // 兩張百家樂桌台的介面**整組住在畫布裡**（見 games/baccarat/index.ts 的
+            // buildDeck）。留著 case 而不是從 switch 拿掉，是為了保持窮盡——
+            // 加第四款玩法時忘了處理會編譯就失敗
+            return null;
         case 'lobby':
         case null:
             return null;
@@ -181,27 +193,43 @@ function useDockMeasure(active: boolean, side: 'bottom' | 'right'): React.RefObj
     return ref;
 }
 
+/**
+ * 牌桌把語言切換收進了畫布裡那顆齒輪（見 games/baccarat/index.ts 的 menuSections），
+ * 所以要把 DOM 那顆藏起來——**兩顆同時在畫面上，第二顆就只是雜訊**。
+ *
+ * 直接操作 `#lang-slot` 而不是把它 React 化：那顆鈕是 i18n 模組建的，整站共用
+ * （見 i18n/index.ts 的 mountLangToggle），為了一頁的版面把它搬進 React 會讓其他六頁
+ * 跟著改。離開牌桌時要還原，所以清理寫在 effect 的 return 裡。
+ */
+function useHideLangToggle(hide: boolean): void {
+    useEffect(() => {
+        const el = document.getElementById('lang-slot');
+        if (!el || !hide) return;
+        el.style.display = 'none';
+        return () => {
+            el.style.display = '';
+        };
+    }, [hide]);
+}
+
 export function Hud() {
     const t = useT();
     const scene = useArcadeStore((s) => s.scene);
     const compact = useIsCompact();
     const side = useDockSide();
 
-    // 大廳不需要操作面板——那裡沒有東西可以操作，留著只會擋住機台卡片
+    // 大廳不需要操作面板——那裡沒有東西可以操作，留著只會擋住機台卡片。
+    // 兩張桌台也不需要：它們的介面在畫布裡（見上面 GameReadouts 的說明）
     const inGame = scene !== null && scene !== 'lobby';
-    const dockRef = useDockMeasure(inGame, side);
+    const atTable = scene === 'baccarat' || scene === 'baccaratLive';
+    const hasDock = inGame && !atTable;
+    const dockRef = useDockMeasure(hasDock, side);
+    useHideLangToggle(atTable);
 
     // 這一頁最該讓人知道的一件事，直接寫在面板上而不是藏在 README 裡。
     // 窄畫面它會跟著選項一起進抽屜——不是刪掉，是換個位置：那段話在 390 寬會換成九行，
     // 留在外面等於用 210px 的畫面去講一件玩家隨時可以展開來看的事
     const note = <p className="note">{t('arcade.serverNote')}</p>;
-
-    // 視訊桌台的說明**不管畫面多寬都收進抽屜**。
-    //
-    // 抽屜原本只是窄畫面的補救（見 OptionsDrawer），但這一頁在寬螢幕上一樣需要它：
-    // 它是整站最吃畫面高度的一頁——路圖、視訊、座位、兩列注區要在同一個畫面裡排下來，
-    // 而面板每高一行，畫布那側就少一行。說明是「想看才看」的東西，不該一直佔著位置。
-    const alwaysDrawer = scene === 'baccaratLive';
 
     return (
         <div className="hud">
@@ -212,12 +240,11 @@ export function Hud() {
             <Toast />
 
             {/*
-                面板帶一個場景 class，讓某一款玩法微調自己的尺寸。目前只有視訊桌台用到：
-                它的讀數比別款多兩欄（串流的四個 + 下注的兩個），760px 會把籌碼那一欄
-                擠成直排，而直排的五顆籌碼會把整塊面板撐高一百多 px——**面板每高一 px，
-                畫布那側就少一 px**，那正是這一頁最缺的東西
+                面板帶一個場景 class，讓某一款玩法微調自己的尺寸。現在只剩老虎機在用這塊
+                面板——兩張百家樂桌台把介面搬進了畫布，因為**面板每高一 px，畫布那側就少
+                一 px**，而那正是牌桌最缺的東西（見 common/table/tableLayout.ts）
             */}
-            {inGame && (
+            {hasDock && (
                 <footer className={`dock dock--${scene}`} ref={dockRef as React.RefObject<HTMLElement>}>
                     <div className="readouts">
                         <GameReadouts />
@@ -225,7 +252,7 @@ export function Hud() {
 
                     <GameControls />
 
-                    {compact || alwaysDrawer ? (
+                    {compact ? (
                         <OptionsDrawer>
                             <GameOptions />
                             {note}

@@ -3,12 +3,18 @@ import { Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { bakeChipAtlas, type ChipAtlas, type ChipValue } from '../../common/chips/atlas';
 import { BetSpotView } from '../../common/chips/BetSpotView';
 import { FlyingChips } from '../../common/chips/FlyingChips';
+import { placeRoads } from '../../common/roadmap/placeRoads';
 import { ScrollableRoad } from '../../common/roadmap/ScrollableRoad';
 import { PhaseBanner } from '../../common/table/PhaseBanner';
+import { computeTableLayout, type Rect, type TableLayout } from '../../common/table/tableLayout';
+import { ChipRail } from '../../common/ui/ChipRail';
+import { MoreMenu, type MenuSection } from '../../common/ui/MoreMenu';
+import { MySeat } from '../../common/ui/MySeat';
+import { StatStrip } from '../../common/ui/StatStrip';
+import { TableButton } from '../../common/ui/TableButton';
 import { createVideoLayer, type VideoLayer } from '../../common/video/VideoLayer';
 import { createSource, type SourceKind } from '../../common/video/sources';
 import type { VideoSource } from '../../common/video/types';
-import { topBarH, uiScale } from '../../core/layout';
 import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import { ONLINE_SEAT, type OtherBet, type SeatInfo } from '../../net/games/baccarat';
@@ -16,7 +22,7 @@ import type { BaccaratLiveS2C, LiveDealt } from '../../net/games/baccaratLive';
 import { BETTING_DURATION } from '../../live/schedule';
 import { arcadeState, useArcadeStore } from '../../store';
 import { BANKER, GOLD, IVORY, PLAYER, TIE } from '../../theme';
-import { onLangChange, t } from '../../../i18n';
+import { getLang, onLangChange, setLang, t, type Lang } from '../../../i18n';
 import { buildBigRoad } from '../baccarat/roadmap';
 import { beadMarks, bigRoadMarks, derivedMarks, ROAD_ROWS } from '../baccarat/roadView';
 import { OnlineBadge, SeatView } from '../baccarat/seatView';
@@ -68,25 +74,12 @@ const PANEL_MAX_W = 880;
 const PANEL_RATIO = 9 / 16;
 
 /**
- * 路圖區佔畫面高度的比例與上限、以及讓步的底線。
+ * 我自己的籌碼在飛幣層裡用哪個座位編號。
  *
- * 比例與底線沿用數位桌台——同一種桌子的路圖不該因為牌是拍的就變大或變小。
- * **只有上限降了一階（172 → 148）**，理由是中間那塊東西換了：牌被壓到 64px 寬
- * 還讀得出點數，640×360 的素材被壓到那個尺寸就只剩一片綠色。視訊比牌更吃面積，
- * 所以路圖在這一款要多讓一點。
+ * 跟數位桌台同一個道理與同一個數字（見 games/baccarat/index.ts 的 MY_SEAT）：不能跟
+ * 散客共用 `ONLINE_SEAT`，否則我贏的籌碼會飛去線上人數的膠囊上，而不是回到我的座位。
  */
-const ROAD_RATIO = 0.26;
-const ROAD_MAX = 148;
-const ROAD_MIN = 64;
-
-/** 手機橫放時路單那條的高度上限。橫放只有 390 高，每省 10px 視訊就寬 18px */
-const ROAD_MAX_LANDSCAPE = 60;
-
-/** 階段膠囊與座位列各要留多高。兩者都是固定字級，所以是常數 */
-const BANNER_H = 32;
-const SEAT_H = 84;
-/** 窄畫面只有頭像與名字，不留餘額那一行 */
-const SEAT_H_COMPACT = 38;
+const MY_SEAT = -2;
 
 /**
  * 桌面的疊法。視訊不在其中——**它沉在畫布底下**（見 common/video/VideoLayer.ts），
@@ -151,6 +144,16 @@ export class BaccaratLiveModule implements GameModule {
     private phaseBanner!: PhaseBanner;
     private onlineBadge!: OnlineBadge;
 
+    // ---- 改版後搬進畫布的那一組介面 ----
+    // 原本是 DOM 的操作面板（見 ui/LivePanel.tsx）。這一頁比數位桌台更需要搬：
+    // 它的面板多了四格串流讀數與一列線路切換，在 760px 寬會堆成三列、吃掉一百多 px，
+    // 而畫布那側正好是整站最缺高度的一頁
+    private chipRail: ChipRail | null = null;
+    private readonly mySeat = new MySeat();
+    private readonly stats = new StatStrip();
+    private more: MoreMenu | null = null;
+    private repeatBtn: TableButton | null = null;
+
     // ---- 疊在視訊上的那幾樣 ----
     private liveTag!: Text;
     private liveDot!: Graphics;
@@ -160,7 +163,7 @@ export class BaccaratLiveModule implements GameModule {
     /** 視訊佔的那塊矩形。疊層照它定位 */
     private rect = { x: 0, y: 0, w: 0, h: 0 };
 
-    /** 我沒有座位（是路過的），籌碼從操作面板那一側上來 */
+    /** 我自己的籌碼從哪裡飛出來。改版後這裡有我的座位了（見 mySeat） */
     private myOrigin = { x: 0, y: 0 };
     /** 輸掉的籌碼往這裡收 */
     private houseAt = { x: 0, y: 0 };
@@ -241,16 +244,62 @@ export class BaccaratLiveModule implements GameModule {
         liveState.set({ betHandler: (spot, amount) => this.sendBet(spot, amount) });
         ctx.onDispose(() => liveState.set({ betHandler: null }));
 
+        /**
+         * 驗證用的狀態入口，跟 `__ARCADE__` 與 `__PIXI_APP__` 同一個用途
+         * （見 core/stage.ts）。
+         *
+         * 這一版非有不可：桌台的介面整組搬進了畫布之後，**端對端腳本再也不能靠
+         * `document.querySelector` 讀狀態**——倒數、延遲、本局押注全都是 Pixi 的 Text，
+         * DOM 裡什麼都沒有。與其讓腳本去遍歷場景樹用文字比對（那會綁死在字串與語言上），
+         * 不如把權威來源直接開一個口（見 live/tools/live-verify.mjs）。
+         */
+        (globalThis as unknown as { __TABLE__?: () => unknown }).__TABLE__ = () => liveState.get();
+        ctx.onDispose(() => {
+            delete (globalThis as unknown as { __TABLE__?: () => unknown }).__TABLE__;
+        });
+
         this.watchSource(handlers);
 
-        // 面板長高／改貼右側就要重排。**它比第一次排版晚定案**——換語言、多一段說明
-        // 都會讓它變高，而那時候沒有 resize 事件可以搭便車
-        const unwatchDock = useArcadeStore.subscribe((now, prev) => {
-            if (now.dockInset !== prev.dockInset && !this.disposed) this.layout(this.size.w, this.size.h);
+        // ---- 桌況變了就更新讀數 ----
+        // 比對的是**會顯示出來的那幾個欄位**：`stats` 每 250ms 就寫一次，跟著整份 state
+        // 重畫的話讀數一秒重建四次；而延遲那一格本來就是要跟著它動的，所以它在名單裡
+        const unwatchTable = useLiveStore.subscribe((now, prev) => {
+            if (this.disposed) return;
+            if (
+                now.stats !== prev.stats ||
+                now.myTotal !== prev.myTotal ||
+                now.lastNet !== prev.lastNet ||
+                now.played !== prev.played ||
+                now.phase !== prev.phase ||
+                now.chip !== prev.chip ||
+                now.lastBets !== prev.lastBets
+            ) {
+                this.syncReadouts();
+            }
+            // 線路切換是選單裡的分段控制項，按下去要立刻換掉高亮的那一段
+            if (now.source !== prev.source) this.refreshMenu();
         });
-        ctx.onDispose(unwatchDock);
+        ctx.onDispose(unwatchTable);
 
-        ctx.frame(() => this.tick());
+        // ---- 餘額與籌碼設置 ----
+        const unwatchShell = useArcadeStore.subscribe((now, prev) => {
+            if (this.disposed) return;
+            if (now.balance !== prev.balance) this.mySeat.setBalance(now.balance);
+            if (now.chipSet !== prev.chipSet) {
+                this.chipRail?.setChips(now.chipSet);
+                this.refreshMenu();
+                this.alignChip();
+            }
+        });
+        ctx.onDispose(unwatchShell);
+
+        // 籌碼架的慣性也在這裡推——捲動器自己不碰 ticker，那是模組契約的要求
+        // （見 common/scroll/InertiaScroller.ts）
+        ctx.frame((ticker) => {
+            this.tick();
+            const dt = ticker.deltaMS / 1000;
+            this.chipRail?.update(dt);
+        });
         ctx.onResize((w, h) => {
             this.size = { w, h };
             this.layout(w, h);
@@ -264,6 +313,9 @@ export class BaccaratLiveModule implements GameModule {
             this.onlineBadge.stop();
             for (const view of this.spots.values()) view.stop();
             for (const seat of this.seatViews) seat.stop();
+            // gsap 的 tween 與捲動慣性都不在場景樹上，destroy 收不到它們
+            this.chipRail?.stop();
+            this.mySeat.stop();
             gsap.killTweensOf(this.liveDot);
             this.video?.destroy();
             this.video = null;
@@ -313,6 +365,165 @@ export class BaccaratLiveModule implements GameModule {
         this.uiLayer.addChild(this.phaseBanner, this.onlineBadge);
 
         this.buildVideoOverlay();
+        this.buildDeck();
+    }
+
+    /**
+     * 桌邊那一組介面：我的座位、籌碼架、重複下注、讀數、更多。
+     *
+     * 跟數位桌台同一套元件、同一個位置——**同一種桌子的介面不該因為牌是拍的就換一個
+     * 排法**。唯一不同的是更多選單裡多了兩區：串流讀數與線路切換。
+     */
+    private buildDeck(): void {
+        const shell = arcadeState();
+        this.mySeat.setPlayer(shell.player.name, shell.player.tint);
+        this.mySeat.setBalance(shell.balance);
+        this.uiLayer.addChild(this.mySeat, this.stats);
+
+        if (this.chips) {
+            this.chipRail = new ChipRail({
+                atlas: this.chips,
+                onPick: (value) => liveState.set({ chip: value }),
+            });
+            this.chipRail.setChips(shell.chipSet);
+            this.chipRail.setSelected(liveState.get().chip);
+            this.uiLayer.addChild(this.chipRail);
+
+            this.more = new MoreMenu({
+                atlas: this.chips,
+                onChipSetChange: (values) => arcadeState().setChipSet(values),
+            });
+            this.more.setChipSet(shell.chipSet);
+            this.uiLayer.addChild(this.more);
+        }
+
+        this.repeatBtn = new TableButton({
+            label: t('arcade.bac.repeat'),
+            variant: 'ghost',
+            onTap: () => this.repeatBets(),
+        });
+        this.uiLayer.addChild(this.repeatBtn);
+
+        this.refreshDeckLabels();
+        this.refreshMenu();
+        this.alignChip();
+        this.syncReadouts();
+    }
+
+    /** 重複上一局的注——一注一注重送，server 那邊就只認得單筆下注 */
+    private repeatBets(): void {
+        const st = liveState.get();
+        if (st.phase !== 'betting') {
+            arcadeState().setNotice('arcade.bac.betClosed');
+            return;
+        }
+        for (const spot of BET_SPOTS) {
+            const amount = st.lastBets[spot] ?? 0;
+            if (amount > 0) this.sendBet(spot, amount);
+        }
+    }
+
+    /**
+     * 讓選中的面額對齊手邊那五顆（見 games/baccarat/index.ts 的同名方法）。
+     */
+    private alignChip(): void {
+        const set = arcadeState().chipSet;
+        if (set.length === 0) return;
+        if (!set.includes(liveState.get().chip)) liveState.set({ chip: set[set.length - 1] });
+        this.chipRail?.setSelected(liveState.get().chip);
+    }
+
+    /**
+     * 左上那疊讀數。
+     *
+     * 只留三格：**延遲**、本局押注、上一局。延遲留在桌上而其餘三個串流讀數收進選單，
+     * 判準是「會不會影響下一手怎麼押」——延遲會（它決定畫面比實際慢多少），
+     * 緩衝與倍速是實作細節，倍速在追趕時才有意義，而那時候延遲那一格已經先變色了。
+     */
+    private syncReadouts(): void {
+        const st = liveState.get();
+        // 四秒是視訊桌台開始不能接受的線——下注只剩幾秒時，畫面慢四秒等於閉著眼睛押
+        const hot = st.stats.latency > 4;
+
+        this.stats.setStats([
+            { label: t('arcade.live.latency'), value: `${st.stats.latency.toFixed(2)}s`, hot },
+            { label: t('arcade.bac.totalBet'), value: st.myTotal.toLocaleString() },
+            {
+                label: t('arcade.bac.net'),
+                value: !st.played ? '—' : st.lastNet > 0 ? `+${st.lastNet.toLocaleString()}` : st.lastNet.toLocaleString(),
+                hot: st.played && st.lastNet > 0,
+            },
+        ]);
+
+        const betting = st.phase === 'betting';
+        this.chipRail?.setEnabled(betting);
+        this.chipRail?.setSelected(st.chip);
+        this.repeatBtn?.setEnabled(betting && Object.keys(st.lastBets).length > 0);
+    }
+
+    /** 重畫更多選單。跟讀數分開，因為兩者的更新頻率差三個數量級 */
+    private refreshMenu(): void {
+        this.more?.setSections(this.menuSections());
+        this.more?.setChipSet(arcadeState().chipSet);
+    }
+
+    /**
+     * 更多選單裡有什麼。
+     *
+     * 線路切換是這一頁最值得按的一顆按鈕——同一個儀表下，自己寫的那條是零點幾秒，
+     * 接真實 CDN 的 HLS 是好幾秒，而**那個差距就是視訊博弈不用 HLS 的全部理由**。
+     * 收進選單而不是留在桌上，是因為它一場只會按一兩次，而桌面上每一格都在跟
+     * 「這一手要押多少」競爭。
+     */
+    private menuSections(): MenuSection[] {
+        const st = liveState.get();
+        return [
+            {
+                kind: 'stats',
+                title: t('arcade.live.stream'),
+                stats: [
+                    { label: t('arcade.live.buffered'), value: `${st.stats.buffered.toFixed(1)}s` },
+                    { label: t('arcade.live.rate'), value: `${st.stats.playbackRate.toFixed(2)}×` },
+                    { label: t('arcade.live.stalls'), value: `${st.stats.stalls} / ${st.stats.jumps}` },
+                ],
+            },
+            {
+                kind: 'segmented',
+                title: t('arcade.live.source'),
+                options: [
+                    { key: 'dealer', label: t('arcade.live.sourceDealer') },
+                    { key: 'public', label: t('arcade.live.sourcePublic') },
+                ],
+                value: st.source,
+                // 只寫 store，不碰播放層。換來源要卸掉舊的那一條，那是資源生命週期的事
+                // （見 watchSource）
+                onPick: (key) => liveState.set({ source: key as SourceKind }),
+            },
+            { kind: 'chips', title: t('arcade.bac.chipSet'), hint: t('arcade.bac.chipSetHint') },
+            {
+                kind: 'segmented',
+                title: t('arcade.language'),
+                options: [
+                    { key: 'en', label: 'EN' },
+                    { key: 'zh', label: '中' },
+                ],
+                value: getLang(),
+                // 換語言會觸發 onLangChange，那裡會把整組介面重畫一次（含這張選單），
+                // 所以這裡不必自己重排
+                onPick: (key) => setLang(key as Lang),
+            },
+            { kind: 'note', text: t('arcade.live.caption') },
+        ];
+    }
+
+    private refreshDeckLabels(): void {
+        this.more?.setLabel(t('arcade.moreOptions'));
+        this.repeatBtn?.setLabel(t('arcade.bac.repeat'));
+    }
+
+    /** 把桌上的籌碼搬到注區的新位置。**每次重排都要叫**，不然它們會留在舊座標 */
+    private relayoutChips(): void {
+        this.chipLayer?.relayout((spot) => this.spots.get(spot as BetSpot)?.rect() ?? null);
     }
 
     /**
@@ -490,6 +701,9 @@ export class BaccaratLiveModule implements GameModule {
         for (const r of settle.seats) {
             if (r.seat !== ONLINE_SEAT) this.seatViews[r.seat]?.flashDelta(r.delta);
         }
+        // 我自己的那一份飄在我的座位上。改版前它只出現在底部面板的「上一局」，
+        // 而開牌那幾秒視線是釘在畫面上的
+        if (st.myTotal > 0) this.mySeat.flashDelta(net);
 
         // 籌碼回收：贏的飛回押注的人面前，輸的往上收給莊家
         this.chipLayer?.recycle(
@@ -530,7 +744,7 @@ export class BaccaratLiveModule implements GameModule {
             return;
         }
 
-        this.flyChip(nearestChip(amount), spot, ONLINE_SEAT, this.myOrigin, 0);
+        this.flyChip(nearestChip(amount), spot, MY_SEAT, this.myOrigin, 0);
         this.socket?.send({ type: 'bet', spot, amount });
     }
 
@@ -550,6 +764,9 @@ export class BaccaratLiveModule implements GameModule {
     private syncLabels(): void {
         for (const [spot, view] of this.spots) view.setLabels(t(`arcade.bac.${spot}`), oddsLabel(spot));
         this.syncPhase();
+        this.refreshDeckLabels();
+        this.refreshMenu();
+        this.syncReadouts();
     }
 
     private syncSeats(seats: SeatInfo[]): void {
@@ -613,6 +830,7 @@ export class BaccaratLiveModule implements GameModule {
 
     /** 某個座位的籌碼從哪裡飛出來。沒有座位的散客走線上人數膠囊（見 seatView.ts） */
     private originOf(seat: number): { x: number; y: number } | null {
+        if (seat === MY_SEAT) return this.myOrigin;
         if (seat === ONLINE_SEAT) return this.onlineBadge.originPoint();
         return this.seatViews[seat]?.originPoint() ?? null;
     }
@@ -660,165 +878,83 @@ export class BaccaratLiveModule implements GameModule {
     // ---- 版面 -------------------------------------------------------------
 
     /**
-     * 兩套版面，判準跟數位桌台**是同一組數字**——同一種桌子不該在同一個視窗尺寸下
-     * 一款換版、另一款不換。
+     * 整張桌子的排版。
+     *
+     * 跟數位桌台走**同一支** `computeTableLayout`——這是改版順手還掉的一筆債：兩張桌子
+     * 的版面本來就只差中間那一塊是什麼，卻各自維護了一份幾乎相同的排版程式，
+     * 改一個數字要改兩遍。現在這裡只剩「把算好的座標套上去」與「中間那塊是視訊」。
      */
     private layout(w: number, h: number): void {
-        if (h <= 560 && w >= h) this.layoutLandscape(w, h);
-        else this.layoutStacked(w, h);
-    }
+        const L = computeTableLayout(w, h);
 
-    /**
-     * 直式與桌面：路圖在上、**視訊在中**、座位與階段膠囊夾在中間、注區在下、面板貼底。
-     *
-     * 整個骨架跟數位桌台一模一樣，唯一換掉的是中間那一塊：那裡原本是 Pixi 畫的牌。
-     */
-    private layoutStacked(w: number, h: number): void {
-        // 「窄」與「矮」是**兩件不同的事**，各自要縮的東西也不同：窄要縮字與注區寬度，
-        // 矮要縮注區高度
-        const narrow = w < 760;
-        const short = h < 560;
-        const portrait = h > w * 1.15;
-
-        // ---- 下注區 ----
-        // **先算它**，因為它是唯一位置固定的一段：從畫面底往上長，只跟操作面板的高度有關
-        const betW = Math.min(w * 0.94, 720);
-        const betX = (w - betW) / 2;
-        const gap = 8;
-        const smallH = short ? 44 : 54;
-        const bigH = short ? 58 : 72;
-        // 讓開畫面下緣的操作面板。高度是 HUD 那側**實測**回報的（見 store 的 dockInset）
-        const dock = arcadeState().dockInset.bottom || (narrow ? 250 : 180);
-        const betBottom = h - dock - 10;
-        const bigY = betBottom - bigH;
-        const smallY = bigY - smallH - gap;
-
-        this.placeBets(betX, betW, smallY, bigY, smallH, bigH, gap);
-        this.chipPx = Math.max(15, Math.min(24, smallH * 0.42));
+        this.placeBets(L.bets);
+        this.chipPx = Math.max(15, Math.min(26, L.bets.smallH * 0.42));
         this.chipLayer?.setChipSize(this.chipPx);
         this.relayoutChips();
 
-        this.myOrigin = { x: w / 2, y: betBottom + 34 };
-        this.houseAt = { x: w / 2, y: smallY - 40 };
+        this.phaseBanner.setBoxSize(L.banner.w, L.banner.h);
+        this.phaseBanner.position.set(L.banner.x, L.banner.y);
 
-        // ---- 階段膠囊 ----
-        // 貼在注區正上方。它是玩家**每一秒都要瞄一眼**的東西，放在注區旁邊才不必來回移動視線
-        const bannerY = smallY - BANNER_H - 8;
-        const bannerW = Math.min(210, betW * 0.46);
-        this.phaseBanner.setBoxSize(bannerW, BANNER_H);
-        this.phaseBanner.position.set(betX + (betW - bannerW) / 2, bannerY);
-        this.onlineBadge.position.set(betX + 2, bannerY + (BANNER_H - 22) / 2);
+        this.placeSeats(L);
+        placeRoads(this.roads, L.roads, ROAD_ROWS);
+        this.syncRoads();
+        this.placeDeck(L);
+        this.placeVideo(L.stage);
 
-        // ---- 路圖區 ----
-        // 豎屏時右上角有語言鈕，路圖得整個往下讓
-        const roadY = portrait ? topBarH(uiScale(w, h)) + 24 : 12;
-        const roadIdeal = Math.min((h - roadY) * ROAD_RATIO, ROAD_MAX);
-        // 由視訊的高度公式反解：**視訊要留到看得清荷官的手，路圖就縮到那裡**。
-        // 數位桌台這裡填的是「牌要看得清點數」，換成視訊之後那個下限變成面板寬度——
-        // 640×360 的素材放到 320 寬以下，桌上的牌就開始糊成一團色塊
-        const videoForComfort = bannerY - roadY - 28 - 320 * PANEL_RATIO;
-        const roadH = Math.max(ROAD_MIN, Math.min(roadIdeal, videoForComfort));
-        const roadW = Math.min(w - 24, 900);
-        const roadX = (w - roadW) / 2;
+        this.houseAt = { x: L.stage.x + L.stage.w / 2, y: L.stage.y + L.stage.h / 2 };
+    }
 
-        // 上排（珠盤路 + 大路）拿六成高度，下排三張衍生路分剩下的
-        const topH = roadH * 0.58;
-        const botH = roadH - topH - 6;
-        const beadW = Math.min(roadW * 0.3, (topH / ROAD_ROWS) * 12);
+    /** 底下那一條與四個角落。跟數位桌台同一套（見 games/baccarat/index.ts 的 placeDeck） */
+    private placeDeck(L: TableLayout): void {
+        this.mySeat.position.set(L.mySeat.x, L.mySeat.y);
+        this.mySeat.setBoxSize(L.mySeat.w, L.mySeat.h, L.seatCompact || L.variant === 'row');
+        this.myOrigin = this.mySeat.originPoint();
 
-        this.roads.bead.setViewport(topH / ROAD_ROWS, beadW, topH);
-        this.roads.bead.position.set(roadX, roadY);
-        this.roads.big.setViewport(topH / ROAD_ROWS, roadW - beadW - 8, topH);
-        this.roads.big.position.set(roadX + beadW + 8, roadY);
+        this.chipRail?.position.set(L.chipRail.x, L.chipRail.y);
+        this.chipRail?.setViewport(L.chipRail.w, L.chipRail.h);
 
-        const derivedW = (roadW - 12) / 3;
-        const derivedY = roadY + topH + 6;
-        this.roads.bigEye.setViewport(botH / ROAD_ROWS, derivedW, botH);
-        this.roads.bigEye.position.set(roadX, derivedY);
-        this.roads.small.setViewport(botH / ROAD_ROWS, derivedW, botH);
-        this.roads.small.position.set(roadX + derivedW + 6, derivedY);
-        this.roads.cockroach.setViewport(botH / ROAD_ROWS, derivedW, botH);
-        this.roads.cockroach.position.set(roadX + (derivedW + 6) * 2, derivedY);
+        this.repeatBtn?.position.set(L.repeat.x, L.repeat.y);
+        this.repeatBtn?.setBoxSize(L.repeat.w, L.repeat.h);
 
-        // ---- 視訊與座位 ----
-        const videoTop = roadY + roadH + 14;
-        const videoSpace = bannerY - videoTop - 10;
+        this.onlineBadge.position.set(L.online.x, L.online.y);
 
-        // 寬且高的畫面才排得下「環繞」：三張椅子在左、三張在右，視訊夾在中間
-        const canFlank = w >= 880 && videoSpace >= 210;
-        if (canFlank) {
-            this.placeVideo(videoTop, videoSpace, w, 92);
-            this.placeSeatsFlanking(w, videoTop, videoSpace);
-        } else {
-            const seatH = short || narrow ? SEAT_H_COMPACT : SEAT_H;
-            this.placeSeatsRow(betX, betW, bannerY - seatH - 6, seatH, short || narrow);
-            this.placeVideo(videoTop, videoSpace - seatH - 6, w, 0);
+        this.stats.visible = L.showStats;
+        this.stats.position.set(L.stats.x, L.stats.y);
+        this.stats.setScale$(L.scale);
+
+        this.more?.place(L.more.x, L.more.y, this.size.w, this.size.h, L.scale);
+    }
+
+    /** 六張椅子照版面給的座標擺 */
+    private placeSeats(L: TableLayout): void {
+        for (let i = 0; i < this.seatViews.length; i++) {
+            const at = L.seats[i];
+            if (!at) continue;
+            // 手機橫放整列不畫（見 tableLayout 的 showSeats）。視訊桌台更需要這一刀：
+            // 中央那塊少 40px 高，等於少 71px 寬
+            this.seatViews[i].visible = L.showSeats;
+            this.seatViews[i].setSeatSize(L.seatSize, L.seatCompact);
+            this.seatViews[i].position.set(at.x, at.y);
         }
     }
 
     /**
-     * 手機橫放：面板直立在右側，所以底部整條空了出來給路單。
-     *
-     * 由下往上疊：路單 → 注區 → 座位列 → 視訊。視訊拿到最上面那一整塊。
-     */
-    private layoutLandscape(w: number, h: number): void {
-        const availW = w - arcadeState().dockInset.right;
-        // 橫版的頂列只有一列（見 style.css），不必像直式那樣讓開兩列
-        const top = 50;
-        const bottom = h - 12;
-
-        // ---- 路單：貼底橫躺，五張並列 ----
-        const roadH = Math.max(ROAD_MIN, Math.min(ROAD_MAX_LANDSCAPE, (bottom - top) * 0.24));
-        const roadY = bottom - roadH;
-        this.placeRoadStrip(availW, roadY, roadH);
-
-        // ---- 注區 ----
-        const gap = 6;
-        const smallH = 30;
-        const bigH = 40;
-        const betW = Math.min(availW * 0.96, 720);
-        const betX = (availW - betW) / 2;
-        const bigY = roadY - 8 - bigH;
-        const smallY = bigY - smallH - gap;
-        this.placeBets(betX, betW, smallY, bigY, smallH, bigH, gap);
-        this.chipPx = 15;
-        this.chipLayer?.setChipSize(this.chipPx);
-        this.relayoutChips();
-
-        this.myOrigin = { x: availW, y: (smallY + bigY) / 2 };
-        this.houseAt = { x: availW / 2, y: smallY - 24 };
-
-        // ---- 階段膠囊：橫躺在注區左上，跟座位共用一列 ----
-        const stripY = smallY - SEAT_H_COMPACT - 4;
-        const bannerW = 150;
-        this.phaseBanner.setBoxSize(bannerW, 26);
-        this.phaseBanner.position.set(betX, stripY + 6);
-        this.onlineBadge.position.set(betX + bannerW + 8, stripY + 8);
-
-        // 座位擠在膠囊右邊那一段
-        const seatsX = betX + bannerW + 100;
-        this.placeSeatsRow(seatsX, betX + betW - seatsX, stripY, SEAT_H_COMPACT, true);
-
-        // ---- 視訊：頂列到座位列之間整片 ----
-        this.placeVideo(top, stripY - top - 6, availW, 0);
-    }
-
-    /**
-     * 視訊擺在給定的那一塊區域裡。
+     * 視訊擺在中央那一塊裡。
      *
      * 高度與寬度**同時**受限：16:9 放不進去時由高度決定寬度，否則由寬度決定高度。
      * 素材本身是 `object-fit: cover`（見 style.css），所以框比 16:9 扁或高都不會有黑邊——
      * 但那會裁掉桌面邊緣，所以這裡仍然照原始比例算，讓裁切只發生在四捨五入的那幾 px。
+     *
+     * **沒有寬度下限。** 一度寫成 `max(200, …)`，想的是「太小就不要再縮了」，但那讓視訊
+     * 在空間不足時直接撐破分配給它的那一塊，往下壓到座位上——而重疊比小更難看，
+     * 也更難查（看起來像座位排錯位置）。
      */
-    private placeVideo(top: number, space: number, availW: number, sidePad: number): void {
-        const maxW = Math.min(availW - sidePad * 2 - 24, PANEL_MAX_W);
-        // **沒有寬度下限。** 一度寫成 `max(200, …)`，想的是「太小就不要再縮了」，
-        // 但那讓視訊在空間不足時直接撐破分配給它的那一塊，往下壓到座位列上——
-        // 而重疊比小更難看，也更難查（看起來像座位排錯位置）
-        const w = Math.min(maxW, Math.max(1, space) / PANEL_RATIO);
+    private placeVideo(stage: Rect): void {
+        const maxW = Math.min(stage.w - 16, PANEL_MAX_W);
+        const w = Math.min(maxW, Math.max(1, stage.h) / PANEL_RATIO);
         const h = w * PANEL_RATIO;
-        const x = (availW - w) / 2;
-        const y = top + Math.max(0, (space - h) / 2);
+        const x = stage.x + (stage.w - w) / 2;
+        const y = stage.y + Math.max(0, (stage.h - h) / 2);
 
         this.rect = { x, y, w, h };
         this.video?.setRect(x, y, w, h);
@@ -842,16 +978,17 @@ export class BaccaratLiveModule implements GameModule {
         this.lagText.position.set(x + w / 2, y + h * 0.24);
     }
 
-    /** 五個注區：三個小的一排、莊閒兩個大的一排。兩套版面共用 */
-    private placeBets(x: number, betW: number, smallY: number, bigY: number, smallH: number, bigH: number, gap: number): void {
-        const third = (betW - gap * 2) / 3;
-        this.put('playerPair', x, smallY, third, smallH);
-        this.put('tie', x + third + gap, smallY, third, smallH);
-        this.put('bankerPair', x + (third + gap) * 2, smallY, third, smallH);
+    /** 五個注區：三個小的一排、莊閒兩個大的一排。 */
+    private placeBets(bets: TableLayout['bets']): void {
+        const { x, width, gap } = bets;
+        const third = (width - gap * 2) / 3;
+        this.put('playerPair', x, bets.smallY, third, bets.smallH);
+        this.put('tie', x + third + gap, bets.smallY, third, bets.smallH);
+        this.put('bankerPair', x + (third + gap) * 2, bets.smallY, third, bets.smallH);
 
-        const half = (betW - gap) / 2;
-        this.put('player', x, bigY, half, bigH);
-        this.put('banker', x + half + gap, bigY, half, bigH);
+        const half = (width - gap) / 2;
+        this.put('player', x, bets.bigY, half, bets.bigH);
+        this.put('banker', x + half + gap, bets.bigY, half, bets.bigH);
     }
 
     private put(spot: BetSpot, x: number, y: number, w: number, h: number): void {
@@ -859,77 +996,6 @@ export class BaccaratLiveModule implements GameModule {
         if (!view) return;
         view.position.set(x, y);
         view.setBoxSize(w, h);
-    }
-
-    /** 五張路並排成一條，各自是一個獨立的捲動視窗 */
-    private placeRoadStrip(availW: number, y: number, roadH: number): void {
-        const cell = roadH / ROAD_ROWS;
-        const gapX = 6;
-        const pad = 6;
-        const beadW = 6 * cell;
-        const derivedW = 7 * cell;
-        // 兩側的留白要**先扣掉再分**，否則這一排的總寬仍然是整個 availW，右緣會頂出去壓到面板
-        const bigW = Math.max(8 * cell, availW - pad * 2 - beadW - derivedW * 3 - gapX * 4);
-
-        let x = Math.max(pad, (availW - (beadW + bigW + derivedW * 3 + gapX * 4)) / 2);
-        const put = (road: ScrollableRoad, width: number): void => {
-            road.setViewport(cell, width, roadH);
-            road.position.set(x, y);
-            x += width + gapX;
-        };
-        put(this.roads.bead, beadW);
-        put(this.roads.big, bigW);
-        put(this.roads.bigEye, derivedW);
-        put(this.roads.small, derivedW);
-        put(this.roads.cockroach, derivedW);
-    }
-
-    /**
-     * 座位排成一列。窄畫面與橫放走這條。
-     *
-     * 六張椅子**平均分佈在整條寬度上**而不是靠攏在中間：靠攏會跟正中央的視訊疊在一起，
-     * 分開之後左右兩端的椅子剛好落在視訊兩側。
-     */
-    private placeSeatsRow(x: number, width: number, y: number, seatH: number, compact: boolean): void {
-        const count = this.seatViews.length;
-        const slot = width / count;
-        for (let i = 0; i < count; i++) {
-            const view = this.seatViews[i];
-            view.setSeatSize(Math.min(slot * 0.86, compact ? 72 : 80), compact);
-            view.position.set(x + slot * (i + 0.5), y + seatH * 0.42);
-        }
-    }
-
-    /**
-     * 座位分左右兩排夾住視訊——**真正的「環繞」只在寬螢幕上成立**。
-     *
-     * 左三右三、上下錯開，中間留給視訊。錯開是為了讓三張椅子看起來像沿著桌沿排列，
-     * 而不是釘在一條直線上。
-     */
-    private placeSeatsFlanking(w: number, top: number, space: number): void {
-        const seatW = 84;
-        const step = Math.min(84, space / 3);
-        const startY = top + (space - step * 2) / 2;
-
-        for (let i = 0; i < this.seatViews.length; i++) {
-            const view = this.seatViews[i];
-            const left = i < 3;
-            const row = left ? i : i - 3;
-            view.setSeatSize(seatW, false);
-            // 中間那張往外推一點，三張連起來是一條弧而不是一條線
-            const bulge = row === 1 ? 14 : 0;
-            const x = left ? 54 - bulge : w - 54 + bulge;
-            view.position.set(x, startY + step * row);
-        }
-    }
-
-    /**
-     * 版面變了，把已經落桌的籌碼搬到注區的新位置。
-     *
-     * 只記絕對座標的話，注區搬走了籌碼會整批留在原地——那正是「已經發到位的籌碼跑版」。
-     */
-    private relayoutChips(): void {
-        this.chipLayer?.relayout((spot) => this.spots.get(spot as BetSpot)?.rect() ?? null);
     }
 
     // ---- 每幀 -------------------------------------------------------------
