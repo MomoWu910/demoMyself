@@ -14,7 +14,7 @@ import { uiScale } from '../../core/layout';
  *
  * ```
  *  ┌──────────────────────────────────────────┐
- *  │ 讀數                              [ ··· ] │  資訊區左上、更多鈕右上
+ *  │ 讀數                                  [⚙] │  讀數左上，齒輪切進頂列的右端
  *  │   ●        ┌────────────┐          ●     │
  *  │   ●        │ 發牌／視訊 │          ●     │  座位左三右三夾住中央
  *  │   ●        └────────────┘          ●     │
@@ -113,7 +113,12 @@ export interface TableLayout {
     online: { x: number; y: number };
     /** 讀數區的左上角 */
     stats: { x: number; y: number };
-    /** 更多鈕的**右上角**（它靠右對齊） */
+    /**
+     * 更多鈕（齒輪）的**右上角**（它靠右對齊）。
+     *
+     * 它比 `stats` 高一整列：讀數讓開整條頂列，齒輪則跟頂列右側的核對徽章並排。
+     * 那顆徽章是 DOM，讓位寫在 style.css 的 `.top-right--gear`。
+     */
     more: { x: number; y: number };
     /** 路單整條 */
     roads: Rect;
@@ -125,11 +130,28 @@ const PAD = 12;
 /**
  * 頂列實際佔住的高度。
  *
- * 比 `topBarH()` 給的 72 高，因為那個數字取的是「左半邊只有返回鍵」的保守值，而這裡
- * 讓開的是**右上角**——那裡的語言鈕錯開一列，實際被佔到 92px（見 core/layout.ts）。
- * 中央區與更多鈕都在那一側，用 72 的話會被語言鈕壓住。
+ * 這個數字一度是 92——那是為了讓開右上角錯開一列的語言鈕。**但牌桌上根本沒有那顆鈕**：
+ * 語言切換在這兩張桌上收進了齒輪選單，DOM 那顆進桌就被藏起來（見 ui/Hud.tsx 的
+ * `useHideLangToggle`）。於是那 34px 是讓給一個不存在的東西，代價是齒輪懸在半空、
+ * 讀數與中央區跟著往下掉一整列。
+ *
+ * 現在取的是頂列自己的高度加一點呼吸：`.top` 從 16px 開始，右邊那顆玩家膠囊實測收在 57
+ * （頭像 28 + 上下 padding + 框線），所以 56 會**正好壓到它 1px**——那種重疊在截圖上看不出來，
+ * 只有把讀數的字放大才發現。取 64 讓兩者之間留得下一道看得見的間隙。
  */
-const TOP_BAR_SAFE = 92;
+const TOP_BAR_SAFE = 64;
+
+/**
+ * 齒輪的上緣。**它不跟讀數同一列**——讀數讓開整條頂列，齒輪則是切進頂列的右端，
+ * 跟那顆資源核對徽章並排。
+ *
+ * 那一段畫布在牌桌上是空的：頂列右側只剩核對徽章，而它靠 `.top-right` 的 padding
+ * 讓開了齒輪的寬度（見 style.css 的 `.top-right--gear`）。**兩邊的讓位要一起改**，
+ * 少讓一邊就會疊在一起。
+ *
+ * 值取 12 而不是頂列的 16：齒輪比徽章高一截，齊中心比齊上緣好看。
+ */
+const MORE_TOP = 12;
 
 /** 座位那一欄佔多寬（flank 版）。頭像 + 名字 + 餘額三行的寬度 */
 const SEAT_COL_W = 104;
@@ -235,17 +257,17 @@ export function computeTableLayout(w: number, h: number, opts: LayoutOptions = {
     const tiny = h < 470;
     const compact = w < 620 || h < 520;
 
-    // 矮螢幕的頂列只有一列——核對數字在這個尺寸下藏起來（見 style.css），所以不必像
-    // 直式那樣讓開兩列。但**還是得讓開一整列**：那個尺寸下語言鈕移到頂列中間，
-    // 而中間正是中央區的位置——讓 50 的話，牌位框的上緣會從語言鈕底下鑽出來
-    const top = (short ? 66 : TOP_BAR_SAFE) * scale;
+    // 每個尺寸都讓同一條：頂列只有一列高，而語言鈕在牌桌上不存在（見 TOP_BAR_SAFE）。
+    // 矮螢幕原本另外讓到 66，是為了躲那個尺寸下被搬到頂列中間的語言鈕——同樣的理由，
+    // 那顆鈕進桌就被藏起來了，躲的是空氣
+    const top = TOP_BAR_SAFE * scale;
     const bottom = h - PAD;
 
     const gapY = compact ? 6 : 10;
     // 矮螢幕把狀態條併進籌碼架那一列（見下面的 banner），所以少一道間隙
     const gaps = gapY * (tiny ? 5 : 6);
 
-    // 頂上那條給讀數與更多鈕。**它必須是獨立的一列**：讀數若貼在中央區的左上角，
+    // 頂上那條給讀數（齒輪更高一列，切進頂列裡）。**它必須是獨立的一列**：讀數若貼在中央區的左上角，
     // 在寬螢幕上會正好落在左邊那三張椅子頭上——那一欄是座位的地盤，而椅子的位置
     // 是由「圍著桌子」決定的，讓不開
     const headH = tiny ? 0 : (short ? 26 : 34) * scale;
@@ -291,10 +313,10 @@ export function computeTableLayout(w: number, h: number, opts: LayoutOptions = {
     const online = { x: w - PAD - rightW, y: railY + bands.rail - 22 * scale };
 
     // ---- 頂上那一列 ----
-    // 讀數靠左、更多鈕靠右，中間空著。`top` 已經讓開了語言鈕那一列
-    // （見 TOP_BAR_SAFE），所以這裡不必再讓
+    // 讀數靠左，落在頂列下面那一條；齒輪往上切進頂列的右端（見 MORE_TOP），
+    // 那裡是這張桌上唯一真正的右上角
     const stats = { x: PAD, y: top };
-    const more = { x: w - PAD, y: top };
+    const more = { x: w - PAD, y: MORE_TOP * scale };
 
     const seats: Array<{ x: number; y: number }> = [];
     let stageInset = 0;

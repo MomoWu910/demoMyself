@@ -103,9 +103,21 @@ canvas { display: block; touch-action: none; }
    兩者長得一樣，所以要把 button 的預設外觀抹掉 */
 button.back { cursor: pointer; font-weight: inherit; }
 
-/* 頂列左側是返回鍵加玩家資訊，右側是核對數字與連線狀態 */
+/* 頂列左側是返回鍵加玩家資訊，右側是核對數字 */
 .top-left { display: flex; align-items: center; gap: calc(12px * var(--ui-scale)); }
 .top-right { display: flex; align-items: center; gap: calc(10px * var(--ui-scale)); }
+
+/*
+ * 牌桌上讓開畫布右上角那顆齒輪。
+ *
+ * **這是一條跨層的約定**：齒輪畫在 canvas 裡（common/table/tableLayout.ts 的 `more`），
+ * 這一列是疊在上面的 DOM，兩層各自定位、誰也偵測不到誰，所以只能兩邊各讓一半、
+ * 把數字對好——齒輪從畫面右緣算起吃掉 `PAD(12) + 36`，這裡讓出的是那段加上一點間隙。
+ *
+ * 30 是量出來的：`.top` 自己的右邊距是 clamp(16,3vw,32)，扣掉之後剩下的差額就是這個數。
+ * **改齒輪的 PAD 或尺寸要回來改這裡**，不然核對徽章會跟它疊在一起。
+ */
+.top-right--gear { padding-right: calc(30px * var(--ui-scale)); }
 
 /* ---- 玩家與錢包 ----
    真實博弈大廳的頂列一定有錢包，而且進了遊戲也不會消失——玩家隨時要知道自己還有多少。
@@ -257,31 +269,14 @@ button.back { cursor: pointer; font-weight: inherit; }
     .meter-wrap { display: none; }
 }
 
-/* 語言鈕：i18n 掛進 #lang-slot，位置在這裡定。頂列右側留給連線狀態，所以往下錯開一列 */
+/* 語言鈕：i18n 掛進 #lang-slot，位置在這裡定。頂列右側是核對數字，所以往下錯開一列。
+   牌桌上它整顆不畫——語言切換收進了畫布那顆齒輪（見 ui/Hud.tsx 的 useHideLangToggle） */
 #lang-slot {
     position: fixed;
     top: calc(max(58px, calc(env(safe-area-inset-top) + 46px)) * var(--ui-scale));
     right: calc(clamp(16px, 3vw, 32px) * var(--ui-scale));
     z-index: 5;
 }
-
-/* ---- 連線狀態 ---- */
-.conn {
-    font-family: var(--mono);
-    font-size: calc(0.68rem * var(--ui-scale));
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: calc(5px * var(--ui-scale)) calc(11px * var(--ui-scale));
-    border-radius: 999px;
-    border: 1px solid currentColor;
-    opacity: 0.9;
-}
-.conn.connecting { color: var(--muted); animation: pulse 1.1s ease-in-out infinite; }
-.conn.open { color: var(--good); }
-.conn.closed { color: var(--hot); }
-
-@keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .conn.connecting { animation: none; } }
 
 /* ---- 錯誤提示 ---- */
 .toast {

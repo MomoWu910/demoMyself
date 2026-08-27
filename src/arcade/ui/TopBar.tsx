@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useArcadeStore } from '../store';
+import { isTableScene, useArcadeStore } from '../store';
 import { useT } from '../../i18n/useT';
 import { wireGoBack } from '../../shell/goBack';
 
@@ -9,15 +9,20 @@ import { wireGoBack } from '../../shell/goBack';
  * 真實博弈大廳的頂列一定有錢包，而且**進了遊戲也不會消失**——玩家隨時要知道自己還有多少。
  * 這一頁的餘額本來只長在底部操作面板裡，於是大廳完全看不到自己有錢，那是版面上的漏洞
  * 而不是取捨。搬上來之後 dock 那格就拿掉了，同一個數字沒有理由出現兩次。
+ *
+ * ---
+ *
+ * **這裡一度還有一顆連線徽章，已經拿掉了。**
+ *
+ * 它綁的是假 socket 的狀態機（net/fakeSocket.ts），寫起來很像那麼一回事，但實際上
+ * 玩家只看得到兩件事：進桌時閃 420ms 的「連線中」，然後**永遠是綠色的「已連線」**。
+ * 紅色那一態根本渲染不出來——`closed` 只在玩法卸載時發生，而徽章只在遊戲內顯示，
+ * 那一瞬間它自己已經先下架了。而 fakeSocket 沒有做重連，也就沒有任何路徑會讓它
+ * 從 `open` 掉回去。
+ *
+ * **一盞恆亮的燈不傳遞資訊**，而它佔的正好是右上角那個位置。`connection` 狀態本身留著
+ * （下注前的 `!== 'open'` 防護還在用），只是不再畫成一顆徽章。
  */
-
-/** 連線狀態。假 WebSocket 也有握手，所以這裡顯示的是真的狀態機（見 net/fakeSocket.ts）。 */
-export function ConnectionBadge() {
-    const t = useT();
-    const state = useArcadeStore((s) => s.connection);
-    const label = state === 'open' ? t('arcade.online') : state === 'connecting' ? t('arcade.connecting') : t('arcade.offline');
-    return <span className={`conn ${state}`}>{label}</span>;
-}
 
 /**
  * 錢包。
@@ -195,7 +200,6 @@ function ResourceMeter() {
 
 export function TopBar() {
     const scene = useArcadeStore((s) => s.scene);
-    const inGame = scene !== null && scene !== 'lobby';
 
     return (
         <header className="top">
@@ -203,9 +207,13 @@ export function TopBar() {
                 <BackLink />
                 <PlayerChip />
             </div>
-            <div className="top-right">
+            {/*
+                牌桌上右上角**還有一顆畫在畫布裡的齒輪**（見 common/table/tableLayout.ts
+                的 MORE_TOP）。它跟這一列是同一條水平線上的鄰居，但分屬 canvas 與 DOM
+                兩層，誰也擋不了誰——所以讓位只能用 padding 手動談好
+            */}
+            <div className={`top-right${isTableScene(scene) ? ' top-right--gear' : ''}`}>
                 <ResourceMeter />
-                {inGame && <ConnectionBadge />}
             </div>
         </header>
     );

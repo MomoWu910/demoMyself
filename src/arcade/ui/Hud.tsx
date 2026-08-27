@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useArcadeStore } from '../store';
+import { isTableScene, useArcadeStore } from '../store';
 import { SlotControls, SlotOptions, SlotReadouts } from './SlotPanel';
 import { useDockSide, useIsCompact } from './useIsCompact';
 import { LobbyChrome } from './LobbyChrome';
@@ -221,7 +221,7 @@ export function Hud() {
     // 大廳不需要操作面板——那裡沒有東西可以操作，留著只會擋住機台卡片。
     // 兩張桌台也不需要：它們的介面在畫布裡（見上面 GameReadouts 的說明）
     const inGame = scene !== null && scene !== 'lobby';
-    const atTable = scene === 'baccarat' || scene === 'baccaratLive';
+    const atTable = isTableScene(scene);
     const hasDock = inGame && !atTable;
     const dockRef = useDockMeasure(hasDock, side);
     useHideLangToggle(atTable);

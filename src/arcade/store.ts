@@ -237,3 +237,13 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
 
 /** 在 React 之外讀當下狀態（Pixi 那半邊用）。 */
 export const arcadeState = () => useArcadeStore.getState();
+
+/**
+ * 現在是不是在牌桌上（兩張百家樂）。
+ *
+ * 抽出來是因為**這條判斷同時決定了三件會互相打架的事**：dock 要不要出現、DOM 那顆
+ * 語言鈕要不要藏、頂列右側要不要讓開畫布裡的齒輪。散在三個檔案各寫一次的話，
+ * 加第三張桌台時漏掉任何一處，症狀都會是「有東西疊在一起」而不是編譯錯誤。
+ */
+export const isTableScene = (scene: ModuleId | null): boolean =>
+    scene === 'baccarat' || scene === 'baccaratLive';

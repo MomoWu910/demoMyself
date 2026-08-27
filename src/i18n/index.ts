@@ -564,9 +564,6 @@ export const DICT: Record<string, Entry> = {
     // 所以要有一個「停止中」讓玩家知道請求收到了，不然他會以為沒按到而狂點
     'arcade.stopSpin': { en: 'STOP', zh: '停止' },
     'arcade.stopping': { en: 'STOPPING…', zh: '停止中…' },
-    'arcade.connecting': { en: 'connecting', zh: '連線中' },
-    'arcade.online': { en: 'online', zh: '已連線' },
-    'arcade.offline': { en: 'offline', zh: '已斷線' },
     'arcade.error.insufficient_balance': { en: 'Insufficient balance', zh: '餘額不足' },
     'arcade.error.invalid_bet': { en: 'Invalid bet', zh: '押注金額無效' },
     'arcade.error.bet_closed': { en: 'Betting is closed', zh: '已封盤，來不及了' },
