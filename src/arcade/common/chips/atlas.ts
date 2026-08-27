@@ -169,3 +169,29 @@ function drawChip(value: ChipValue): Container {
 
     return box;
 }
+
+/**
+ * 挑一顆籌碼來代表某個金額。**兩支不是同一件事**，所以分成兩個名字。
+ *
+ * 這兩支原本是兩張百家樂桌各自的區域函式，而且**都叫 `nearestChip`、實作卻不一樣**：
+ * 一邊取「不超過金額的最大面額」（下注飛幣：飛出去的那顆不該比押的錢還大），
+ * 另一邊取「數值上最接近的面額」（撒快照籌碼：那是視覺化，只求看起來合理）。
+ * 同名不同義是最容易在複製貼上時出事的一種形狀，所以搬上來的時候一併改成兩個講得清楚
+ * 的名字，第三款玩法就不必再猜該複製哪一份。
+ */
+
+/** 不超過 `amount` 的最大面額。下注時飛出去的那顆用這支 */
+export function largestChipUnder(amount: number): ChipValue {
+    let best: ChipValue = CHIP_VALUES[0];
+    for (const value of CHIP_VALUES) {
+        if (value <= amount) best = value;
+    }
+    return best;
+}
+
+/** 數值上最接近 `target` 的面額。撒快照籌碼用這支——它只求看起來合理，不必精確 */
+export function nearestChipTo(target: number, pool: readonly ChipValue[] = DEFAULT_CHIP_SET): ChipValue {
+    let best = pool[0];
+    for (const value of pool) if (Math.abs(value - target) < Math.abs(best - target)) best = value;
+    return best;
+}

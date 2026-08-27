@@ -73,9 +73,10 @@ function GameReadouts() {
             return <SlotReadouts />;
         case 'baccarat':
         case 'baccaratLive':
-            // 兩張百家樂桌台的介面**整組住在畫布裡**（見 games/baccarat/index.ts 的
-            // buildDeck）。留著 case 而不是從 switch 拿掉，是為了保持窮盡——
-            // 加第四款玩法時忘了處理會編譯就失敗
+        case 'roulette':
+            // 三張桌台的介面**整組住在畫布裡**（見 games/baccarat/index.ts 的 buildDeck）。
+            // 留著 case 而不是從 switch 拿掉，是為了保持窮盡——加下一款玩法時
+            // 忘了處理會編譯就失敗
             return null;
         case 'lobby':
         case null:
@@ -90,9 +91,10 @@ function GameControls() {
             return <SlotControls />;
         case 'baccarat':
         case 'baccaratLive':
-            // 兩張百家樂桌台的介面**整組住在畫布裡**（見 games/baccarat/index.ts 的
-            // buildDeck）。留著 case 而不是從 switch 拿掉，是為了保持窮盡——
-            // 加第四款玩法時忘了處理會編譯就失敗
+        case 'roulette':
+            // 三張桌台的介面**整組住在畫布裡**（見 games/baccarat/index.ts 的 buildDeck）。
+            // 留著 case 而不是從 switch 拿掉，是為了保持窮盡——加下一款玩法時
+            // 忘了處理會編譯就失敗
             return null;
         case 'lobby':
         case null:
@@ -108,9 +110,10 @@ function GameOptions() {
             return <SlotOptions />;
         case 'baccarat':
         case 'baccaratLive':
-            // 兩張百家樂桌台的介面**整組住在畫布裡**（見 games/baccarat/index.ts 的
-            // buildDeck）。留著 case 而不是從 switch 拿掉，是為了保持窮盡——
-            // 加第四款玩法時忘了處理會編譯就失敗
+        case 'roulette':
+            // 三張桌台的介面**整組住在畫布裡**（見 games/baccarat/index.ts 的 buildDeck）。
+            // 留著 case 而不是從 switch 拿掉，是為了保持窮盡——加下一款玩法時
+            // 忘了處理會編譯就失敗
             return null;
         case 'lobby':
         case null:

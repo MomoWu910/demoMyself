@@ -777,21 +777,46 @@ function drawIcon(host: Container, key: string, color: number, size: number, fac
             break;
         }
         case 'roulette': {
-            // 輪盤：外圈分格、內圈、一顆球
-            const r = s * 0.62;
-            g.circle(0, 0, r).fill({ color: 0x241f18, alpha: 0.95 });
-            g.circle(0, 0, r).stroke({ color, width: 1.4, alpha: 0.85 });
+            /*
+             * 斜俯視的橢圓，跟真的坐上那張桌看到的東西同一個角度
+             * （見 games/roulette/wheelView.ts）。做法也一樣：**正圓畫好再壓扁**——
+             * 直接畫橢圓的話，分格的楔子會往兩側歪掉，看起來像一顆被踩過的輪盤。
+             *
+             * 這張卡從佔位變成能玩之後才改成這樣。原本那個正圓在一排卡片裡認得出來，
+             * 但點進去看到的是另一種東西——**大廳的圖示是承諾，桌上要兌現它**。
+             */
+            const tilt = new Container();
+            const wheel = new Graphics();
+            const r = s * 0.66;
+
+            wheel.circle(0, 0, r).fill({ color: 0x241f18, alpha: 0.98 });
+            wheel.circle(0, 0, r).stroke({ color, width: 1.4, alpha: 0.9 });
+
+            // 12 格交替。真輪盤是 37 格，那個密度在 130px 的卡片上只會糊成一圈灰
             for (let i = 0; i < 12; i++) {
                 const a = (i / 12) * Math.PI * 2;
-                // 隔一格填色，才看得出是輪盤而不是時鐘
-                if (i % 2 === 0) continue;
-                g.moveTo(0, 0)
-                    .arc(0, 0, r, a, a + Math.PI / 6)
-                    .fill({ color, alpha: 0.28 });
+                wheel.moveTo(0, 0)
+                    .arc(0, 0, r * 0.82, a, a + Math.PI / 6)
+                    .fill({ color: i % 2 === 0 ? color : INK, alpha: i % 2 === 0 ? 0.75 : 1 });
             }
-            g.circle(0, 0, r * 0.38).fill({ color: INK, alpha: 1 });
-            g.circle(0, 0, r * 0.38).stroke({ color, width: 1, alpha: 0.6 });
-            g.circle(r * 0.76, -r * 0.32, s * 0.09).fill(face);
+
+            wheel.circle(0, 0, r * 0.42).fill({ color: INK });
+            wheel.circle(0, 0, r * 0.42).stroke({ color, width: 1, alpha: 0.7 });
+            for (let i = 0; i < 2; i++) {
+                const a = i * (Math.PI / 2);
+                wheel.moveTo(Math.cos(a) * r * 0.42, Math.sin(a) * r * 0.42)
+                    .lineTo(-Math.cos(a) * r * 0.42, -Math.sin(a) * r * 0.42)
+                    .stroke({ color, width: 1.6, alpha: 0.55 });
+            }
+            wheel.circle(0, 0, r * 0.13).fill({ color, alpha: 0.9 });
+
+            tilt.addChild(wheel);
+            tilt.scale.set(1, 0.52);
+            host.addChild(tilt);
+
+            // 球在外圈的近側，壓在壓扁後的軌道上——它是這張圖唯一在動的東西的證據
+            const ballA = 0.72;
+            g.circle(Math.cos(ballA) * r * 0.9, Math.sin(ballA) * r * 0.9 * 0.52, s * 0.085).fill(face);
             break;
         }
         case 'goldenflower': {

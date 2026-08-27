@@ -3,6 +3,7 @@ import { ModuleHost, type GameModule, type ModuleId } from './module';
 import { SlotModule } from '../games/slot';
 import { BaccaratModule } from '../games/baccarat';
 import { BaccaratLiveModule } from '../games/baccaratLive';
+import { RouletteModule } from '../games/roulette';
 import { LobbyModule } from '../lobby';
 import { useArcadeStore } from '../store';
 import { sessionWallet } from '../server/wallet';
@@ -156,6 +157,8 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
                 return new BaccaratModule();
             case 'baccaratLive':
                 return new BaccaratLiveModule();
+            case 'roulette':
+                return new RouletteModule();
         }
     };
 

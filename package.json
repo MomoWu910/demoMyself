@@ -13,9 +13,11 @@
     "check:cards": "node src/arcade/common/cards/card-check.mjs",
     "check:chips": "node src/arcade/common/chips/chips-check.mjs",
     "check:road": "node src/arcade/games/baccarat/roadmap-check.mjs",
+    "check:roulette": "node src/arcade/games/roulette/roulette-check.mjs",
     "check:video": "node src/arcade/common/video/video-check.mjs",
     "build:stream": "node src/arcade/live/tools/build-stream.mjs",
-    "check:live": "node src/arcade/live/tools/live-verify.mjs"
+    "check:live": "node src/arcade/live/tools/live-verify.mjs",
+    "verify:roulette": "node src/arcade/games/roulette/roulette-verify.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "8.2.0",

@@ -1,6 +1,6 @@
 import gsap from 'gsap';
 import { Container, Graphics, Text, TextStyle } from 'pixi.js';
-import { bakeChipAtlas, type ChipAtlas, type ChipValue } from '../../common/chips/atlas';
+import { bakeChipAtlas, largestChipUnder, nearestChipTo, type ChipAtlas, type ChipValue } from '../../common/chips/atlas';
 import { BetSpotView } from '../../common/chips/BetSpotView';
 import { FlyingChips } from '../../common/chips/FlyingChips';
 import { placeRoads } from '../../common/roadmap/placeRoads';
@@ -743,7 +743,7 @@ export class BaccaratLiveModule implements GameModule {
             return;
         }
 
-        this.flyChip(nearestChip(amount), spot, MY_SEAT, this.myOrigin, 0);
+        this.flyChip(largestChipUnder(amount), spot, MY_SEAT, this.myOrigin, 0);
         this.socket?.send({ type: 'bet', spot, amount });
     }
 
@@ -846,7 +846,7 @@ export class BaccaratLiveModule implements GameModule {
             if (total <= 0) continue;
 
             const count = Math.min(SNAPSHOT_CHIPS_PER_SPOT, Math.max(1, Math.round(Math.log10(total) * 2)));
-            const value = nearestChip(total / count);
+            const value = nearestChipTo(total / count);
             const view = this.spots.get(spot);
             if (!view) continue;
             for (let i = 0; i < count; i++) {
@@ -1077,12 +1077,4 @@ function spotWon(spot: BetSpot, road: { outcome: string; playerPair: boolean; ba
         case 'bankerPair':
             return road.bankerPair;
     }
-}
-
-/** 撒快照籌碼時挑一個看起來合理的面額 */
-function nearestChip(target: number): ChipValue {
-    const values: ChipValue[] = [25, 50, 100, 500, 1000];
-    let best = values[0];
-    for (const v of values) if (Math.abs(v - target) < Math.abs(best - target)) best = v;
-    return best;
 }

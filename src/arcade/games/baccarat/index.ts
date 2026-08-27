@@ -2,7 +2,7 @@ import gsap from 'gsap';
 import { Container, Text, TextStyle, type Ticker } from 'pixi.js';
 import { bakeCardAtlas, CARD_ASPECT, type CardAtlas } from '../../common/cards/atlas';
 import { CardView } from '../../common/cards/CardView';
-import { bakeChipAtlas, CHIP_VALUES, type ChipAtlas, type ChipValue } from '../../common/chips/atlas';
+import { bakeChipAtlas, largestChipUnder, nearestChipTo, type ChipAtlas, type ChipValue } from '../../common/chips/atlas';
 import { BetSpotView } from '../../common/chips/BetSpotView';
 import { FlyingChips } from '../../common/chips/FlyingChips';
 import { DealSpots } from '../../common/table/DealSpots';
@@ -597,7 +597,7 @@ export class BaccaratModule implements GameModule {
             return;
         }
 
-        this.flyChip(nearestChip(amount), spot, MY_SEAT, this.myOrigin, 0);
+        this.flyChip(largestChipUnder(amount), spot, MY_SEAT, this.myOrigin, 0);
         this.socket?.send({ type: 'bet', spot, amount });
     }
 
@@ -848,7 +848,7 @@ export class BaccaratModule implements GameModule {
             if (total <= 0) continue;
 
             const count = Math.min(SNAPSHOT_CHIPS_PER_SPOT, Math.max(1, Math.round(Math.log10(total) * 2)));
-            const value = nearestChip(total / count);
+            const value = nearestChipTo(total / count);
             const view = this.spots.get(spot);
             if (!view) continue;
             for (let i = 0; i < count; i++) {
@@ -1307,15 +1307,6 @@ function spotWon(spot: BetSpot, road: { outcome: string; playerPair: boolean; ba
         case 'bankerPair':
             return road.bankerPair;
     }
-}
-
-/** 找一個最接近這個金額的籌碼面額。畫面上要飛的是籌碼，而籌碼只有五種面額 */
-function nearestChip(amount: number): ChipValue {
-    let best: ChipValue = CHIP_VALUES[0];
-    for (const value of CHIP_VALUES) {
-        if (value <= amount) best = value;
-    }
-    return best;
 }
 
 /** 賠率標籤。從 PAYOUTS 讀而不是寫死，改賠率時面板會自己跟上 */

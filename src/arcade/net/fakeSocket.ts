@@ -2,10 +2,12 @@ import type { CommonC2S, GameId } from './protocol';
 import type { SlotC2S, SlotS2C } from './games/slot';
 import type { BaccaratC2S, BaccaratS2C } from './games/baccarat';
 import type { BaccaratLiveC2S, BaccaratLiveS2C } from './games/baccaratLive';
+import type { RouletteC2S, RouletteS2C } from './games/roulette';
 import type { GameServer } from '../server/gameServer';
 import { SlotServer } from '../server/slotServer';
 import { baccaratTable } from '../server/baccaratServer';
 import { liveTable } from '../server/baccaratLiveServer';
+import { rouletteTable } from '../server/rouletteServer';
 import { sessionWallet } from '../server/wallet';
 
 /**
@@ -53,6 +55,7 @@ export interface GameProtocols {
     slot: { c2s: SlotC2S; s2c: SlotS2C };
     baccarat: { c2s: BaccaratC2S; s2c: BaccaratS2C };
     baccaratLive: { c2s: BaccaratLiveC2S; s2c: BaccaratLiveS2C };
+    roulette: { c2s: RouletteC2S; s2c: RouletteS2C };
 }
 
 export type C2SOf<G extends GameId> = GameProtocols[G]['c2s'];
@@ -93,6 +96,10 @@ function createServer<G extends GameId>(game: G): GameServer<C2SOf<G>, S2COf<G>>
             // 跟百家樂同理，是 module-level 的一張桌：它照著影片一局一局跑，
             // 沒人在看的時候也一樣在跑（差別只在沒有 listener 就不推播）
             return liveTable as unknown as GameServer<C2SOf<G>, S2COf<G>>;
+        case 'roulette':
+            // 同樣是一張一直在跑的桌子。輪盤更需要這件事：它的歷史看板是冷熱統計，
+            // 每次進桌 new 一張新桌的話，那面看板會永遠停在「剛開張」的樣子
+            return rouletteTable as unknown as GameServer<C2SOf<G>, S2COf<G>>;
         default:
             throw new Error(`[arcade] 未知的玩法：${String(game)}`);
     }

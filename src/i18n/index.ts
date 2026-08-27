@@ -694,6 +694,40 @@ export const DICT: Record<string, Entry> = {
         en: 'Feed is {s}s behind — betting already closed',
         zh: '畫面落後 {s} 秒，已停止下注',
     },
+    // ---- 輪盤 ----
+    'arcade.lobby.rouletteDesc': { en: 'Bet the layout · 35:1 top', zh: '押滿桌布 · 最高 35 倍' },
+
+    // 三個階段。`spinning` 用真桌荷官喊的那句話——那是全世界的輪盤桌都聽得懂的一句
+    'arcade.rou.phase.betting': { en: 'Place your bets', zh: '下注中' },
+    'arcade.rou.phase.spinning': { en: 'No more bets', zh: '停止下注' },
+    'arcade.rou.phase.result': { en: 'Paying out', zh: '結算中' },
+
+    // 桌布上的外注。紅與黑不在這裡——那兩格畫的是菱形色塊，是這張桌上唯一不必翻譯的注
+    'arcade.rou.dozen1': { en: '1st 12', zh: '第一打' },
+    'arcade.rou.dozen2': { en: '2nd 12', zh: '第二打' },
+    'arcade.rou.dozen3': { en: '3rd 12', zh: '第三打' },
+    'arcade.rou.even': { en: 'EVEN', zh: '雙' },
+    'arcade.rou.odd': { en: 'ODD', zh: '單' },
+    // 比例條的標籤（桌布上那兩格寫的是 1-18／19-36，數字不必翻譯）
+    'arcade.rou.low': { en: 'LOW', zh: '小' },
+    'arcade.rou.high': { en: 'HIGH', zh: '大' },
+    'arcade.rou.red': { en: 'RED', zh: '紅' },
+    'arcade.rou.black': { en: 'BLACK', zh: '黑' },
+    'arcade.rou.recent': { en: 'Recent numbers', zh: '最近開出' },
+    'arcade.rou.noHistory': { en: 'Waiting for the first spin', zh: '等這張桌開出第一局' },
+
+    'arcade.rou.undo': { en: 'Undo', zh: '收回' },
+    'arcade.rou.round': { en: 'Round', zh: '局號' },
+    'arcade.rou.table': { en: 'Table', zh: '桌台' },
+    'arcade.rou.wheelType': { en: 'Wheel', zh: '輪盤' },
+    'arcade.rou.european': { en: 'European · single 0', zh: '歐式 · 單零' },
+    'arcade.rou.edge': { en: 'House edge', zh: '莊家優勢' },
+    'arcade.rou.maxPayout': { en: 'Top payout', zh: '最高賠率' },
+    'arcade.rou.caption': {
+        en: 'The number is decided before the ball moves: the server sends it ten seconds early and the wheel animation is solved backwards from it — two counter-rotating frames, so the ball has to land where the answer already is. On the layout, position is the bet: dead centre of 5 is a straight-up, three pixels left is a split.',
+        zh: '號碼在球動之前就定了：server 提早十秒送來，球的軌跡是從那個號碼反解出來的——盤與球反向轉，所以球非落在答案那一格不可。桌布那側則是位置決定注別：壓在 5 的正中央是直注，往左挪三個像素就變成分注。',
+    },
+
     // 還沒做的那幾款。名字用真實桌台的叫法，因為它們是接下來要做的東西，不是佔位的假名
     'arcade.lobby.dragontiger': { en: 'Dragon Tiger', zh: '龍虎' },
     'arcade.lobby.sicbo': { en: 'Sic Bo', zh: '骰寶' },
