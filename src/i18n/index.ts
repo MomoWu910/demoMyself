@@ -632,15 +632,31 @@ export const DICT: Record<string, Entry> = {
     'arcade.error.no_bet': { en: 'Place a bet first', zh: '請先下注' },
 
     // ---- 大廳與資源核對 ----
+    /*
+     * 三張能玩的卡片，副標一律**用玩家的話講玩家會遇到的事**。
+     *
+     * 這幾行原本是規格表：「五軸三列 · 伺服器停軸」「五張路圖 · 八副牌靴」
+     * 「真實視訊串流 · 延遲不到一秒」。那是寫給工程師看的——「伺服器停軸」講的是
+     * 誰決定結果（重要，但那件事寫在桌上的 serverNote 裡），「延遲不到一秒」則是
+     * 只有做過串流的人才知道好在哪。**站在大廳前面的人要的是「這款怎麼玩、跟隔壁
+     * 那款差在哪」**，行話用博弈桌上通行的那套（百搭、路單、閒莊），不是技術名詞。
+     *
+     * 但通俗不等於吹噓：能寫的只有真的做出來的東西。所以老虎機不提免費遊戲
+     * （Scatter 目前不觸發任何東西，見 games/slot/rules.ts 的 PAYOUTS），
+     * 視訊桌台的荷官前面留著「模擬」兩個字——那是預錄的片子，不是真的有人在發牌。
+     *
+     * **英文那半邊有長度上限：27 個字元左右。** 卡片在 390 寬的手機上只有 113px，
+     * 超過就會被 fitText 壓字級（見 lobby/rail.ts）。第一版寫成
+     * 'Simulated live dealer · dealt on camera'，39 個字元，在手機上被壓到 5.67px——
+     * 那已經不是「小字」是「看不到的字」。中文一個字抵兩個字元，所以中文那半邊
+     * 十一個字就是同一條線。
+     */
     'arcade.lobby.slot': { en: 'Slot', zh: '老虎機' },
-    'arcade.lobby.slotDesc': { en: '5×3 reels · server stops', zh: '五軸三列 · 伺服器停軸' },
+    'arcade.lobby.slotDesc': { en: 'Classic 777 · wild reels', zh: '經典 777 · 五線百搭' },
     'arcade.lobby.baccarat': { en: 'Baccarat', zh: '百家樂' },
-    'arcade.lobby.baccaratDesc': { en: 'Five roadmaps · 8-deck shoe', zh: '五張路圖 · 八副牌靴' },
+    'arcade.lobby.baccaratDesc': { en: 'Player vs banker · roadmaps', zh: '閒莊對決 · 五張路單' },
     'arcade.lobby.baccaratLive': { en: 'Live Baccarat', zh: '視訊百家樂' },
-    // 這一行一度寫的是「真實視訊串流 · 延遲不到一秒」——那是講給工程師聽的。
-    // 玩家站在大廳前面想知道的是**這張桌子跟隔壁那張有什麼不一樣**，而差別只有一件事：
-    // 桌子後面站著真人。延遲的事留在桌上那顆讀數裡給看得懂的人看
-    'arcade.lobby.baccaratLiveDesc': { en: 'Live dealer · cards dealt on camera', zh: '真人荷官 · 鏡頭前開牌' },
+    'arcade.lobby.baccaratLiveDesc': { en: 'Simulated dealer · on video', zh: '模擬真人荷官 · 視訊發牌' },
 
     // 視訊桌台
     'arcade.live.caption': {

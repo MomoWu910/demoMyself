@@ -321,6 +321,33 @@ class GameCard extends Container {
         this.title.text = this.titleText();
         this.sub.text = this.subText();
         this.badgeText.text = this.badgeLabel();
+        /*
+         * **換完字一定要重算字級。**
+         *
+         * fitText 是「量出來太寬就縮回去」，而縮放係數是**上一個語言**那串字算出來的。
+         * 少了這一行，切語言之後兩個方向都會壞：長的換成短的，短的那個會留在被縮小的
+         * 字級（實測手機上是 5.67px，理想值 10px）；短的換成長的，長的那句就直接溢出
+         * 卡片——正是 fitText 當初要擋的那件事。
+         *
+         * 這裡不叫 redraw()：卡片的圖形、漸層、圖示都跟語言無關，重畫一遍只是白花。
+         */
+        this.fitLabels();
+    }
+
+    /**
+     * 字級跟著縮放走。**這一段是「大螢幕上字太小」的正主**——原本 15／10／8
+     * 這三個數字是在 1440 寬調出來的絕對值，螢幕變成 2560 之後它們一點都沒變。
+     *
+     * 但光乘一個係數還不夠：字級是絕對值、卡片寬度不是，兩者在手機上會對撞。
+     * 實測 390×844 的卡片只有 113px 寬，而百家樂的副標「Five roadmaps · 8-deck shoe」
+     * 量出來 131px——**左右各有 9px 的字跑到卡片外面**。所以理想字級之後還要
+     * 過一道「量出來太寬就縮回去」（見 fitText）。
+     */
+    private fitLabels(): void {
+        const maxTextW = this.w - 14 * this.ui;
+        fitText(this.title, 15 * this.ui, maxTextW);
+        fitText(this.sub, 10 * this.ui, maxTextW);
+        this.badgeText.style.fontSize = 8 * this.ui;
     }
 
     public stop(): void {
@@ -368,19 +395,7 @@ class GameCard extends Container {
         // 圓角跟著放大。固定的 14px 貼在一張 390 寬的卡片上會顯得幾乎是直角
         const radius = 14 * ui;
 
-        /*
-         * 字級跟著縮放走。**這一段是「大螢幕上字太小」的正主**——原本 15／10／8
-         * 這三個數字是在 1440 寬調出來的絕對值，螢幕變成 2560 之後它們一點都沒變。
-         *
-         * 但光乘一個係數還不夠：字級是絕對值、卡片寬度不是，兩者在手機上會對撞。
-         * 實測 390×844 的卡片只有 113px 寬，而百家樂的副標「Five roadmaps · 8-deck shoe」
-         * 量出來 131px——**左右各有 9px 的字跑到卡片外面**。所以理想字級之後還要
-         * 過一道「量出來太寬就縮回去」（見 fitText）。
-         */
-        const maxTextW = w - 14 * ui;
-        fitText(this.title, 15 * ui, maxTextW);
-        fitText(this.sub, 10 * ui, maxTextW);
-        this.badgeText.style.fontSize = 8 * ui;
+        this.fitLabels();
 
         g.clear();
         g.roundRect(-w / 2, -h / 2, w, h, radius).fill({ color: INK, alpha: 0.96 });
