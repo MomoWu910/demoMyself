@@ -23,16 +23,26 @@ const SHOTS = process.argv[2] ?? tmpdir();
 const PORT = 8090;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.woff2': 'font/woff2' };
 
-const server = createServer(async (req, res) => {
-    let url = decodeURIComponent(req.url.split('?')[0]);
-    if (url.startsWith('/demoMyself/')) url = url.slice('/demoMyself'.length);
-    try {
-        const buf = await readFile(join(ROOT, url));
-        res.writeHead(200, { 'content-type': MIME[extname(url)] ?? 'application/octet-stream' });
-        res.end(buf);
-    } catch { res.writeHead(404).end('nope'); }
-});
-await new Promise((r) => server.listen(PORT, r));
+/*
+ * 預設驗本機 `dist`；給了 `VERIFY_BASE` 就改驗那個站台。
+ *
+ * 線上驗收值得單獨跑一次：**build 產物與本地 server 是兩條路徑**，publicPath、
+ * 快取標頭、字體與素材的實際位置都只有真的部署上去才算數。踩過「新版在 main、
+ * 線上還是舊版」那次之後，這一步才是「上線了」的證據。
+ */
+const BASE = process.env.VERIFY_BASE ?? `http://localhost:${PORT}`;
+const server = process.env.VERIFY_BASE
+    ? null
+    : createServer(async (req, res) => {
+          let url = decodeURIComponent(req.url.split('?')[0]);
+          if (url.startsWith('/demoMyself/')) url = url.slice('/demoMyself'.length);
+          try {
+              const buf = await readFile(join(ROOT, url));
+              res.writeHead(200, { 'content-type': MIME[extname(url)] ?? 'application/octet-stream' });
+              res.end(buf);
+          } catch { res.writeHead(404).end('nope'); }
+      });
+if (server) await new Promise((r) => server.listen(PORT, r));
 
 let pass = 0, fail = 0;
 const ok = (n, c, extra = '') => { c ? (pass++, console.log(`  ✓ ${n}`)) : (fail++, console.log(`  ✗ ${n} ${extra}`)); };
@@ -44,7 +54,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push('[console] ' + m.text()); });
 
-await page.goto(`http://localhost:${PORT}/arcade.html?renderer=webgl`);
+await page.goto(`${BASE}/arcade.html?renderer=webgl`);
 await page.waitForFunction(() => window.__ARCADE__ != null, null, { timeout: 30000 });
 await wait(1500);
 
@@ -191,7 +201,7 @@ console.log('\n== 結算 ==');
 console.log('\n== RWD ==');
 for (const [name, w, h] of [['桌機', 1440, 900], ['平板', 900, 700], ['手機橫放', 740, 390]]) {
     const p = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 2 });
-    await p.goto(`http://localhost:${PORT}/arcade.html?renderer=webgl`);
+    await p.goto(`${BASE}/arcade.html?renderer=webgl`);
     await p.waitForFunction(() => window.__ARCADE__ != null, null, { timeout: 30000 });
     await p.evaluate(() => window.__ARCADE__.enter('roulette'));
     await wait(2500);
@@ -257,5 +267,5 @@ console.log(`\n通過 ${pass} 項，失敗 ${fail} 項`);
 console.log(`截圖：${SHOTS}\n`);
 
 await browser.close();
-server.close();
+server?.close();
 process.exit(fail === 0 ? 0 : 1);
