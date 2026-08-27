@@ -1,0 +1,1051 @@
+{
+  "rounds": [
+    {
+      "startAt": 0,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 2,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 10,
+            "suit": "diamond"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 2,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 8,
+            "suit": "heart"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 17.3,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 2,
+            "suit": "spade"
+          },
+          {
+            "rank": 2,
+            "suit": "heart"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 10,
+            "suit": "diamond"
+          },
+          {
+            "rank": 8,
+            "suit": "heart"
+          }
+        ],
+        "playerTotal": 4,
+        "bankerTotal": 8,
+        "outcome": "banker",
+        "playerPair": true,
+        "bankerPair": false,
+        "natural": true
+      }
+    },
+    {
+      "startAt": 22,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 4,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 4,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 2,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 9,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 17.3,
+          "side": "banker",
+          "index": 2,
+          "card": {
+            "rank": 4,
+            "suit": "heart"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 18.1,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 4,
+            "suit": "spade"
+          },
+          {
+            "rank": 2,
+            "suit": "heart"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 4,
+            "suit": "club"
+          },
+          {
+            "rank": 9,
+            "suit": "heart"
+          },
+          {
+            "rank": 4,
+            "suit": "heart"
+          }
+        ],
+        "playerTotal": 6,
+        "bankerTotal": 7,
+        "outcome": "banker",
+        "playerPair": false,
+        "bankerPair": false,
+        "natural": false
+      }
+    },
+    {
+      "startAt": 44,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 5,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 3,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 1,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 12,
+            "suit": "diamond"
+          }
+        },
+        {
+          "at": 17.3,
+          "side": "banker",
+          "index": 2,
+          "card": {
+            "rank": 12,
+            "suit": "club"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 18.1,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 5,
+            "suit": "spade"
+          },
+          {
+            "rank": 1,
+            "suit": "heart"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 3,
+            "suit": "heart"
+          },
+          {
+            "rank": 12,
+            "suit": "diamond"
+          },
+          {
+            "rank": 12,
+            "suit": "club"
+          }
+        ],
+        "playerTotal": 6,
+        "bankerTotal": 3,
+        "outcome": "player",
+        "playerPair": false,
+        "bankerPair": false,
+        "natural": false
+      }
+    },
+    {
+      "startAt": 66,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 5,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 8,
+            "suit": "diamond"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 13,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 4,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 17.3,
+          "side": "player",
+          "index": 2,
+          "card": {
+            "rank": 6,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 18.1,
+          "side": "banker",
+          "index": 2,
+          "card": {
+            "rank": 3,
+            "suit": "diamond"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 18.900000000000002,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 5,
+            "suit": "club"
+          },
+          {
+            "rank": 13,
+            "suit": "club"
+          },
+          {
+            "rank": 6,
+            "suit": "spade"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 8,
+            "suit": "diamond"
+          },
+          {
+            "rank": 4,
+            "suit": "club"
+          },
+          {
+            "rank": 3,
+            "suit": "diamond"
+          }
+        ],
+        "playerTotal": 1,
+        "bankerTotal": 5,
+        "outcome": "banker",
+        "playerPair": false,
+        "bankerPair": false,
+        "natural": false
+      }
+    },
+    {
+      "startAt": 88,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 6,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 9,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 5,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 11,
+            "suit": "heart"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 17.3,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 6,
+            "suit": "spade"
+          },
+          {
+            "rank": 5,
+            "suit": "heart"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 9,
+            "suit": "spade"
+          },
+          {
+            "rank": 11,
+            "suit": "heart"
+          }
+        ],
+        "playerTotal": 1,
+        "bankerTotal": 9,
+        "outcome": "banker",
+        "playerPair": false,
+        "bankerPair": false,
+        "natural": true
+      }
+    },
+    {
+      "startAt": 110,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 3,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 2,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 1,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 11,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 17.3,
+          "side": "player",
+          "index": 2,
+          "card": {
+            "rank": 13,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 18.1,
+          "side": "banker",
+          "index": 2,
+          "card": {
+            "rank": 1,
+            "suit": "club"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 18.900000000000002,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 3,
+            "suit": "club"
+          },
+          {
+            "rank": 1,
+            "suit": "heart"
+          },
+          {
+            "rank": 13,
+            "suit": "heart"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 2,
+            "suit": "heart"
+          },
+          {
+            "rank": 11,
+            "suit": "heart"
+          },
+          {
+            "rank": 1,
+            "suit": "club"
+          }
+        ],
+        "playerTotal": 4,
+        "bankerTotal": 3,
+        "outcome": "player",
+        "playerPair": false,
+        "bankerPair": false,
+        "natural": false
+      }
+    },
+    {
+      "startAt": 132,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 9,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 6,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 13,
+            "suit": "diamond"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 3,
+            "suit": "spade"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 17.3,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 9,
+            "suit": "heart"
+          },
+          {
+            "rank": 13,
+            "suit": "diamond"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 6,
+            "suit": "club"
+          },
+          {
+            "rank": 3,
+            "suit": "spade"
+          }
+        ],
+        "playerTotal": 9,
+        "bankerTotal": 9,
+        "outcome": "tie",
+        "playerPair": false,
+        "bankerPair": false,
+        "natural": true
+      }
+    },
+    {
+      "startAt": 154,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 13,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 1,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 4,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 11,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 17.3,
+          "side": "player",
+          "index": 2,
+          "card": {
+            "rank": 10,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 18.1,
+          "side": "banker",
+          "index": 2,
+          "card": {
+            "rank": 9,
+            "suit": "diamond"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 18.900000000000002,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 13,
+            "suit": "spade"
+          },
+          {
+            "rank": 4,
+            "suit": "spade"
+          },
+          {
+            "rank": 10,
+            "suit": "heart"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 1,
+            "suit": "club"
+          },
+          {
+            "rank": 11,
+            "suit": "club"
+          },
+          {
+            "rank": 9,
+            "suit": "diamond"
+          }
+        ],
+        "playerTotal": 4,
+        "bankerTotal": 0,
+        "outcome": "player",
+        "playerPair": false,
+        "bankerPair": false,
+        "natural": false
+      }
+    },
+    {
+      "startAt": 176,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 8,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 8,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 9,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 4,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 17.3,
+          "side": "banker",
+          "index": 2,
+          "card": {
+            "rank": 13,
+            "suit": "heart"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 18.1,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 8,
+            "suit": "club"
+          },
+          {
+            "rank": 9,
+            "suit": "club"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 8,
+            "suit": "spade"
+          },
+          {
+            "rank": 4,
+            "suit": "spade"
+          },
+          {
+            "rank": 13,
+            "suit": "heart"
+          }
+        ],
+        "playerTotal": 7,
+        "bankerTotal": 2,
+        "outcome": "player",
+        "playerPair": false,
+        "bankerPair": false,
+        "natural": false
+      }
+    },
+    {
+      "startAt": 198,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 12,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 10,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 10,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 5,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 17.3,
+          "side": "player",
+          "index": 2,
+          "card": {
+            "rank": 7,
+            "suit": "diamond"
+          }
+        },
+        {
+          "at": 18.1,
+          "side": "banker",
+          "index": 2,
+          "card": {
+            "rank": 5,
+            "suit": "spade"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 18.900000000000002,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 12,
+            "suit": "club"
+          },
+          {
+            "rank": 10,
+            "suit": "spade"
+          },
+          {
+            "rank": 7,
+            "suit": "diamond"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 10,
+            "suit": "club"
+          },
+          {
+            "rank": 5,
+            "suit": "club"
+          },
+          {
+            "rank": 5,
+            "suit": "spade"
+          }
+        ],
+        "playerTotal": 7,
+        "bankerTotal": 0,
+        "outcome": "player",
+        "playerPair": false,
+        "bankerPair": false,
+        "natural": false
+      }
+    },
+    {
+      "startAt": 220,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 4,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 1,
+            "suit": "diamond"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 12,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 8,
+            "suit": "heart"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 17.3,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 4,
+            "suit": "club"
+          },
+          {
+            "rank": 12,
+            "suit": "heart"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 1,
+            "suit": "diamond"
+          },
+          {
+            "rank": 8,
+            "suit": "heart"
+          }
+        ],
+        "playerTotal": 4,
+        "bankerTotal": 9,
+        "outcome": "banker",
+        "playerPair": false,
+        "bankerPair": false,
+        "natural": true
+      }
+    },
+    {
+      "startAt": 242,
+      "lockAt": 11,
+      "deals": [
+        {
+          "at": 12,
+          "side": "player",
+          "index": 0,
+          "card": {
+            "rank": 10,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 12.9,
+          "side": "banker",
+          "index": 0,
+          "card": {
+            "rank": 12,
+            "suit": "club"
+          }
+        },
+        {
+          "at": 13.8,
+          "side": "player",
+          "index": 1,
+          "card": {
+            "rank": 3,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 14.7,
+          "side": "banker",
+          "index": 1,
+          "card": {
+            "rank": 12,
+            "suit": "heart"
+          }
+        },
+        {
+          "at": 17.3,
+          "side": "player",
+          "index": 2,
+          "card": {
+            "rank": 13,
+            "suit": "spade"
+          }
+        },
+        {
+          "at": 18.1,
+          "side": "banker",
+          "index": 2,
+          "card": {
+            "rank": 1,
+            "suit": "club"
+          }
+        }
+      ],
+      "revealAt": 16.5,
+      "resultAt": 18.900000000000002,
+      "clearAt": 20.8,
+      "round": {
+        "player": [
+          {
+            "rank": 10,
+            "suit": "club"
+          },
+          {
+            "rank": 3,
+            "suit": "heart"
+          },
+          {
+            "rank": 13,
+            "suit": "spade"
+          }
+        ],
+        "banker": [
+          {
+            "rank": 12,
+            "suit": "club"
+          },
+          {
+            "rank": 12,
+            "suit": "heart"
+          },
+          {
+            "rank": 1,
+            "suit": "club"
+          }
+        ],
+        "playerTotal": 3,
+        "bankerTotal": 1,
+        "outcome": "player",
+        "playerPair": false,
+        "bankerPair": true,
+        "natural": false
+      }
+    }
+  ],
+  "duration": 264,
+  "epoch": 1787735308308
+}

@@ -59,8 +59,11 @@ html, body {
 
 canvas { display: block; touch-action: none; }
 
-/* canvas 鋪滿；HUD 疊在上面 */
-.stage { position: fixed; inset: 0; }
+/* canvas 鋪滿；HUD 疊在上面。
+   底色畫在這一層而不是交給 canvas：畫布是透明的（見 core/stage.ts 的 backgroundAlpha），
+   視訊桌台的 <video> 就沉在它底下。背景屬於元素自己，繪製順序在所有子元素之前，
+   所以擋不到那塊視訊 */
+.stage { position: fixed; inset: 0; background: var(--bg); }
 
 /* z-index 要比語言鈕（#lang-slot 的 5）高，資源核對展開的說明才蓋得過它。
    這一層自己是 pointer-events: none，所以疊在上面不會擋住底下任何東西的點擊 */
@@ -100,9 +103,21 @@ canvas { display: block; touch-action: none; }
    兩者長得一樣，所以要把 button 的預設外觀抹掉 */
 button.back { cursor: pointer; font-weight: inherit; }
 
-/* 頂列左側是返回鍵加玩家資訊，右側是核對數字與連線狀態 */
+/* 頂列左側是返回鍵加玩家資訊，右側是核對數字 */
 .top-left { display: flex; align-items: center; gap: calc(12px * var(--ui-scale)); }
 .top-right { display: flex; align-items: center; gap: calc(10px * var(--ui-scale)); }
+
+/*
+ * 牌桌上讓開畫布右上角那顆齒輪。
+ *
+ * **這是一條跨層的約定**：齒輪畫在 canvas 裡（common/table/tableLayout.ts 的 `more`），
+ * 這一列是疊在上面的 DOM，兩層各自定位、誰也偵測不到誰，所以只能兩邊各讓一半、
+ * 把數字對好——齒輪從畫面右緣算起吃掉 `PAD(12) + 36`，這裡讓出的是那段加上一點間隙。
+ *
+ * 30 是量出來的：`.top` 自己的右邊距是 clamp(16,3vw,32)，扣掉之後剩下的差額就是這個數。
+ * **改齒輪的 PAD 或尺寸要回來改這裡**，不然核對徽章會跟它疊在一起。
+ */
+.top-right--gear { padding-right: calc(30px * var(--ui-scale)); }
 
 /* ---- 玩家與錢包 ----
    真實博弈大廳的頂列一定有錢包，而且進了遊戲也不會消失——玩家隨時要知道自己還有多少。
@@ -254,31 +269,14 @@ button.back { cursor: pointer; font-weight: inherit; }
     .meter-wrap { display: none; }
 }
 
-/* 語言鈕：i18n 掛進 #lang-slot，位置在這裡定。頂列右側留給連線狀態，所以往下錯開一列 */
+/* 語言鈕：i18n 掛進 #lang-slot，位置在這裡定。頂列右側是核對數字，所以往下錯開一列。
+   牌桌上它整顆不畫——語言切換收進了畫布那顆齒輪（見 ui/Hud.tsx 的 useHideLangToggle） */
 #lang-slot {
     position: fixed;
     top: calc(max(58px, calc(env(safe-area-inset-top) + 46px)) * var(--ui-scale));
     right: calc(clamp(16px, 3vw, 32px) * var(--ui-scale));
     z-index: 5;
 }
-
-/* ---- 連線狀態 ---- */
-.conn {
-    font-family: var(--mono);
-    font-size: calc(0.68rem * var(--ui-scale));
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: calc(5px * var(--ui-scale)) calc(11px * var(--ui-scale));
-    border-radius: 999px;
-    border: 1px solid currentColor;
-    opacity: 0.9;
-}
-.conn.connecting { color: var(--muted); animation: pulse 1.1s ease-in-out infinite; }
-.conn.open { color: var(--good); }
-.conn.closed { color: var(--hot); }
-
-@keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .conn.connecting { animation: none; } }
 
 /* ---- 錯誤提示 ---- */
 .toast {
@@ -418,8 +416,9 @@ button.back { cursor: pointer; font-weight: inherit; }
     left: 50%;
     transform: translateX(-50%);
     bottom: calc(max(18px, env(safe-area-inset-bottom)) * var(--ui-scale));
-    /* 760 而不是 680：百家樂的讀數比老虎機多兩欄（本局押注、牌靴），680 的中間欄
-       擠到讓五顆籌碼換行——換行後那一列會長高，canvas 那側就得多讓一截出來。
+    /* 760 是量出來的：這塊面板現在只剩老虎機在用（兩張百家樂桌台的介面搬進了畫布，
+       見 games/baccarat/index.ts 的 buildDeck），而老虎機的讀數加上五顆籌碼在 680 會換行——
+       換行後那一列會長高，canvas 那側就得多讓一截出來。
        面板整組跟著 --ui-scale 放大：**高度是實測回報給 canvas 的**（見 Hud.tsx 的
        useDockMeasure），所以放大之後盤面會自己讓位，不必在兩邊各維護一份數字 */
     width: calc(min(760px, calc(100vw - 32px)) * var(--ui-scale));
@@ -427,6 +426,7 @@ button.back { cursor: pointer; font-weight: inherit; }
     grid-template-columns: auto 1fr auto;
     grid-template-areas:
         'readouts bet spin'
+        'controls controls controls'
         'options options options'
         'note note note';
     align-items: center;
@@ -440,7 +440,9 @@ button.back { cursor: pointer; font-weight: inherit; }
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
 }
 
-.readouts { grid-area: readouts; display: flex; gap: calc(18px * var(--ui-scale)); }
+/* wrap 是必要的而不是保險：讀數的欄數由玩法決定（視訊桌台有六欄），
+   不換行的話窄畫面上它會直接撐破面板、整列跑到畫面外 */
+.readouts { grid-area: readouts; display: flex; flex-wrap: wrap; gap: calc(18px * var(--ui-scale)); }
 .stat { display: flex; flex-direction: column; gap: 2px; }
 .cap {
     font-family: var(--mono);
@@ -499,8 +501,8 @@ button.back { cursor: pointer; font-weight: inherit; }
     font-weight: 700;
 }
 .chip:disabled { opacity: 0.4; cursor: not-allowed; }
-/* 清除／重複：跟籌碼面額同一區塊，但它們是**動作**不是「選一個」，永遠不會有 .on 狀態。
-   虛線邊框把這個差別講出來，省下一個標籤的高度（見 BaccaratPanel 的 BetControls） */
+/* 動作類的 chip（不是「選一個」的那種），永遠不會有 .on 狀態。
+   虛線邊框把這個差別講出來，省下一個標籤的高度 */
 .chip.ghost { border-style: dashed; }
 
 .spin {
@@ -531,51 +533,6 @@ button.back { cursor: pointer; font-weight: inherit; }
     opacity: 0.5;
     cursor: not-allowed;
     box-shadow: none;
-}
-
-/*
- * 多人桌的階段儀表——**站在原本發牌按鈕的位置上**。
- *
- * 刻意長得不像按鈕：沒有金色漸層、沒有 hover、沒有陰影。那個位置在老虎機與單機版
- * 百家樂上都是「按這裡」，所以這裡最重要的事是讓人一眼看出**這個不能按**，
- * 否則玩家會一直戳它，然後以為桌子壞了。
- */
-.table-status {
-    grid-area: spin;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: calc(10px * var(--ui-scale));
-    padding: calc(12px * var(--ui-scale)) calc(20px * var(--ui-scale));
-    border-radius: calc(12px * var(--ui-scale));
-    border: 1px solid var(--border);
-    background: var(--well);
-    /* 倒數每秒換一個數字，寬度會跳。等寬數字讓整塊儀表定住 */
-    font-variant-numeric: tabular-nums;
-}
-.table-status .cap { color: var(--muted); }
-.table-status .clock {
-    font-family: var(--mono);
-    font-size: calc(1.5rem * var(--ui-scale));
-    font-weight: 700;
-    line-height: 1;
-    color: var(--gold-bright);
-}
-/* 最後五秒。跟 canvas 裡那顆膠囊同一個門檻，兩邊要一起變才不會互相矛盾 */
-.table-status.urgent {
-    border-color: color-mix(in srgb, var(--hot) 60%, transparent);
-}
-.table-status.urgent .clock {
-    color: var(--hot);
-    animation: table-urgent 1s ease-in-out infinite;
-}
-@keyframes table-urgent {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.12); }
-}
-/* 會動的東西要尊重系統設定。倒數靠顏色仍然讀得出來，脈動只是加強 */
-@media (prefers-reduced-motion: reduce) {
-    .table-status.urgent .clock { animation: none; }
 }
 
 .note {
@@ -669,12 +626,12 @@ button.back { cursor: pointer; font-weight: inherit; }
         grid-template-areas:
             'readouts'
             'bet'
+            'controls'
             'options'
             'spin';
     }
     .readouts { justify-content: space-between; gap: 10px; }
     .spin { width: 100%; padding: 13px; font-size: 0.9rem; }
-    .table-status { width: 100%; padding: 10px 16px; }
 }
 
 /*
@@ -705,15 +662,14 @@ button.back { cursor: pointer; font-weight: inherit; }
         padding: 10px 12px;
     }
 
-    /* DOM 順序是 readouts → bet → spin → 抽屜，視覺要的是 SPIN 在最底，所以重排 */
+    /* DOM 順序是 readouts → bet → spin → 抽屜，視覺要的是 SPIN 在最底，所以重排。
+       沒有 order 的東西預設是 0，會排到所有人前面 */
     .readouts { order: 1; }
     .bet { order: 2; }
-    .drawer, .options { order: 3; }
-    .spin { order: 4; }
-    .table-status { order: 4; }
+    .drawer, .options { order: 4; }
+    .spin { order: 5; }
 
-    /* 讀數改兩欄：直排四個（百家樂的餘額／本局／上局／牌靴）會吃掉 144px，
-       這個高度下那是整面板的四成 */
+    /* 讀數改兩欄：直排四個會吃掉 144px，這個高度下那是整面板的四成 */
     .readouts {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -756,8 +712,6 @@ button.back { cursor: pointer; font-weight: inherit; }
     }
 
     .spin { width: 100%; padding: 11px; font-size: 0.86rem; }
-    .table-status { width: 100%; padding: 8px 14px; }
-    .table-status .clock { font-size: 1.2rem; }
     .drawer-toggle { padding: 5px 10px; }
     .cap { font-size: 0.55rem; }
     .val { font-size: 0.92rem; }
@@ -815,6 +769,45 @@ button.back { cursor: pointer; font-weight: inherit; }
     #lang-slot { left: 300px; }
     .lobby-foot { bottom: max(8px, env(safe-area-inset-bottom)); height: 34px; }
     .foot-note { display: none; }
+}
+
+/* ---- 視訊桌台 -------------------------------------------------------------
+
+   視訊是一塊疊在畫布上的 DOM，不是畫進畫布裡的貼圖（理由見 common/video/VideoLayer.ts）。
+   所以位置由模組算好、用 transform 推過來，跟 Pixi 的 screen 座標共用同一套單位。 */
+
+.live-video {
+    position: absolute;
+    left: 0;
+    top: 0;
+    /* **沉在 canvas 底下。** 疊層（倒數、延遲讀數、結果、注區、路圖）全部畫在 Pixi 裡，
+       因為它們用的是 common/chips 與 common/roadmap 那套現成元件（見 VideoLayer.ts）。
+       視訊在這一頁就是背景，沒有任何東西需要鑽到它下面 */
+    z-index: 0;
+    /* 整層不吃指標事件：注區的點擊要落在上面那層 canvas 上 */
+    pointer-events: none;
+}
+
+/* canvas 提到視訊之上。Pixi 的背景在進視訊桌台時會被設成透明，
+   所以「上面那層」蓋住的只有它自己畫的東西（見 games/baccaratLive/index.ts） */
+.stage canvas { position: relative; z-index: 1; }
+
+.live-video__frame {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1.5px solid rgba(138, 106, 51, 0.55);
+    background: #0d1512;
+}
+
+/* 等比填滿而不是完整放進去：視訊桌台寧可裁邊也不要黑邊——
+   黑邊會讓整塊面板看起來像播放器，而裁掉的是桌面邊緣，本來就不帶資訊 */
+.live-video__el {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 /* 跨頁轉場的落地端：一層純色覆蓋，淡出＋微放大揭開頁面。 */
