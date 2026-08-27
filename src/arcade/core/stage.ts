@@ -1,4 +1,5 @@
 import { Application, Container, FillGradient, Graphics } from 'pixi.js';
+import { installCJKLineBreak } from '../common/text/lineBreak';
 import { ModuleHost, type GameModule, type ModuleId } from './module';
 import { SlotModule } from '../games/slot';
 import { BaccaratModule } from '../games/baccarat';
@@ -31,6 +32,10 @@ export interface ArcadeStage {
 }
 
 export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> {
+    // 中文的行首行尾禁則。**要在任何一個 Text 被量測之前掛上**——Pixi 會快取量測結果，
+    // 掛晚了的話已經排好的那幾段不會重排（見 common/text/lineBreak.ts）
+    installCJKLineBreak();
+
     const params = new URLSearchParams(window.location.search);
     const preference = params.get('renderer') === 'webgl' ? 'webgl' : 'webgpu';
 

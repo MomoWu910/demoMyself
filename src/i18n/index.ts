@@ -454,7 +454,7 @@ export const DICT: Record<string, Entry> = {
     },
     'shader.chromatic.cost': {
         en: 'Three texture fetches per pixel instead of one. Texture bandwidth, not ALU, is what you are spending here — and bandwidth is the resource that runs out first on mobile GPUs. The subtle trap is premultiplied alpha: the three samples land in different places and therefore carry different alphas, so each channel must be divided back out by its own alpha before being combined, then repremultiplied by a single shared alpha. Skip that and translucent edges pick up colour fringing that is a bug, not an effect.',
-        zh: '每個像素從一次取樣變成三次。你花掉的是**貼圖頻寬**而不是 ALU——而頻寬正是行動裝置 GPU 最先耗盡的資源。隱晦的陷阱在預乘 alpha：三個取樣點落在不同位置、各自的 alpha 也不同，所以每個 channel 都得先除回自己的 alpha 再組合，最後用一個共用的 alpha 重新預乘。省掉這步，半透明邊緣會出現一圈「不是特效、是 bug」的色邊。',
+        zh: '每個像素從一次取樣變成三次。你花掉的是貼圖頻寬而不是 ALU——而頻寬正是行動裝置 GPU 最先耗盡的資源。隱晦的陷阱在預乘 alpha：三個取樣點落在不同位置、各自的 alpha 也不同，所以每個 channel 都得先除回自己的 alpha 再組合，最後用一個共用的 alpha 重新預乘。省掉這步，半透明邊緣會出現一圈「不是特效、是 bug」的色邊。',
     },
 
     'shader.flag.title': { en: 'Waving Flag', zh: '飄動旗幟' },
@@ -591,7 +591,23 @@ export const DICT: Record<string, Entry> = {
     'arcade.auto': { en: 'Auto', zh: '自動' },
     'arcade.auto.off': { en: 'Off', zh: '關' },
     /*
-     * 四款玩法的說明，一律**寫給要玩的人看**。
+     * 四款玩法的說明，一律寫給要玩的人看。
+     *
+     * ⚠️ **這份字典是純文字，畫面上沒有 Markdown 渲染器。** Pixi 的 `Text` 與 DOM 的
+     * `<p>` 都會把 `**粗體**` 原封不動地印出來——星號會直接出現在玩家眼前（踩過一次）。
+     * 要強調就用「」括起來，或把重點寫到句首。註解裡可以用 Markdown，字典的值不行。
+     *
+     * ⚠️ **畫在畫布裡的中文長段落不要用半形空格**，中英文之間、數字與量詞之間都不要。
+     * （DOM 那側不受影響——瀏覽器對中文的斷行是逐字的，那裡的空格照慣例留著就好。）
+     *
+     * 面板那段說明有 `wordWrap`，而 Pixi 是**先照空白切 token、整個 token 放不下才換行**，
+     * 塞不進去的 token 只有比整行還寬時才會逐字切。中文整段沒有空格時它是一個超長 token，
+     * 逐字排下來每一行都填滿；一旦中間插進一個空格，後半段就變成獨立 token，
+     * 於是**上一行會空掉一大截**（「右上角 LIVE」後面整行留白就是這樣來的）。
+     * 「賠 35 倍」則更明顯，會在行尾拆成「賠 35」跟「倍」兩行。
+     *
+     * 寫成「賠35倍」「右上角LIVE標籤」，或改用中文數字（「接近九」）就都不會。
+     * 英文版照常用空格——它本來就是照單字斷行的。
      *
      * 這幾格原本放的是技術說明（自己餵 fMP4 給 MediaSource、球的軌跡是反解的…），
      * 那是寫給讀原始碼的人看的東西，而**打開齒輪選單的人想知道的是「這個怎麼玩、
@@ -603,15 +619,15 @@ export const DICT: Record<string, Entry> = {
      */
     'arcade.slot.help': {
         en: 'Five reels, three rows, five fixed paylines (top, middle, bottom and two zigzags) — your stake is split evenly across them. Three or more matching symbols counting from the leftmost reel pays, and longer runs pay far more. Wild substitutes for anything but Scatter. This machine is tuned to a 93% long-run return. The result comes from the server, which is why the button waits a moment.',
-        zh: '五軸三列，五條固定賠付線（上、中、下與兩條折線），押注會平均分到五條線上。**從最左邊那一軸算起**，同一條線上連三格相同符號就中獎，連得越長賠得越多。百搭可以替代除了散佈符號以外的任何一種。這台機的長期回報率配在 93%。按下去會頓一下，是因為結果是伺服器算完才送過來的。',
+        zh: '五軸三列，五條固定賠付線（上、中、下與兩條折線），押注會平均分到五條線上。中獎要從最左邊那一軸算起，同一條線上連三格相同符號才算數，連得越長賠得越多。百搭可以替代除了散佈符號以外的任何一種。這台機的長期回報率配在93%。按下去會頓一下，是因為結果要等伺服器算完才送過來。',
     },
     'arcade.bac.help': {
         en: 'Bet on Player or Banker — whichever hand lands closer to nine. Tens and face cards count as zero and only the last digit of the total counts; whether a third card comes is fixed by the rules, nobody chooses. Player pays 1:1, Banker pays 0.95:1 (5% commission), and a tie returns both stakes. Side bets: Tie pays 8:1, either Pair pays 11:1.',
-        zh: '押閒或押莊，比誰的點數接近 9。10 與花牌算 0 點，兩張相加只取個位數；要不要補第三張由固定規則決定，玩家沒有選擇權。閒贏賠 1 倍，莊贏賠 0.95 倍（抽 5% 水），和局時莊閒的注**退還本金**。另外可以押和（8 倍）或對子（11 倍）。',
+        zh: '押閒或押莊，比誰的點數接近九。10與花牌算0點，兩張相加只取個位數；要不要補第三張由固定規則決定，玩家沒有選擇權。閒贏賠1倍，莊贏賠0.95倍（抽5%水），和局時莊閒的注退還本金。另外可以押和（8倍）或對子（11倍）。',
     },
     'arcade.live.help': {
         en: 'Same game as Baccarat — the difference is that the cards are dealt on camera. Your video runs a little behind the table (the LIVE badge shows by how much), so what decides whether you can still bet is the countdown above the betting spots: that one comes from the server. The board beside the dealer shows his clock, and the two do not have to agree.',
-        zh: '玩法跟百家樂完全一樣——差別在牌是荷官在鏡頭前發的。**你的畫面會比桌上慢一點**（右上角 LIVE 標籤顯示的就是慢幾秒），所以能不能下注要看注區上方那個倒數，那一份是伺服器給的。影片裡桌邊那塊牌子是荷官端的時間，兩者不一定同步。',
+        zh: '玩法跟百家樂完全一樣，差別在牌是荷官在鏡頭前發的。你的畫面會比桌上慢一點，右上角LIVE標籤顯示的就是慢幾秒；所以能不能下注要看注區上方那個倒數，那一份是伺服器給的。影片裡桌邊那塊牌子走的是荷官端的時間，兩者不一定同步。',
     },
 
     // ---- 百家樂 ----
@@ -740,7 +756,7 @@ export const DICT: Record<string, Entry> = {
     'arcade.rou.maxPayout': { en: 'Top payout', zh: '最高賠率' },
     'arcade.rou.help': {
         en: 'Bet on which pocket the ball drops into. Thirty-seven of them: 1 to 36 plus a green zero. Inside the number grid, position is the bet — dead centre of a number is a straight-up (35:1), on the line between two numbers is a split (17:1), on the point where four meet is a corner (8:1). Hover first and the covered numbers light up. The two rows below are outside bets: red/black, odd/even and high/low pay 1:1, dozens and columns pay 2:1. When zero comes up every outside bet loses — that single pocket is the whole house edge.',
-        zh: '押球會停在哪一格。37 格：1~36 加一個綠色的 0。中間那片號碼格是**位置決定注別**——籌碼壓在格子正中央是直注（35 倍），壓在兩格之間的線上是分注（17 倍），四格交會的那個點是角注（8 倍）；滑過去會先亮出你押到哪幾格。下面兩排是外注：紅黑、單雙、大小賠 1 倍，十二數與縱列賠 2 倍。**開出 0 的時候外注全部落空**，莊家的優勢就只在這一格。',
+        zh: '押球會停在哪一格。轉盤上有37格：1到36，加一個綠色的零。中間那片號碼格是「位置決定注別」——籌碼壓在格子正中央是直注，賠35倍；壓在兩格之間的線上是分注，賠17倍；壓在四格交會的那個點是角注，賠8倍。滑過去會先亮出你押到哪幾格。下面兩排是外注：紅黑、單雙、大小賠1倍，十二數與縱列賠2倍。開出零的時候外注全部落空，莊家的優勢就只在這一格。',
     },
 
     // 還沒做的那幾款。名字用真實桌台的叫法，因為它們是接下來要做的東西，不是佔位的假名
