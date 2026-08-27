@@ -7,8 +7,25 @@
  *
  * 自然動線下「上一頁」就等於我們想回的父頁（首頁→節點頁、實驗結論→壓測），所以 back 會正確落點。
  * 只有「直接開這頁」（沒有同源 referrer，例如貼網址進來）才 fallback 導到指定父頁。
+ *
+ * ---
+ *
+ * **例外：被別人嵌在框架裡的時候不准碰 history。**
+ *
+ * session history 是**整個分頁共用的一份**，不是每個 iframe 各有一份。所以在子框架裡呼叫
+ * `history.back()`，退掉的是最外層那一頁——RWD 裝置模擬器（rwdShowcase）預覽本站頁面時
+ * 就出過這個包：在模擬器的小螢幕裡按「返回首頁」，整個模擬器連同外框一起跳去首頁。
+ *
+ * 被嵌著的時候改成只動自己那個框架的位址。**這不是為模擬器加的特例**——任何人把這些頁面
+ * 嵌進 iframe，返回鍵都不該有本事把宿主頁面帶走。
  */
 export function goBack(fallbackHref: string): void {
+    // 跨源時讀 window.top 的屬性會拋，但比較參考本身是安全的
+    if (window.top !== window.self) {
+        window.location.replace(fallbackHref);
+        return;
+    }
+
     let cameFromSameSite = false;
     try {
         cameFromSameSite = !!document.referrer && new URL(document.referrer).origin === window.location.origin;

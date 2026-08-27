@@ -67,7 +67,13 @@ const rotateBtn = $<HTMLButtonElement>('rotate');
 // --- 狀態 ---
 let frameW = 393, frameH = 852;          // 目前 viewport 尺寸（CSS px）
 let activeDevice: string | null = 'iphone-15'; // null = 自由拖拉的 custom 尺寸
-let activePage = PAGES[0];
+/**
+ * 目前預覽的是清單裡的哪一頁。**null = 不在清單裡**——預覽的頁面自己導航得到那種地方
+ * （壓測頁的返回鍵回的是 findings，模擬器不該硬把某顆 pill 點亮）。
+ */
+let activePage: Page | null = PAGES[0];
+/** 假網址列顯示什麼。跟 activePage 分開存，因為 iframe 可能導到清單外的位址 */
+let previewPath = PAGES[0].url;
 
 // 依寬度決定外框樣式（自由拖拉時也會跟著變）
 const frameType = (): DeviceType => (frameW < 600 ? 'phone' : frameW < 1000 ? 'tablet' : 'desktop');
@@ -104,7 +110,7 @@ const applyLayout = (fixedScale?: number) => {
 
     sizeW.textContent = String(frameW);
     sizeH.textContent = String(frameH);
-    chromeUrl.textContent = activePage.url.replace('./', '/');
+    chromeUrl.textContent = previewPath.replace('./', '/');
 };
 
 // --- 裝置 pills ---
@@ -147,6 +153,7 @@ rotateBtn.addEventListener('click', () => {
  * 那時歷史會被多推一筆，但總比整個預覽空掉好。
  */
 function showPage(url: string): void {
+    previewPath = url;
     const win = preview.contentWindow;
     if (win) {
         try {
@@ -162,14 +169,14 @@ function showPage(url: string): void {
 // --- 頁面 pills ---
 const pageBtns = new Map<string, HTMLButtonElement>();
 const paintPages = () => {
-    pageBtns.forEach((b, id) => b.classList.toggle('active', id === activePage.id));
+    pageBtns.forEach((b, id) => b.classList.toggle('active', id === activePage?.id));
 };
 PAGES.forEach((p) => {
     const b = document.createElement('button');
     b.className = 'pill';
     b.textContent = t(p.key);
     b.addEventListener('click', () => {
-        if (activePage.id === p.id) return;
+        if (activePage?.id === p.id) return;
         activePage = p;
         showPage(p.url); // 全程只有一個 live iframe，切頁只換它的位址
         paintPages();
@@ -180,6 +187,32 @@ PAGES.forEach((p) => {
 });
 onLangChange(() => {
     pageBtns.forEach((b, id) => { b.textContent = t(PAGES.find((p) => p.id === id)!.key); });
+});
+
+/*
+ * 預覽的頁面**自己也會導航**：它們的返回鍵、頁內連結都會換頁，而模擬器完全不知情。
+ * 不校正的話，假網址列會一直停在上次用 pill 切過去的那一頁——預覽裡明明已經是首頁，
+ * 上面卻還寫著 /arcade.html，看起來像模擬器壞了。
+ *
+ * 同源才讀得到子視窗的位址（預覽的都是本站頁面）；讀不到就維持原樣，不是錯誤。
+ */
+preview.addEventListener('load', () => {
+    let path: string;
+    try {
+        const win = preview.contentWindow;
+        if (!win) return;
+        path = `.${win.location.pathname}`;
+    } catch {
+        return; // 跨源，讀不到就別猜
+    }
+    if (path === previewPath) return;
+
+    previewPath = path;
+    // 導到清單外的頁面時 activePage 收成 null，pill 就全部熄掉——
+    // 硬留著上一顆亮著，等於告訴使用者他正在看一個他其實沒在看的頁面
+    activePage = PAGES.find((p) => p.url === path) ?? null;
+    paintPages();
+    applyLayout();
 });
 
 // --- 自由拖拉手把（pointer capture，拖曳中凍結縮放比避免抖動）---
@@ -212,7 +245,7 @@ handle.addEventListener('pointercancel', endDrag);
 initI18n({ parent: $('lang-slot') });
 // 第一次可以直接設 src：iframe 還沒導航過，這一次是「初始載入」而不是換頁，
 // 不會往上層歷史推紀錄。之後的每一次都得走 showPage
-preview.src = activePage.url;
+preview.src = previewPath;
 paintDevices();
 paintPages();
 applyLayout();
