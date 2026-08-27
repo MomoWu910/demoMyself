@@ -745,7 +745,6 @@ export const DICT: Record<string, Entry> = {
     'arcade.rou.recent': { en: 'Recent numbers', zh: '最近開出' },
     'arcade.rou.noHistory': { en: 'Waiting for the first spin', zh: '等這張桌開出第一局' },
 
-    'arcade.rou.undo': { en: 'Undo', zh: '收回' },
     'arcade.rou.round': { en: 'Round', zh: '局號' },
     'arcade.rou.table': { en: 'Table', zh: '桌台' },
     // 齒輪選單裡玩法說明那一區的標題，四款共用

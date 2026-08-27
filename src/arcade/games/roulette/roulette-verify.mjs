@@ -128,12 +128,10 @@ console.log('\n== 下注 ==');
     const two = await page.evaluate(() => window.__TABLE__());
     ok('外注也押得到', Object.keys(two.myBets).length === 2, JSON.stringify(Object.keys(two.myBets)));
 
-    const undo = await boundsOf('table-button');
-    await page.evaluate(() => window.__TABLE__().undoHandler?.());
-    await wait(600);
-    const undone = await page.evaluate(() => window.__TABLE__());
-    ok('收回最後一筆注', undone.myTotal === two.myTotal - two.chip, `${two.myTotal} → ${undone.myTotal}`);
-    ok('收回後注單只剩一筆', Object.keys(undone.myBets).length === 1, JSON.stringify(undone.myBets));
+    // 這張桌**沒有收回**：推出去的籌碼就是桌上的注（見 rouletteServer.bet）。
+    // 驗的是那條路真的不存在，而不是只把按鈕藏起來
+    const noUndo = await page.evaluate(() => typeof window.__TABLE__().undoHandler === 'undefined');
+    ok('沒有收回這條路', noUndo);
 }
 
 console.log('\n== 球真的在跑 ==');
@@ -199,7 +197,18 @@ console.log('\n== 結算 ==');
 }
 
 console.log('\n== RWD ==');
-for (const [name, w, h] of [['桌機', 1440, 900], ['平板', 900, 700], ['手機橫放', 740, 390]]) {
+/*
+ * 直屏（後兩個）是**回頭補上的**：第一版只驗橫屏，於是兩個只在直屏出現的版面錯
+ * 是玩的人先看到的——百家樂的牌位整組超出畫面、輪盤的看板被擠成一條讀不出號碼的細長條。
+ * 驗證沒涵蓋的方向，就等於沒有驗。
+ */
+for (const [name, w, h] of [
+    ['桌機', 1440, 900],
+    ['平板', 900, 700],
+    ['手機橫放', 740, 390],
+    ['手機直屏', 390, 844],
+    ['平板直屏', 768, 1024],
+]) {
     const p = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 2 });
     await p.goto(`${BASE}/arcade.html?renderer=webgl`);
     await p.waitForFunction(() => window.__ARCADE__ != null, null, { timeout: 30000 });
@@ -216,11 +225,11 @@ for (const [name, w, h] of [['桌機', 1440, 900], ['平板', 900, 700], ['手�
             }
             return null;
         };
-        const felt = walk(window.__PIXI_APP__.stage, 'roulette-felt');
-        const wheel = walk(window.__PIXI_APP__.stage, 'roulette-wheel');
-        const fb = felt.getBounds();
-        const wb = wheel.getBounds();
-        return { felt: { x: fb.x, y: fb.y, w: fb.width, h: fb.height }, wheel: { x: wb.x, y: wb.y, w: wb.width, h: wb.height }, screen: { w: innerWidth, h: innerHeight } };
+        const box = (name) => {
+            const b = walk(window.__PIXI_APP__.stage, name).getBounds();
+            return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) };
+        };
+        return { felt: box('roulette-felt'), wheel: box('roulette-wheel'), history: box('roulette-history'), screen: { w: innerWidth, h: innerHeight } };
     });
 
     ok(`${name}：桌布在畫面內`, box.felt.x >= -2 && box.felt.x + box.felt.w <= box.screen.w + 2, JSON.stringify(box.felt));
@@ -228,7 +237,34 @@ for (const [name, w, h] of [['桌機', 1440, 900], ['平板', 900, 700], ['手�
     // 一格至少 18px 寬，不然手指按不準（12 欄加上 0 與縱列）
     ok(`${name}：號碼格寬度還按得到`, box.felt.w / 14 >= 18, `${(box.felt.w / 14).toFixed(1)}px`);
     ok(`${name}：輪盤沒被壓成一條線`, box.wheel.h > 24, `${box.wheel.h.toFixed(1)}px`);
+    // 看板窄到某個程度，最近開出的號碼就縮成一排看不清的小點——直屏該堆疊而不是並排
+    ok(`${name}：看板寬得足以讀出號碼`, box.history.w >= Math.min(300, box.screen.w * 0.6), `${box.history.w}px`);
+    // 輪盤與看板不能疊在一起
+    ok(
+        `${name}：輪盤與看板沒有重疊`,
+        box.wheel.x + box.wheel.w <= box.history.x + 2 || box.wheel.y + box.wheel.h <= box.history.y + 2,
+        `${JSON.stringify(box.wheel)} / ${JSON.stringify(box.history)}`
+    );
     await p.close();
+
+    // 同一個尺寸也驗一次數位百家樂：牌位框曾經整組超出畫面（那是牌寬用錯了上限）
+    const bp = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+    await bp.goto(`${BASE}/arcade.html?renderer=webgl`);
+    await bp.waitForFunction(() => window.__ARCADE__ != null, null, { timeout: 30000 });
+    await bp.evaluate(() => window.__ARCADE__.enter('baccarat'));
+    await wait(2500);
+    const spots = await bp.evaluate(() => {
+        const walk = (n, name) => { if (n.label === name) return n; for (const c of n.children ?? []) { const f = walk(c, name); if (f) return f; } return null; };
+        const node = walk(window.__PIXI_APP__.stage, 'deal-spots');
+        const b = node.getBounds();
+        return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height), sw: innerWidth, sh: innerHeight };
+    });
+    ok(
+        `${name}：百家樂的牌位在畫面內`,
+        spots.x >= -2 && spots.x + spots.w <= spots.sw + 2,
+        JSON.stringify(spots)
+    );
+    await bp.close();
 }
 
 console.log('\n== 離桌回收 ==');

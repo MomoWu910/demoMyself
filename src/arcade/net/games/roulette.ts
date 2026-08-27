@@ -73,9 +73,7 @@ export interface RouletteSnapshot {
 export type RouletteC2S =
     | CommonC2S
     | { type: 'sit' }
-    | { type: 'bet'; key: BetKey; amount: number }
-    /** 收回最後一筆注。輪盤的注是一筆一筆疊上去的，沒有這個等於押錯了只能認賠 */
-    | { type: 'undo' };
+    | { type: 'bet'; key: BetKey; amount: number };
 
 export type RouletteS2C =
     | CommonS2C

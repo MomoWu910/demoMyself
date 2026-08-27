@@ -43,8 +43,6 @@ export interface RouletteState {
 
     /** 下注入口。按下去不改任何狀態，只是請 Pixi 那側送封包——只有 server 說了算 */
     betHandler: ((key: string, amount: number) => void) | null;
-    /** 收回最後一筆注 */
-    undoHandler: (() => void) | null;
     /** 重複上一局的注 */
     repeatHandler: (() => void) | null;
 }
@@ -68,7 +66,6 @@ const FRESH = {
     played: false,
     lastBets: {} as Bets,
     betHandler: null,
-    undoHandler: null,
     repeatHandler: null,
 };
 

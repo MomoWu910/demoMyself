@@ -26,6 +26,8 @@ export class DealSpots extends Container {
 
     constructor() {
         super();
+        // 具名給驗證腳本用：直屏曾經整組超出畫面（見 baccarat/index.ts 的 placeCards）
+        this.label = 'deal-spots';
         this.addChild(this.frame);
         this.playerLabel = label(PLAYER);
         this.bankerLabel = label(BANKER);

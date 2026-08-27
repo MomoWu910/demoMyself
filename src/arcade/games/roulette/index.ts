@@ -88,7 +88,6 @@ export class RouletteModule implements GameModule {
     private readonly online = new OnlineBadge(0);
     private chipRail: ChipRail | null = null;
     private more: MoreMenu | null = null;
-    private undoBtn: TableButton | null = null;
     private repeatBtn: TableButton | null = null;
 
     private L: RouletteLayout | null = null;
@@ -142,7 +141,6 @@ export class RouletteModule implements GameModule {
             this.syncPhase();
             this.syncReadouts();
             this.refreshMenu();
-            this.undoBtn?.setLabel(t('arcade.rou.undo'));
             this.repeatBtn?.setLabel(t('arcade.bac.repeat'));
         });
 
@@ -155,7 +153,6 @@ export class RouletteModule implements GameModule {
 
         rouletteState.set({
             betHandler: (key, amount) => this.sendBet(key, amount),
-            undoHandler: () => this.socket?.send({ type: 'undo' }),
             repeatHandler: () => this.repeatBets(),
         });
         ctx.onDispose(() => rouletteState.reset());
@@ -248,17 +245,12 @@ export class RouletteModule implements GameModule {
             this.uiLayer.addChild(this.more);
         }
 
-        this.undoBtn = new TableButton({
-            label: t('arcade.rou.undo'),
-            variant: 'ghost',
-            onTap: () => this.socket?.send({ type: 'undo' }),
-        });
         this.repeatBtn = new TableButton({
             label: t('arcade.bac.repeat'),
             variant: 'ghost',
             onTap: () => this.repeatBets(),
         });
-        this.uiLayer.addChild(this.undoBtn, this.repeatBtn);
+        this.uiLayer.addChild(this.repeatBtn);
 
         this.refreshMenu();
         this.alignChip();
@@ -394,8 +386,6 @@ export class RouletteModule implements GameModule {
                     myTotal: totalStake(packet.myBets),
                     totals: packet.totals,
                 });
-                // undo 之後桌上那顆籌碼也要跟著消失，否則畫面上的注會比帳目多
-                this.syncMyChips(packet.myBets);
                 break;
 
             case 'spin':
@@ -422,9 +412,6 @@ export class RouletteModule implements GameModule {
             }
 
             case 'error':
-                // `nothing_to_undo` 不是錯，是「沒東西可以收」。當成錯誤跳紅字的話，
-                // 玩家連按兩下 undo 就會看到一個看起來很嚴重的訊息
-                if (packet.reason === 'nothing_to_undo') break;
                 arcadeState().setError(packet.reason);
                 break;
         }
@@ -506,35 +493,7 @@ export class RouletteModule implements GameModule {
     }
 
     /**
-     * 讓桌上我的籌碼跟帳目對齊。
-     *
-     * 只有 `undo` 需要它：下注是「先飛一顆再送封包」，收回卻沒有「反向飛」這種東西
-     * ——最誠實的做法是把我的籌碼整批重畫成帳目現在的樣子。別人的籌碼不動。
-     */
-    private syncMyChips(myBets: Record<string, number>): void {
-        if (!this.chipLayer) return;
-        const before = totalStake(rouletteState.get().myBets);
-        const after = totalStake(myBets);
-        if (after >= before) return;
-
-        this.chipLayer.recycle(
-            () => false,
-            () => this.mySeat.originPoint(),
-            this.mySeat.originPoint(),
-            () => {
-                // 收乾淨之後照帳目重擺一次。**別人的注也會一起被清掉**，所以順便照總額重撒
-                this.scatterSnapshotChips();
-                for (const [key, amount] of Object.entries(myBets)) {
-                    if (amount <= 0) continue;
-                    const at = this.felt.anchor(key);
-                    if (at) this.chipLayer?.place(largestChipUnder(amount), key, MY_SEAT, { ...at, u: 0.5, v: 0.5 });
-                }
-            }
-        );
-    }
-
-    /**
-     * 中途進桌（或收回注之後）照總額撒一些籌碼。
+     * 中途進桌時照各注區的總額撒一些籌碼。
      *
      * **這是視覺化，不是重建**：server 的快照只給每個位置的總額，給不出「誰押了幾顆
      * 什麼面額」。玩家看到的是「這幾格很熱」這個正確的資訊，只是每一顆籌碼不對應到
@@ -623,7 +582,6 @@ export class RouletteModule implements GameModule {
         const betting = st.phase === 'betting';
         this.chipRail?.setEnabled(betting);
         this.chipRail?.setSelected(st.chip);
-        this.undoBtn?.setEnabled(betting && st.myTotal > 0);
         this.repeatBtn?.setEnabled(betting && Object.keys(st.lastBets).length > 0);
     }
 
@@ -690,8 +648,6 @@ export class RouletteModule implements GameModule {
         this.mySeat.position.set(L.mySeat.x, L.mySeat.y);
         this.mySeat.setBoxSize(L.mySeat.w, L.mySeat.h, L.mySeat.w < 100 * L.scale);
 
-        this.undoBtn?.position.set(L.undo.x, L.undo.y);
-        this.undoBtn?.setBoxSize(L.undo.w, L.undo.h);
         this.repeatBtn?.position.set(L.repeat.x, L.repeat.y);
         this.repeatBtn?.setBoxSize(L.repeat.w, L.repeat.h);
 
@@ -701,9 +657,15 @@ export class RouletteModule implements GameModule {
         // 手機橫放沒有一條空帶可以放讀數，硬放會疊在輪盤的外框上（見 layout.ts）
         this.stats.visible = L.showStats;
 
-        // 籌碼大小由籌碼架的高度反推，桌上的籌碼跟著同一個數字——**桌上與架上一樣大**，
-        // 玩家才認得出自己剛剛押出去的是哪一顆
-        this.chipPx = Math.max(16, Math.min(L.chipRail.h * 0.62, 44 * L.scale));
+        /*
+         * 籌碼大小由籌碼架的高度反推，桌上的籌碼跟著同一個數字——**桌上與架上一樣大**，
+         * 玩家才認得出自己剛剛押出去的是哪一顆。
+         *
+         * 但桌上那顆還要再受**格子寬度**限制：直屏的桌布只有三百多寬，一格 28px，
+         * 而籌碼架那側算出來的是 38px——籌碼比格子還大，整片桌布會被蓋到看不見號碼。
+         */
+        const cellW = this.felt.geometry().grid.cellW;
+        this.chipPx = Math.max(14, Math.min(L.chipRail.h * 0.62, 44 * L.scale, cellW * 1.15));
         this.chipLayer?.setChipSize(this.chipPx * 0.8);
         this.chipRail?.position.set(L.chipRail.x, L.chipRail.y);
         this.chipRail?.setViewport(L.chipRail.w, L.chipRail.h);

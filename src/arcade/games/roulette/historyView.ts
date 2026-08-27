@@ -46,6 +46,8 @@ export class HistoryView extends Container {
 
     constructor() {
         super();
+        // 具名給驗證腳本用（同 ChipRail 的理由）
+        this.label = 'roulette-history';
         this.caption = label(t('arcade.rou.recent'), MUTED, 10);
         this.caption.anchor.set(0, 0.5);
         this.empty = label(t('arcade.rou.noHistory'), MUTED, 10);

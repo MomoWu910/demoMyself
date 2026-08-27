@@ -362,12 +362,21 @@ export function computeTableLayout(w: number, h: number, opts: LayoutOptions = {
             });
         }
     } else {
-        // 窄畫面：座位收成一列橫排，貼在中央區下緣。矮到放不下時整列不畫，
-        // 但**座標照給**——籌碼還是要從那幾個點飛出來
-        const seatH = tiny ? 0 : compact ? 40 : 62;
+        /*
+         * 窄畫面：座位收成一列橫排，貼在中央區下緣。矮到放不下時整列不畫，
+         * 但**座標照給**——籌碼還是要從那幾個點飛出來。
+         *
+         * 這一列要讓出多高，**是由頭像加下面那兩行字反推的**，不是一個估計值。
+         * 原本寫死 62，而 768 寬的直屏上頭像直徑就有 47、名字與餘額再吃 30——
+         * 於是餘額那行落到中央區之外，被階段膠囊壓掉半個字。同一個錯在 flank 版
+         * 修過一次（見上面 SEAT_TEXT_H 的說明），這裡漏了。
+         */
         seatSize = Math.min((w - PAD * 2) / 6.4, SEAT_ROW_MAX);
+        const avatarH = seatSize * AVATAR_RATIO;
+        const seatH = tiny ? 0 : avatarH + SEAT_TEXT_H * scale + 6;
         stageSpace = Math.max(40, stageH - seatH - (tiny ? 0 : 4));
-        const rowY = stageTop + stageSpace + seatH * 0.44;
+        // 頭像圓心：讓開一點呼吸之後，圓的上緣貼著中央區下緣
+        const rowY = stageTop + stageSpace + 4 + avatarH / 2;
         const slot = (w - PAD * 2) / 6;
         for (let i = 0; i < 6; i++) seats.push({ x: PAD + slot * (i + 0.5), y: rowY });
     }

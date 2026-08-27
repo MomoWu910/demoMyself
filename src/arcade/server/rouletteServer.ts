@@ -56,13 +56,6 @@ export class RouletteServer implements GameServer<RouletteC2S, RouletteS2C> {
 
     private totals: Bets = {};
     private myBets: Bets = {};
-    /**
-     * 訪客這一局下注的**順序**。`undo` 要靠它知道最後一筆是哪一注。
-     *
-     * 記順序而不是只記金額，是因為同一個位置可以押好幾次——收回的應該是最後那一次
-     * 押上去的那幾百塊，不是把那一格整疊拿回來。
-     */
-    private myOrder: Array<{ key: BetKey; amount: number }> = [];
     private crowdBets: Bets = {};
 
     private seats: Array<CrowdSeat | null> = [];
@@ -106,9 +99,6 @@ export class RouletteServer implements GameServer<RouletteC2S, RouletteS2C> {
             case 'bet':
                 return this.bet(packet.key, packet.amount);
 
-            case 'undo':
-                return this.undo();
-
             default:
                 return null;
         }
@@ -125,7 +115,11 @@ export class RouletteServer implements GameServer<RouletteC2S, RouletteS2C> {
     // ---- 玩家下注 ----
 
     /**
-     * 押一注。
+     * 押一注。**押出去就不能撤**，所以這裡就扣款。
+     *
+     * 沒有「收回」這個指令：真實輪盤桌的籌碼一旦推出去就是桌上的注，而做一顆只收得回
+     * 最後一筆的按鈕，跟玩家以為的「清掉我全部的注」是兩件事——那種落差在賭桌上
+     * 是客訴的來源。想改注就等下一局。
      *
      * `parseBetKey` 是這一層唯一的入口驗證，而它擋的不只是打錯字：桌布上不存在的
      * 分注（`split:3-4`）在格式上完全正確，但那條線根本沒有——放它進來的話，
@@ -139,30 +133,7 @@ export class RouletteServer implements GameServer<RouletteC2S, RouletteS2C> {
 
         this.myBets[key] = (this.myBets[key] ?? 0) + amount;
         this.totals[key] = (this.totals[key] ?? 0) + amount;
-        this.myOrder.push({ key, amount });
 
-        return this.betOk();
-    }
-
-    /**
-     * 收回最後一筆注。
-     *
-     * 百家樂沒有這個功能，輪盤有——差別在**注的顆粒度**。百家樂一局最多押五個注區，
-     * 押錯了再押一次就好；輪盤一局可能點二十幾個位置，而且相鄰位置只差幾個像素，
-     * 點錯格子是常態而不是意外。沒有 undo 的話，玩家對付誤觸的唯一辦法是認賠。
-     */
-    private undo(): RouletteS2C {
-        if (this.phase !== 'betting') return { type: 'error', reason: 'bet_closed' };
-
-        const last = this.myOrder.pop();
-        if (!last) return { type: 'error', reason: 'nothing_to_undo' };
-
-        this.myBets[last.key] -= last.amount;
-        if (this.myBets[last.key] <= 0) delete this.myBets[last.key];
-        this.totals[last.key] -= last.amount;
-        if (this.totals[last.key] <= 0) delete this.totals[last.key];
-
-        this.wallet.credit(last.amount);
         return this.betOk();
     }
 
@@ -181,7 +152,6 @@ export class RouletteServer implements GameServer<RouletteC2S, RouletteS2C> {
         this.roundNo++;
         this.totals = {};
         this.myBets = {};
-        this.myOrder = [];
         this.crowdBets = {};
         this.spin = null;
 
