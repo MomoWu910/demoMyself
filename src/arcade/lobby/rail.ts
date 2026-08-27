@@ -593,6 +593,130 @@ function drawIcon(host: Container, key: string, color: number, size: number, fac
             host.addChild(chips);
             break;
         }
+        case 'baccaratLive': {
+            /*
+             * 荷官，被牌與籌碼圍成一圈。
+             *
+             * 這張卡原本沒有自己的 case，掉進 default 畫成一個空心圓——一排卡片裡
+             * 只有它不指涉任何東西。而視訊桌台跟數位桌台的差別**只有一個**：
+             * 桌子後面站著一個人。所以圖示的主角就是那個人，不是攝影機、不是播放鍵，
+             * 那兩樣講的是「怎麼傳過來的」，玩家不在乎。
+             *
+             * 三層深度，由後往前：牌（斜插在兩側，內緣壓在肩膀下面）、荷官、籌碼
+             * （擺在身前的桌面上）。**遮擋關係就是景深**——三樣東西平鋪在同一層的話，
+             * 人會看起來像貼在牆上的紙片。
+             *
+             * 人形一律深色剪影配金線，不填色塊：這一頁的規矩是金當筆不當漆
+             * （見 style.css 的開頭），而且小尺寸下輪廓比細節好認。
+             */
+            /*
+             * 這張圖示自己的尺規，比別張小一號。
+             *
+             * 元素比別張多（人＋兩張牌＋三枚籌碼），照同樣的 `s` 畫出來上下都更高，
+             * 在 390 寬的手機上籌碼離標題只剩 2px——沒有重疊，但貼著。隔壁那張數位
+             * 百家樂留的是 4px，**同一排卡片的呼吸節奏要一致**，所以整組收 6%。
+             */
+            const u = s * 0.94;
+            const lw = Math.max(1, u * 0.03);
+            const round = u * 0.07;
+
+            // ---- 後層：兩張牌，斜插在肩膀兩側 ----
+            // 角度往外倒而不是往內收：往內收會變成「捧著兩張牌」，往外倒才像剛發出去。
+            // 內緣要壓進肩膀底下（0.56 - 0.19 < 肩寬 0.44），沒有那一截重疊就沒有前後
+            for (const [dx, dy, rot, pip] of [
+                [-u * 0.52, -u * 0.14, -0.58, 'spade'],
+                [u * 0.52, -u * 0.14, 0.58, 'heart'],
+            ] as Array<[number, number, number, 'spade' | 'heart']>) {
+                const card = new Graphics();
+                const cw = u * 0.38;
+                const ch = u * 0.54;
+                card.roundRect(-cw / 2, -ch / 2, cw, ch, round).fill({ color: face, alpha: 0.97 });
+                card.roundRect(-cw / 2, -ch / 2, cw, ch, round).stroke({ color, width: lw, alpha: 0.85 });
+                if (pip === 'spade') spade(card, 0, 0, u * 0.1, WELL);
+                else heart(card, 0, -u * 0.02, u * 0.09, BANKER);
+                card.position.set(dx, dy);
+                card.rotation = rot;
+                host.addChild(card);
+            }
+
+            // ---- 中層：荷官 ----
+            const dealer = new Graphics();
+
+            // 脖子先畫，肩與頭各自蓋掉它的一端，接縫就不必對齊
+            dealer.rect(-u * 0.05, -u * 0.44, u * 0.1, u * 0.18).fill({ color: WELL, alpha: 1 });
+
+            /*
+             * 肩膀畫成**梯形**而不是圓角矩形。
+             *
+             * **斜肩那一段是直線，只有肩角用短曲線收圓。** 這是試了三版才確定的結構：
+             * 整條輪廓用二次曲線畫（無論控制點放哪）出來都是一顆鐘——曲線從領口一路
+             * 彎到腋下，中間沒有任何一處讀得出「肩角」，而肩角正是人形辨識度的來源。
+             * 直線扛住斜肩、圓角只負責轉彎，剪影才立刻像個人。
+             *
+             * 比例也一起改了：寬高比從 1.6:1 收到 1.2:1。矮胖的梯形配圓肩就是鐘，
+             * 換成高瘦的才是半身像。
+             *
+             * 底邊拉到 0.3 而不是收在腰上：這是一張半身像，被圖示下緣截斷是自然的，
+             * 而籌碼會壓住那條線（見下面），所以它不會看起來像憑空切了一刀。
+             */
+            const shoulderY = u * 0.3;
+            dealer.moveTo(-u * 0.38, shoulderY)
+                .lineTo(-u * 0.36, -u * 0.06)                              // 手臂外側，幾乎垂直
+                .quadraticCurveTo(-u * 0.35, -u * 0.17, -u * 0.28, -u * 0.22) // 肩角
+                .lineTo(-u * 0.12, -u * 0.32)                              // 斜肩，直線收進領口
+                .lineTo(u * 0.12, -u * 0.32)
+                .lineTo(u * 0.28, -u * 0.22)
+                .quadraticCurveTo(u * 0.35, -u * 0.17, u * 0.36, -u * 0.06)
+                .lineTo(u * 0.38, shoulderY)
+                .closePath()
+                .fill({ color: WELL, alpha: 1 })
+                .stroke({ color, width: lw, alpha: 0.9 });
+
+            // 頭最後畫，壓住脖子上端。比身體亮一階（INK vs WELL）——同一個黑的話，
+            // 頭與肩之間只剩描邊在分界，縮到 40px 就併成一塊
+            dealer.circle(0, -u * 0.52, u * 0.155).fill({ color: INK, alpha: 1 });
+            dealer.circle(0, -u * 0.52, u * 0.155).stroke({ color, width: lw, alpha: 0.9 });
+
+            /*
+             * 領結。**這是整個圖示裡唯一說明「他是荷官而不是路人」的東西**，
+             * 所以它值得用整張圖示唯一的實心金塊，而不是再一道描邊。
+             */
+            const bow = u * 0.11;
+            dealer.moveTo(-bow, -u * 0.31)
+                .lineTo(-u * 0.015, -u * 0.24)
+                .lineTo(-bow, -u * 0.17)
+                .fill({ color, alpha: 0.95 });
+            dealer.moveTo(bow, -u * 0.31)
+                .lineTo(u * 0.015, -u * 0.24)
+                .lineTo(bow, -u * 0.17)
+                .fill({ color, alpha: 0.95 });
+            host.addChild(dealer);
+
+            /*
+             * ---- 前層：籌碼，擺在身前的桌面上 ----
+             *
+             * 高度抓在**壓住身體下緣那條線**上：第一版擺在胸口，看起來像掛著的勳章；
+             * 完全離開身體又會變成三顆浮在空中的圓。壓著腰線才讀得出「籌碼在他前面的
+             * 桌上」——同一個遮擋關係，順便把身體那條平底邊打斷。
+             *
+             * 左一右二、不對稱：三枚等距排開會跟頭、領結連成一條垂直中線，整張圖示
+             * 就變成一個對稱的圖騰。右邊那兩枚重疊，順便跟數位百家樂那張卡的籌碼
+             * 用同一套畫法（同色圓疊在一起會糊，所以每枚都描一圈深色邊）。
+             */
+            const chips = new Graphics();
+            const r = u * 0.12;
+            for (const [cx, cy, tint] of [
+                [-u * 0.4, u * 0.34, GOLD_DEEP],
+                [u * 0.36, u * 0.32, color],
+                [u * 0.52, u * 0.39, GOLD],
+            ] as Array<[number, number, number]>) {
+                chips.circle(cx, cy, r).fill({ color: tint, alpha: 0.97 });
+                chips.circle(cx, cy, r).stroke({ color: WELL, width: lw * 1.5, alpha: 0.9 });
+                chips.circle(cx, cy, r * 0.5).fill({ color: face, alpha: 0.8 });
+            }
+            host.addChild(chips);
+            break;
+        }
         case 'dragontiger': {
             // 龍虎是「兩邊各一張牌對賭」，所以畫成左右分立而不是疊在一起，
             // 中間留一條斜線當對峙的界線

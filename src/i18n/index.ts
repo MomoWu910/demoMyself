@@ -636,9 +636,11 @@ export const DICT: Record<string, Entry> = {
     'arcade.lobby.slotDesc': { en: '5×3 reels · server stops', zh: '五軸三列 · 伺服器停軸' },
     'arcade.lobby.baccarat': { en: 'Baccarat', zh: '百家樂' },
     'arcade.lobby.baccaratDesc': { en: 'Five roadmaps · 8-deck shoe', zh: '五張路圖 · 八副牌靴' },
-    // 還沒做的那幾款。名字用真實桌台的叫法，因為它們是接下來要做的東西，不是佔位的假名
     'arcade.lobby.baccaratLive': { en: 'Live Baccarat', zh: '視訊百家樂' },
-    'arcade.lobby.baccaratLiveDesc': { en: 'Real video stream · sub-second latency', zh: '真實視訊串流 · 延遲不到一秒' },
+    // 這一行一度寫的是「真實視訊串流 · 延遲不到一秒」——那是講給工程師聽的。
+    // 玩家站在大廳前面想知道的是**這張桌子跟隔壁那張有什麼不一樣**，而差別只有一件事：
+    // 桌子後面站著真人。延遲的事留在桌上那顆讀數裡給看得懂的人看
+    'arcade.lobby.baccaratLiveDesc': { en: 'Live dealer · cards dealt on camera', zh: '真人荷官 · 鏡頭前開牌' },
 
     // 視訊桌台
     'arcade.live.caption': {
@@ -676,6 +678,7 @@ export const DICT: Record<string, Entry> = {
         en: 'Feed is {s}s behind — betting already closed',
         zh: '畫面落後 {s} 秒，已停止下注',
     },
+    // 還沒做的那幾款。名字用真實桌台的叫法，因為它們是接下來要做的東西，不是佔位的假名
     'arcade.lobby.dragontiger': { en: 'Dragon Tiger', zh: '龍虎' },
     'arcade.lobby.sicbo': { en: 'Sic Bo', zh: '骰寶' },
     'arcade.lobby.roulette': { en: 'Roulette', zh: '輪盤' },
