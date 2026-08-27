@@ -606,11 +606,10 @@ export class BaccaratModule implements GameModule {
     /**
      * 每幀從 `endsAt` 反推還剩幾秒。
      *
-     * 兩個消費端的更新頻率**刻意不同**：
+     * 反推而不是每幀扣一：分頁被切到背景時 ticker 會被節流，累減的版本切回來會停在錯的數字。
      *
-     * - 膠囊上的進度條吃**浮點秒**，每幀更新，所以它是連續地縮。
-     * - store 裡的 `secondsLeft` 只在**整數變了**才寫。它會觸發 React 重繪，
-     *   每幀寫一次等於一秒重繪六十遍面板，而面板上顯示的只是一個整數。
+     * 算是每幀算，但**兩個消費端都只在整數變了才寫**——膠囊顯示的是整秒，
+     * store 裡的 `secondsLeft` 又會觸發 React 重繪，每幀寫一次等於一秒重繪六十遍面板。
      */
     private tickClock(_ticker: Ticker): void {
         if (this.dead) return;
@@ -618,11 +617,10 @@ export class BaccaratModule implements GameModule {
         if (st.endsAt === 0) return;
 
         const left = Math.max(0, (st.endsAt - Date.now()) / 1000);
-        this.banner?.setLeft(left);
-
         const whole = Math.ceil(left);
         if (whole !== this.lastSecond) {
             this.lastSecond = whole;
+            this.banner?.setLeft(whole);
             st.setSecondsLeft(whole);
         }
     }
@@ -760,9 +758,10 @@ export class BaccaratModule implements GameModule {
 
     private applyPhaseLabel(phase: Phase): void {
         const spec = PHASE_LABEL[phase];
-        const st = baccaratState();
-        const span = Math.max(0.001, (st.endsAt - Date.now()) / 1000);
-        this.banner?.setPhase(t(spec.key), span, spec.countdown);
+        this.banner?.setPhase(t(spec.key), spec.countdown);
+        // 換階段就讓下一幀無條件重寫一次秒數：現在只有整數變了才寫，不重置的話
+        // 新階段的第一個數字剛好等於上一段最後一個時會沿用舊的字
+        this.lastSecond = -1;
     }
 
     private setSpotsEnabled(on: boolean): void {

@@ -780,7 +780,7 @@ button.back { cursor: pointer; font-weight: inherit; }
     position: absolute;
     left: 0;
     top: 0;
-    /* **沉在 canvas 底下。** 疊層（倒數、延遲區、結果、注區、路圖）全部畫在 Pixi 裡，
+    /* **沉在 canvas 底下。** 疊層（倒數、延遲讀數、結果、注區、路圖）全部畫在 Pixi 裡，
        因為它們用的是 common/chips 與 common/roadmap 那套現成元件（見 VideoLayer.ts）。
        視訊在這一頁就是背景，沒有任何東西需要鑽到它下面 */
     z-index: 0;

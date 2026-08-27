@@ -19,9 +19,8 @@ import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import { ONLINE_SEAT, type OtherBet, type SeatInfo } from '../../net/games/baccarat';
 import type { BaccaratLiveS2C, LiveDealt } from '../../net/games/baccaratLive';
-import { BETTING_DURATION } from '../../live/schedule';
 import { arcadeState, useArcadeStore } from '../../store';
-import { BANKER, GOLD, IVORY, PLAYER, TIE } from '../../theme';
+import { BANKER, IVORY, PLAYER, TIE } from '../../theme';
 import { getLang, onLangChange, setLang, t, type Lang } from '../../../i18n';
 import { buildBigRoad } from '../baccarat/roadmap';
 import { beadMarks, bigRoadMarks, derivedMarks, ROAD_ROWS } from '../baccarat/roadView';
@@ -52,9 +51,10 @@ import { liveState, sumBets, useLiveStore, zeroTotals } from './store';
  * 但實際上早就截止了。這不是 bug，是這個媒介的物理性質，商用平台的做法是**把下注期
  * 設得比畫面短**，用產品規格吃掉延遲。
  *
- * 所以視訊下緣那條倒數條畫了兩段（見 drawBar）：金色是真的還剩多少，紅色是**畫面上
- * 還會再演、但已經押不進去的那一段**。切到公開 HLS 那條線路時紅色會佔滿整條——
- * 同一顆按鈕、同一個儀表，把「為什麼視訊博弈不用 HLS」從一個數字變成一件看得見的事。
+ * 這件事在畫面上由兩樣東西講：LIVE 徽章的延遲讀數（超過四秒轉紅），以及截止之後
+ * 畫面還在演下注期時跳出來的那行 `lagText`。切到公開 HLS 那條線路時延遲會直接跳到
+ * 十幾秒——同一顆按鈕、同一個讀數，把「為什麼視訊博弈不用 HLS」從一個規格變成
+ * 一件看得見的事。
  *
  * ## 疊層要疊什麼
  *
@@ -157,7 +157,6 @@ export class BaccaratLiveModule implements GameModule {
     // ---- 疊在視訊上的那幾樣 ----
     private liveTag!: Text;
     private liveDot!: Graphics;
-    private bar!: Graphics;
     private lagText!: Text;
 
     /** 視訊佔的那塊矩形。疊層照它定位 */
@@ -530,8 +529,7 @@ export class BaccaratLiveModule implements GameModule {
      * 疊在視訊上的那幾樣東西。
      *
      * 全部畫在 Pixi 而不是 DOM——第一版是 DOM 的，視訊沉底之後那條路就斷了
-     * （會被畫布蓋住，見 VideoLayer.ts）。搬過來反而更順：倒數條要畫兩段不同顏色的
-     * 區間，`Graphics` 本來就比三層 div 疊 transition 好寫。
+     * （會被畫布蓋住，見 VideoLayer.ts）。
      *
      * **這裡不放倒數，也不放結果。** 兩者影片裡都已經燒好了，而且那一份跟畫面是同步的
      * ——它就是拍到的東西。疊第二份不只是重複，還會蓋住剛翻開的牌，也就是這一局
@@ -540,9 +538,11 @@ export class BaccaratLiveModule implements GameModule {
      * 倒數還多一層：注區上方的階段膠囊已經有一份 **server 校正過的**時間，而它就在
      * 要按的地方旁邊。玩家該信的是那一份，視訊上再放第三份只會讓人不知道該看哪個。
      *
-     * 留在這裡的只有影片**給不出來**的東西：這條線路現在落後幾秒（LIVE 徽章）、
-     * 那個落後吃掉了多少下注時間（倒數條的紅色那段）、以及截止之後畫面還在演的那幾秒
-     * 要不要出聲提醒（lagText）。
+     * 留在這裡的只有影片**給不出來**的東西：這條線路現在落後幾秒（LIVE 徽章），
+     * 以及截止之後畫面還在演的那幾秒要不要出聲提醒（lagText）。
+     *
+     * 視訊下緣本來還有一條把延遲畫成紅色區間的倒數條，拿掉了——它是講給讀規格的人聽的，
+     * 坐下來玩的人只想知道「現在還能不能押」，而那件事 lagText 一句話就說完了。
      */
     private buildVideoOverlay(): void {
         this.liveDot = new Graphics();
@@ -553,11 +553,10 @@ export class BaccaratLiveModule implements GameModule {
         // 靠右：影片裡桌邊那塊 LIVE 牌子在左上角，兩個疊在一起分不出哪個是哪個。
         // 而它們刻意是兩份不同的東西——影片那份是荷官端的，這份是 server 校正過的
         this.liveTag = overlayText('', 12, IVORY, 1);
-        this.bar = new Graphics();
         this.lagText = overlayText('', 12, 0xe6a15c, 0.5);
         this.lagText.visible = false;
 
-        this.uiLayer.addChild(this.bar, this.liveDot, this.liveTag, this.lagText);
+        this.uiLayer.addChild(this.liveDot, this.liveTag, this.lagText);
     }
 
     /** 換線路。放在這裡而不是讓 React 直接碰播放層——那是資源生命週期的事 */
@@ -784,8 +783,7 @@ export class BaccaratLiveModule implements GameModule {
     private syncPhase(): void {
         const st = liveState.get();
         const countdown = st.phase === 'betting';
-        const span = Math.max(0.001, (st.endsAt - Date.now()) / 1000);
-        this.phaseBanner.setPhase(t(`arcade.live.phase.${st.phase}`), span, countdown);
+        this.phaseBanner.setPhase(t(`arcade.live.phase.${st.phase}`), countdown);
     }
 
     // ---- 籌碼 -------------------------------------------------------------
@@ -1023,42 +1021,12 @@ export class BaccaratLiveModule implements GameModule {
         }
 
         const betting = st.phase === 'betting';
-        this.drawBar(betting, left, stats.latency);
 
         this.liveTag.text = `LIVE  ${stats.latency.toFixed(1)}s`;
         // 四秒是視訊桌台開始不能接受的線：下注只剩幾秒時，畫面慢四秒等於閉著眼睛押
         this.liveTag.style.fill = stats.latency > 4 ? BANKER : IVORY;
 
         this.syncLag(betting, stats.latency);
-    }
-
-    /**
-     * 倒數條的兩段。
-     *
-     * - **金色**：server 說的真實剩餘時間
-     * - **紅色**：畫面上還會再演、但已經押不進去的那一段，長度正好是延遲
-     *
-     * 玩家看到的倒數是 `left + latency`（他看的是 latency 秒前拍到的畫面），
-     * 所以紅色接在金色右邊——它就是「畫面以為還有，實際上沒有」的那一截。
-     * 截止之後金色歸零而紅色還在，意思很直白：**你現在看到的整段下注期都是過去式。**
-     */
-    private drawBar(betting: boolean, left: number, latency: number): void {
-        const g = this.bar;
-        g.clear();
-
-        // 只在下注期畫。其他階段留一條不會動的線只會讓人以為卡住了
-        if (!betting && latency < LAG_WARN) return;
-
-        const { x, w, y, h } = this.rect;
-        const barH = Math.max(3, h * 0.014);
-        const barY = y + h - barH;
-        const px = (secs: number): number => (Math.max(0, secs) / BETTING_DURATION) * w;
-
-        const live = Math.min(w, px(left));
-        const lag = Math.min(w - live, px(Math.min(latency, BETTING_DURATION)));
-
-        if (live > 0) g.rect(x, barY, live, barH).fill({ color: left <= 3 ? BANKER : GOLD });
-        if (lag > 0) g.rect(x + live, barY, lag, barH).fill({ color: BANKER, alpha: 0.5 });
     }
 
     /**
