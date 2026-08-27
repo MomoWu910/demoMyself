@@ -590,11 +590,28 @@ export const DICT: Record<string, Entry> = {
     // 自動轉動。沒有「無限」那一檔：無限自動只會讓分頁在背景默默跑到餘額見底
     'arcade.auto': { en: 'Auto', zh: '自動' },
     'arcade.auto.off': { en: 'Off', zh: '關' },
-    // 這一頁最該讓人知道的一件事：輸贏不是前端算的。寫在面板上而不是藏在 README 裡，
-    // 因為它同時解釋了「為什麼按下去要等一下」——那個延遲是刻意模擬的 RTT，不是卡頓。
-    'arcade.serverNote': {
-        en: 'Outcomes come from a simulated server over a fake socket with real latency — the client only plays back a result it was given, never decides one.',
-        zh: '盤面與賠付由模擬伺服器決定，經過一層帶真實延遲的假 socket 送來——前端只負責把收到的結果演出來，不參與輸贏判定。',
+    /*
+     * 四款玩法的說明，一律**寫給要玩的人看**。
+     *
+     * 這幾格原本放的是技術說明（自己餵 fMP4 給 MediaSource、球的軌跡是反解的…），
+     * 那是寫給讀原始碼的人看的東西，而**打開齒輪選單的人想知道的是「這個怎麼玩、
+     * 押這裡賠多少」**。技術那一份沒有刪，它搬到了 src/arcade/README.md——
+     * 那裡本來就是它該在的地方，而且講得比一格面板能容納的多。
+     *
+     * 賠率與數字全部照實寫（老虎機 93% 的回報率也照寫）：**說明頁一旦有一個數字
+     * 跟程式不符，其他每一個數字就都不能信了**。改 PAYOUTS 要回來改這裡。
+     */
+    'arcade.slot.help': {
+        en: 'Five reels, three rows, five fixed paylines (top, middle, bottom and two zigzags) — your stake is split evenly across them. Three or more matching symbols counting from the leftmost reel pays, and longer runs pay far more. Wild substitutes for anything but Scatter. This machine is tuned to a 93% long-run return. The result comes from the server, which is why the button waits a moment.',
+        zh: '五軸三列，五條固定賠付線（上、中、下與兩條折線），押注會平均分到五條線上。**從最左邊那一軸算起**，同一條線上連三格相同符號就中獎，連得越長賠得越多。百搭可以替代除了散佈符號以外的任何一種。這台機的長期回報率配在 93%。按下去會頓一下，是因為結果是伺服器算完才送過來的。',
+    },
+    'arcade.bac.help': {
+        en: 'Bet on Player or Banker — whichever hand lands closer to nine. Tens and face cards count as zero and only the last digit of the total counts; whether a third card comes is fixed by the rules, nobody chooses. Player pays 1:1, Banker pays 0.95:1 (5% commission), and a tie returns both stakes. Side bets: Tie pays 8:1, either Pair pays 11:1.',
+        zh: '押閒或押莊，比誰的點數接近 9。10 與花牌算 0 點，兩張相加只取個位數；要不要補第三張由固定規則決定，玩家沒有選擇權。閒贏賠 1 倍，莊贏賠 0.95 倍（抽 5% 水），和局時莊閒的注**退還本金**。另外可以押和（8 倍）或對子（11 倍）。',
+    },
+    'arcade.live.help': {
+        en: 'Same game as Baccarat — the difference is that the cards are dealt on camera. Your video runs a little behind the table (the LIVE badge shows by how much), so what decides whether you can still bet is the countdown above the betting spots: that one comes from the server. The board beside the dealer shows his clock, and the two do not have to agree.',
+        zh: '玩法跟百家樂完全一樣——差別在牌是荷官在鏡頭前發的。**你的畫面會比桌上慢一點**（右上角 LIVE 標籤顯示的就是慢幾秒），所以能不能下注要看注區上方那個倒數，那一份是伺服器給的。影片裡桌邊那塊牌子是荷官端的時間，兩者不一定同步。',
     },
 
     // ---- 百家樂 ----
@@ -637,7 +654,7 @@ export const DICT: Record<string, Entry> = {
      *
      * 這幾行原本是規格表：「五軸三列 · 伺服器停軸」「五張路圖 · 八副牌靴」
      * 「真實視訊串流 · 延遲不到一秒」。那是寫給工程師看的——「伺服器停軸」講的是
-     * 誰決定結果（重要，但那件事寫在桌上的 serverNote 裡），「延遲不到一秒」則是
+     * 誰決定結果（重要，但那件事屬於 README 而不是大廳卡片），「延遲不到一秒」則是
      * 只有做過串流的人才知道好在哪。**站在大廳前面的人要的是「這款怎麼玩、跟隔壁
      * 那款差在哪」**，行話用博弈桌上通行的那套（百搭、路單、閒莊），不是技術名詞。
      *
@@ -659,10 +676,6 @@ export const DICT: Record<string, Entry> = {
     'arcade.lobby.baccaratLiveDesc': { en: 'Simulated dealer · on video', zh: '模擬真人荷官 · 視訊發牌' },
 
     // 視訊桌台
-    'arcade.live.caption': {
-        en: 'The dealer feed is a real stream: fMP4 segments fed to MediaSource by hand, position decided by wall clock, so everyone sees the same frame. Public live swaps in hls.js on a real CDN — the red slice on the countdown is time your feed still shows but the table has already closed.',
-        zh: '荷官畫面是真的串流：fMP4 片段自己餵給 MediaSource，位置由牆鐘決定，所有人看同一格。切成公開直播就換 hls.js 接真實 CDN——倒數條上那截紅色，是你的畫面還在演、但桌上已經停止下注的那段。',
-    },
     'arcade.live.source': { en: 'Feed', zh: '線路' },
     // 更多選單裡串流讀數那一區的標題。不能跟線路切換共用 'Feed'——兩區疊在一起時
     // 會出現兩個一模一樣的標題，看起來像同一區被畫了兩次
@@ -719,13 +732,15 @@ export const DICT: Record<string, Entry> = {
     'arcade.rou.undo': { en: 'Undo', zh: '收回' },
     'arcade.rou.round': { en: 'Round', zh: '局號' },
     'arcade.rou.table': { en: 'Table', zh: '桌台' },
+    // 齒輪選單裡玩法說明那一區的標題，四款共用
+    'arcade.howToPlay': { en: 'How to play', zh: '玩法說明' },
     'arcade.rou.wheelType': { en: 'Wheel', zh: '輪盤' },
     'arcade.rou.european': { en: 'European · single 0', zh: '歐式 · 單零' },
     'arcade.rou.edge': { en: 'House edge', zh: '莊家優勢' },
     'arcade.rou.maxPayout': { en: 'Top payout', zh: '最高賠率' },
-    'arcade.rou.caption': {
-        en: 'The number is decided before the ball moves: the server sends it ten seconds early and the wheel animation is solved backwards from it — two counter-rotating frames, so the ball has to land where the answer already is. On the layout, position is the bet: dead centre of 5 is a straight-up, three pixels left is a split.',
-        zh: '號碼在球動之前就定了：server 提早十秒送來，球的軌跡是從那個號碼反解出來的——盤與球反向轉，所以球非落在答案那一格不可。桌布那側則是位置決定注別：壓在 5 的正中央是直注，往左挪三個像素就變成分注。',
+    'arcade.rou.help': {
+        en: 'Bet on which pocket the ball drops into. Thirty-seven of them: 1 to 36 plus a green zero. Inside the number grid, position is the bet — dead centre of a number is a straight-up (35:1), on the line between two numbers is a split (17:1), on the point where four meet is a corner (8:1). Hover first and the covered numbers light up. The two rows below are outside bets: red/black, odd/even and high/low pay 1:1, dozens and columns pay 2:1. When zero comes up every outside bet loses — that single pocket is the whole house edge.',
+        zh: '押球會停在哪一格。37 格：1~36 加一個綠色的 0。中間那片號碼格是**位置決定注別**——籌碼壓在格子正中央是直注（35 倍），壓在兩格之間的線上是分注（17 倍），四格交會的那個點是角注（8 倍）；滑過去會先亮出你押到哪幾格。下面兩排是外注：紅黑、單雙、大小賠 1 倍，十二數與縱列賠 2 倍。**開出 0 的時候外注全部落空**，莊家的優勢就只在這一格。',
     },
 
     // 還沒做的那幾款。名字用真實桌台的叫法，因為它們是接下來要做的東西，不是佔位的假名

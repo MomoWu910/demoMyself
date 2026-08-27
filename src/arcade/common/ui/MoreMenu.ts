@@ -20,7 +20,7 @@ export type MenuSection =
     | { kind: 'stats'; title: string; stats: StatSpec[] }
     | { kind: 'segmented'; title: string; options: Array<{ key: string; label: string }>; value: string; onPick: (key: string) => void }
     | { kind: 'chips'; title: string; hint: string }
-    | { kind: 'note'; text: string };
+    | { kind: 'note'; title?: string; text: string };
 
 export interface MoreMenuOptions {
     atlas: ChipAtlas;
@@ -203,6 +203,9 @@ export class MoreMenu extends Container {
                     break;
                 }
                 case 'note': {
+                    // 標題是選配的：玩法說明需要一個標頭（它是玩家會特地打開來找的東西），
+                    // 而純粹的附註不需要——多一行標題只會把那段話往下推
+                    if (section.title) y = this.putTitle(section.title, pad, y, innerW, textIndex++, k);
                     const note = this.texts[textIndex] ?? this.newText(11, MUTED, '500');
                     textIndex++;
                     note.text = section.text;

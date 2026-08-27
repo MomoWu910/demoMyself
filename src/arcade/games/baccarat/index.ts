@@ -524,7 +524,7 @@ export class BaccaratModule implements GameModule {
                 // 所以這裡不必自己重排
                 onPick: (key) => setLang(key as Lang),
             },
-            { kind: 'note', text: t('arcade.serverNote') },
+            { kind: 'note', title: t('arcade.howToPlay'), text: t('arcade.bac.help') },
         ];
     }
 

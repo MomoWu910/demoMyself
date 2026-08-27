@@ -657,15 +657,17 @@ export class RouletteModule implements GameModule {
             { kind: 'chips', title: t('arcade.bac.chipSet'), hint: t('arcade.bac.chipSetHint') },
             {
                 kind: 'segmented',
-                title: t('arcade.settings.language'),
+                title: t('arcade.language'),
+                // 順序與標籤跟兩張百家樂桌一致（EN 在前、中文用單字）——同一個遊樂場裡
+                // 同一顆開關長得不一樣，玩家會以為那是兩件不同的事
                 options: [
-                    { key: 'zh', label: '中文' },
                     { key: 'en', label: 'EN' },
+                    { key: 'zh', label: '中' },
                 ],
                 value: getLang(),
                 onPick: (key) => setLang(key as Lang),
             },
-            { kind: 'note', text: t('arcade.rou.caption') },
+            { kind: 'note', title: t('arcade.howToPlay'), text: t('arcade.rou.help') },
         ];
     }
 

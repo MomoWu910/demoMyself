@@ -229,10 +229,18 @@ export function Hud() {
     const dockRef = useDockMeasure(hasDock, side);
     useHideLangToggle(atTable);
 
-    // 這一頁最該讓人知道的一件事，直接寫在面板上而不是藏在 README 裡。
-    // 窄畫面它會跟著選項一起進抽屜——不是刪掉，是換個位置：那段話在 390 寬會換成九行，
-    // 留在外面等於用 210px 的畫面去講一件玩家隨時可以展開來看的事
-    const note = <p className="note">{t('arcade.serverNote')}</p>;
+    /*
+     * 老虎機的玩法說明（面板只剩這一款在用）。
+     *
+     * 這裡原本放的是「輸贏由伺服器決定」那段技術宣告。它是這一頁在架構上最想講的事，
+     * 但**打開面板的人想知道的是這台機怎麼玩、押這條線賠多少**——技術那一份搬去了
+     * src/arcade/README.md，那裡講得比一格面板能容納的多。伺服器決定結果這件事
+     * 沒有消失，它變成說明最後那句「按下去會頓一下」——玩家真正會遇到的那一面。
+     *
+     * 窄畫面它會跟著選項一起進抽屜：那段話在 390 寬會換成九行，留在外面等於用
+     * 210px 的畫面去講一件玩家隨時可以展開來看的事。
+     */
+    const note = <p className="note">{t('arcade.slot.help')}</p>;
 
     return (
         <div className="hud">
