@@ -2,6 +2,8 @@ import type { SlotC2S, SlotS2C, WinLine } from '../net/games/slot';
 import type { GameServer } from './gameServer';
 import { Wallet } from './wallet';
 import { canSubstitute, LINE_COUNT, PAYLINES, PAYOUTS, REELS, ROWS, Sym, SYMBOLS, WEIGHTS } from '../games/slot/rules';
+import { newRoundId, PLAYER_ID, record } from './ledger';
+import { checkBet } from './opsConfig';
 
 /**
  * 「伺服器」端的老虎機邏輯：抽盤面、算賠付、記餘額。
@@ -27,8 +29,21 @@ export class SlotServer implements GameServer<SlotC2S, SlotS2C> {
     /** 權重表攤平成一支抽籤陣列，抽一次是 O(1)，不必每次累加權重 */
     private readonly bag: Sym[];
 
-    constructor(wallet: Wallet = new Wallet()) {
+    /**
+     * 亂數來源。預設是 `Math.random`，但可以換掉。
+     *
+     * 換掉的用途有兩個，都不是「為了測試而測試」：
+     * 一是**基準線腳本要可重現**——後台的理論派彩率是跑百萬局算出來的，
+     * 那個數字每跑一次就變的話，就沒有資格當基準（見 admin/rtp-baseline.mjs）。
+     * 二是要重播某一局時，給同一個種子就會抽出同一個盤面。
+     *
+     * 這跟輪盤 server 的 `random` 是同一個做法。
+     */
+    private readonly random: () => number;
+
+    constructor(wallet: Wallet = new Wallet(), random: () => number = Math.random) {
         this.wallet = wallet;
+        this.random = random;
         this.bag = [];
         for (const s of SYMBOLS) {
             for (let i = 0; i < WEIGHTS[s]; i++) this.bag.push(s);
@@ -39,12 +54,50 @@ export class SlotServer implements GameServer<SlotC2S, SlotS2C> {
         return this.wallet.get();
     }
 
-    /** 封包入口。握手由 fakeSocket 處理，這裡只認得老虎機自己的指令。 */
+    /**
+     * 封包入口。握手由 fakeSocket 處理，這裡只認得老虎機自己的指令。
+     *
+     * **營運設定的檢查與注單的寫入都在這一層，不在 spin() 裡面。**
+     * 這條線是刻意畫的：`spin()` 是這款遊戲的數學模型——抽盤面、判連線、算賠付，
+     * 它應該只受規則表影響，驗證腳本（`yarn check:slot`）要能直接叫它跑一百萬次驗期望值。
+     * 而限紅、維護模式、注單留存是**營運層**的事，屬於「這條連線現在允不允許下注」。
+     *
+     * 混在一起的代價很具體：限紅一調，數學驗證就跟著壞掉，
+     * 而那支腳本正是用來證明賠率沒被改壞的東西。
+     */
     public handle(packet: SlotC2S): SlotS2C | null {
         if (packet.type !== 'spin') return null;
 
+        // 營運層的擋人。回代碼不回布林，玩家才知道是限紅擋的還是維護中
+        const denied = checkBet(this.id, packet.bet);
+        if (denied) return { type: 'error', reason: denied };
+
+        // 餘額要在扣款前抓——注單上的 balanceBefore 是給對帳用的，
+        // 事後從 balanceAfter 反推回去是不夠的（中間可能有別的入帳）
+        const balanceBefore = this.wallet.get();
+        const betAt = Date.now();
+
         const res = this.spin(packet.bet);
         if ('error' in res) return { type: 'error', reason: res.error };
+
+        record([
+            {
+                roundId: newRoundId(this.id, betAt),
+                game: this.id,
+                player: PLAYER_ID,
+                betType: 'spin',
+                stake: packet.bet,
+                // 老虎機沒有對沖的可能（只有一種押法），有效投注就等於下注額
+                validStake: packet.bet,
+                payout: res.totalWin,
+                net: res.totalWin - packet.bet,
+                balanceBefore,
+                balanceAfter: res.balance,
+                betAt,
+                settledAt: Date.now(),
+            },
+        ]);
+
         return { type: 'spinResult', ...res };
     }
 
@@ -74,7 +127,7 @@ export class SlotServer implements GameServer<SlotC2S, SlotS2C> {
         for (let r = 0; r < REELS; r++) {
             const col: number[] = [];
             for (let row = 0; row < ROWS; row++) {
-                col.push(this.bag[(Math.random() * this.bag.length) | 0]);
+                col.push(this.bag[(this.random() * this.bag.length) | 0]);
             }
             grid.push(col);
         }

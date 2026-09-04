@@ -3,6 +3,9 @@ import type { BaccaratLiveC2S, BaccaratLiveS2C, LiveDealt, LiveSnapshot } from '
 import { ONLINE_SEAT, type SeatInfo, type SeatResult } from '../net/games/baccarat';
 import type { RoadRound } from '../games/baccarat/roadmap';
 import { BET_SPOTS, settleBets, type BetSpot, type Bets } from '../games/baccarat/rules';
+import { buildRecords, netExposureValidStake, type PendingBet } from './betSlip';
+import { newRoundId, record } from './ledger';
+import { checkBet } from './opsConfig';
 import {
     applyTotals,
     emptyTotals,
@@ -78,6 +81,15 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
     /** 這一局各注區的總押注（含我自己、椅子上的人與所有散客） */
     private totals = emptyTotals();
     /** 我這一局押了什麼 */
+
+    /**
+     * 這一局玩家實際點過的每一筆注，結算時組成注單。
+     *
+     * 跟 `myBets` 並存不是重複：`myBets` 是**現在每個注區有多少**（畫面要的），
+     * 這一份是**點擊的流水**（帳要的）。同一區押兩次，前者是一個合計數字，
+     * 後者是兩筆各自有時間戳的紀錄——客訴要查的是後者。
+     */
+    private pending: PendingBet[] = [];
     private myBets: Bets = {};
     /**
      * 六張椅子。`null` = 空著。
@@ -196,10 +208,17 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
 
         if (!BET_SPOTS.includes(spot)) return { type: 'error', reason: 'invalid_bet' };
         if (!Number.isFinite(amount) || amount <= 0) return { type: 'error', reason: 'invalid_bet' };
+        // 營運層的限紅與維護開關（後台可即時改，見 server/opsConfig.ts）。
+        // 擋在扣款之前——扣完才回錯誤，玩家的錢就憑空少一筆
+        const denied = checkBet(this.id, amount);
+        if (denied) return { type: 'error', reason: denied };
+
+        const balanceBefore = this.wallet.get();
         if (!this.wallet.debit(amount)) return { type: 'error', reason: 'insufficient_balance' };
 
         this.myBets[spot] = (this.myBets[spot] ?? 0) + amount;
         this.totals[spot] += amount;
+        this.pending.push({ spot, amount, betAt: Date.now(), balanceBefore });
 
         return {
             type: 'betOk',
@@ -260,6 +279,7 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
             // 那段時間注區上該留著剛才的數字給人看完自己押了多少
             this.totals = emptyTotals();
             this.myBets = {};
+            this.pending = [];
             this.crowdBets = {};
             this.lastBetTick = -1;
             this.rotateSeats();
@@ -370,6 +390,16 @@ export class BaccaratLiveServer implements GameServer<BaccaratLiveC2S, BaccaratL
         const payouts = settleBets(this.myBets, cue.round);
         const totalReturn = BET_SPOTS.reduce((sum, spot) => sum + (payouts[spot] ?? 0), 0);
         this.wallet.credit(totalReturn);
+
+        // 注單：一筆一筆記，不是照注區合計記（見 server/betSlip.ts）。
+        // 有效投注做對沖折抵——押莊又押閒的風險遠低於下注額，
+        // 照全額算返水就會被這種押法套利
+        record(
+            buildRecords(this.id, newRoundId(this.id), this.pending, payouts, {
+                validStakeOf: netExposureValidStake,
+            }),
+        );
+        this.pending = [];
 
         // 椅子上的人各自算一份。他們的餘額是自己記的（不走錢包——錢包是**我的**帳號）
         const seatResults: SeatResult[] = [];

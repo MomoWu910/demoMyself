@@ -137,6 +137,7 @@ module.exports = {
         findings: './src/findings/index.ts',                  // 渲染效能實測結論
         shader_lab: './src/shaderLab/index.tsx',              // 自訂 Shader Lab（GLSL + WGSL）＋ React/Zustand 面板
         arcade: './src/arcade/index.tsx',                     // 博弈遊樂場：假 server + 玩法模組熱插拔
+        admin: './src/admin/index.tsx',                       // 遊戲營運管理後台：MUI + 注單／報表／設定
     },
     output: {
         filename: '[name].bundle.js',
@@ -251,6 +252,14 @@ module.exports = {
             // 不吃 bootHead：那套遮罩是為了首屏字體與天色而做的（見上面的說明），
             // 這一頁沒有隨時間變的底色，套上去只會多壓一次 body 的淡入
             templateParameters: { i18nBoot: i18nBootFor('./src/arcade/index.html'), i18nHead: i18nHeadFor('./src/arcade/index.html') },
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'admin.html',
+            template: './src/admin/index.html',
+            chunks: ['admin'],
+            title: '遊戲營運管理後台',
+            // 不吃 bootHead 也不吃 i18n：這一頁的字全部由 React 產生，
+            // 沒有靜態 HTML 要翻譯，底色也已經寫在模板的 <style> 裡
         }),
         new CopyWebpackPlugin({
             patterns: [

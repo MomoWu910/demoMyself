@@ -17,15 +17,22 @@
     "check:video": "node src/arcade/common/video/video-check.mjs",
     "build:stream": "node src/arcade/live/tools/build-stream.mjs",
     "check:live": "node src/arcade/live/tools/live-verify.mjs",
-    "verify:roulette": "node src/arcade/games/roulette/roulette-verify.mjs"
+    "verify:roulette": "node src/arcade/games/roulette/roulette-verify.mjs",
+    "baseline:rtp": "node src/admin/rtp-baseline.mjs",
+    "check:admin": "node src/admin/admin-check.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "8.2.0",
     "@babylonjs/loaders": "8.2.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.4.0",
+    "@mui/material": "^9.4.0",
     "cannon-es": "^0.20.0",
     "css-loader": "^7.1.2",
     "esbuild": "^0.25.9",
     "esbuild-loader": "^4.3.0",
+    "formik": "^2.4.9",
     "gsap": "^3.13.0",
     "hls.js": "^1.7.1",
     "lil-gui": "^0.21.0",
@@ -34,6 +41,7 @@
     "react-dom": "^19.2.7",
     "style-loader": "^4.0.0",
     "three": "^0.181.2",
+    "yup": "^1.7.1",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

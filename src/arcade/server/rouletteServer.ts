@@ -1,6 +1,9 @@
 import type { Phase, RouletteC2S, RouletteS2C, RouletteBet, RouletteSnapshot, SpinOutcome } from '../net/games/roulette';
 import type { SeatInfo } from '../net/games/baccarat';
 import { parseBetKey, settleBets, totalStake, type BetKey, type Bets } from '../games/roulette/rules';
+import { buildRecords, netExposureValidStake, type PendingBet } from './betSlip';
+import { newRoundId, record } from './ledger';
+import { checkBet } from './opsConfig';
 import { applyTotals, seatBets, onlineBets, spawnSeat, toSeatInfo, SEAT_COUNT, type CrowdSeat } from './rouletteCrowd';
 import type { GameServer } from './gameServer';
 import { Wallet, sessionWallet } from './wallet';
@@ -55,6 +58,15 @@ export class RouletteServer implements GameServer<RouletteC2S, RouletteS2C> {
     private roundNo = 0;
 
     private totals: Bets = {};
+
+    /**
+     * 這一局玩家實際點過的每一筆注，結算時組成注單。
+     *
+     * 跟 `myBets` 並存不是重複：`myBets` 是**現在桌上每格有多少**（畫面要的），
+     * 這一份是**點擊的流水**（帳要的）。同一格押兩次，前者是一個合計數字，
+     * 後者是兩筆各自有時間戳的紀錄——客訴查的是後者。
+     */
+    private pending: PendingBet[] = [];
     private myBets: Bets = {};
     private crowdBets: Bets = {};
 
@@ -129,10 +141,17 @@ export class RouletteServer implements GameServer<RouletteC2S, RouletteS2C> {
         if (this.phase !== 'betting') return { type: 'error', reason: 'bet_closed' };
         if (!parseBetKey(key)) return { type: 'error', reason: 'invalid_bet' };
         if (!Number.isFinite(amount) || amount <= 0) return { type: 'error', reason: 'invalid_bet' };
+        // 營運層的限紅與維護開關（後台可以即時改，見 server/opsConfig.ts）。
+        // 擋在扣款之前——扣了再回錯誤，玩家的錢就憑空少一筆
+        const denied = checkBet(this.id, amount);
+        if (denied) return { type: 'error', reason: denied };
+
+        const balanceBefore = this.wallet.get();
         if (!this.wallet.debit(amount)) return { type: 'error', reason: 'insufficient_balance' };
 
         this.myBets[key] = (this.myBets[key] ?? 0) + amount;
         this.totals[key] = (this.totals[key] ?? 0) + amount;
+        this.pending.push({ spot: key, amount, betAt: Date.now(), balanceBefore });
 
         return this.betOk();
     }
@@ -153,6 +172,7 @@ export class RouletteServer implements GameServer<RouletteC2S, RouletteS2C> {
         this.totals = {};
         this.myBets = {};
         this.crowdBets = {};
+        this.pending = [];
         this.spin = null;
 
         let seatsChanged = false;
@@ -213,6 +233,16 @@ export class RouletteServer implements GameServer<RouletteC2S, RouletteS2C> {
             const out = settleBets(seat.bets, spin.winning);
             seat.balance += Object.values(out).reduce((sum, v) => sum + v, 0);
         }
+
+        // 注單：一筆一筆記，不是照注區合計記（見 server/betSlip.ts）。
+        // 有效投注用對沖折抵算——同時押紅跟黑幾乎沒有風險，
+        // 照全額算的話返水就會被這種押法套利
+        record(
+            buildRecords(this.id, newRoundId(this.id, this.spinStartedAt), this.pending, payouts, {
+                validStakeOf: netExposureValidStake,
+            }),
+        );
+        this.pending = [];
 
         this.history.unshift(spin.winning);
         if (this.history.length > HISTORY_MAX) this.history.length = HISTORY_MAX;
