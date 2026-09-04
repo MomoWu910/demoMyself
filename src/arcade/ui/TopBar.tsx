@@ -94,6 +94,23 @@ function BackLink() {
 }
 
 /**
+ * 營運後台的入口。
+ *
+ * 開新分頁而不是同頁跳轉，因為**兩邊要同時開著才看得出重點**：
+ * 在後台把單注上限改小，這一頁下一次下注就會被擋下來，中間不必重新整理
+ * （設定走 BroadcastChannel 廣播，見 server/opsConfig.ts）。
+ * 同頁跳轉的話這一頁被關掉，那條線就演不出來了。
+ */
+function AdminLink() {
+    const t = useT();
+    return (
+        <a className="back" href="./admin.html" target="_blank" rel="noreferrer">
+            {t('arcade.adminLink')}
+        </a>
+    );
+}
+
+/**
  * 資源核對：**這一頁在架構上想證明的事，就是這一塊**。
  *
  * 它一度是頂列右上角一串沒有標題的數字（`登記 2 · 未回收 0 · tex 116 ±0`），
@@ -205,6 +222,7 @@ export function TopBar() {
         <header className="top">
             <div className="top-left">
                 <BackLink />
+                <AdminLink />
                 <PlayerChip />
             </div>
             {/*

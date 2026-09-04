@@ -779,6 +779,10 @@ export const DICT: Record<string, Entry> = {
     'arcade.notice.comingSoon': { en: 'Not built yet — on the roadmap', zh: '這款還在規劃中，敬請期待' },
     'arcade.backLobby': { en: '← Lobby', zh: '← 大廳' },
 
+    // 營運後台的入口。放在遊樂場這一頁是因為兩者要**同時開著**才看得出重點：
+    // 後台改一個限紅，這一頁下一次下注就會被擋，中間不必重整。
+    'arcade.adminLink': { en: 'Back Office ↗', zh: '營運後台 ↗' },
+
     // ---- 活動 banner ----
     // 版面照真實大廳做（那個位置就是放廣告的），但**活動是假的**：沒有優惠、沒有東西可以領。
     // 所以每張都掛著 DEMO 角標，頁腳也寫了一行。作品集裡放看起來像真的促銷而不標明，
