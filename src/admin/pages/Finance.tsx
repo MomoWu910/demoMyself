@@ -12,7 +12,8 @@ import {
 } from '../../arcade/server/txLedger';
 import { dateTime, money, signedMoney } from '../format';
 import { denyReason, useCan, useRole } from '../useAuth';
-import { MONO } from '../theme';
+import { MONO, rowHeight } from '../theme';
+import { useDensity } from '../useTheme';
 
 /**
  * 金流管理。
@@ -131,6 +132,7 @@ export function FinancePage(): React.ReactElement {
      * 看全部交易是在查帳，看待審提領是在處理待辦。
      * 待辦要一眼看得到還剩幾筆，那個數字放在籤上才會被看見。
      */
+    const density = useDensity();
     const [tab, setTab] = React.useState<'all' | 'pending'>('all');
     const [range, setRange] = React.useState<RangeKey>('30d');
     const [kind, setKind] = React.useState<TxKind | 'all'>('all');
@@ -327,7 +329,8 @@ export function FinancePage(): React.ReactElement {
                     rows={result.rows}
                     columns={columns}
                     localeText={zhTW.components.MuiDataGrid.defaultProps.localeText}
-                    density="compact"
+                    density={density === "comfortable" ? "standard" : "compact"}
+                    rowHeight={rowHeight(density)}
                     disableColumnFilter
                     disableRowSelectionOnClick
                     paginationMode="server"

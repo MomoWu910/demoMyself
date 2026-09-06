@@ -3,6 +3,7 @@ import {
     Box, Chip, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow,
     ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -90,7 +91,9 @@ function DailyBars(props: { days: { at: number; stake: number; payout: number }[
                                         width: '100%',
                                         height: Math.max(3, (d.stake / max) * 105),
                                         borderRadius: '3px 3px 0 0',
-                                        background: 'linear-gradient(180deg, #e8b84b 0%, #a8802a 100%)',
+                                        // 走 palette 而不是寫死金色：亮色模式的 primary 是壓深過的，
+                                        // 寫死的話白底上會出現一根讀不出來的淺色柱子
+                                        background: (t) => `linear-gradient(180deg, ${t.palette.primary.main} 0%, ${alpha(t.palette.primary.main, 0.65)} 100%)`,
                                     }}
                                 />
                                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, whiteSpace: 'nowrap' }}>
@@ -200,9 +203,9 @@ function HourHeatmap(props: { cells: number[][]; max: number; spanDays: number }
                                     <Box
                                         sx={{
                                             borderRadius: '2px',
-                                            background: v > 0
-                                                ? `rgba(232, 184, 75, ${0.08 + intensity(v) * 0.92})`
-                                                : 'rgba(255,255,255,0.035)',
+                                            background: (t) => (v > 0
+                                                ? alpha(t.palette.primary.main, 0.08 + intensity(v) * 0.92)
+                                                : alpha(t.palette.text.primary, 0.05)),
                                         }}
                                     />
                                 </Tooltip>

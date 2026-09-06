@@ -14,7 +14,8 @@ import {
 import { REBATE_RATE, stats as txStats, subscribe as subscribeTx } from '../../arcade/server/txLedger';
 import { betTypeLabel, dateTime, GAME_LABEL, money, percent, signedMoney } from '../format';
 import { denyReason, useCan, useRole } from '../useAuth';
-import { MONO } from '../theme';
+import { MONO, rowHeight } from '../theme';
+import { useDensity } from '../useTheme';
 
 /**
  * 玩家管理。
@@ -368,6 +369,7 @@ function PlayerDialog(props: {
 }
 
 export function PlayersPage(): React.ReactElement {
+    const density = useDensity();
     const [range, setRange] = React.useState<RangeKey>('30d');
     const [profile, setProfile] = React.useState<PlayerProfile | 'all'>('all');
     const [riskOnly, setRiskOnly] = React.useState(false);
@@ -477,9 +479,11 @@ export function PlayersPage(): React.ReactElement {
             field: 'validRatio', headerName: '有效投注比', width: 108, align: 'right', headerAlign: 'right',
             renderCell: (p) => (
                 <Tooltip title={`有效投注 ${money(p.row.validStake)} ÷ 投注額 ${money(p.row.stake)}`}>
-                    <span style={{ fontFamily: MONO, color: p.row.risk ? '#e56b6f' : undefined }}>
+                    {/* 顏色走 palette：亮色模式的 error 是另一個紅，
+                        寫死深色模式那個值會在白底上變得刺眼又不夠深 */}
+                    <Box component="span" sx={{ fontFamily: MONO, color: p.row.risk ? 'error.main' : undefined }}>
                         {p.row.stake > 0 ? percent(p.row.validRatio, 0) : '—'}
-                    </span>
+                    </Box>
                 </Tooltip>
             ),
         },
@@ -598,7 +602,8 @@ export function PlayersPage(): React.ReactElement {
                     rows={visible}
                     columns={columns}
                     localeText={zhTW.components.MuiDataGrid.defaultProps.localeText}
-                    density="compact"
+                    density={density === "comfortable" ? "standard" : "compact"}
+                    rowHeight={rowHeight(density)}
                     disableColumnFilter
                     disableRowSelectionOnClick
                     initialState={{

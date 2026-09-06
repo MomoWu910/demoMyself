@@ -4,6 +4,7 @@ import {
     MenuItem, Paper, Snackbar, Stack, Table, TableBody, TableCell, TableHead, TableRow,
     TextField, Tooltip, Typography,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import DownloadIcon from '@mui/icons-material/FileDownloadOutlined';
 import {
     DataGrid,
@@ -20,7 +21,8 @@ import {
 import { list as listPlayers, SELF_ID } from '../../arcade/server/players';
 import { betTypeLabel, dateTime, GAME_IDS, GAME_LABEL, money, signedMoney } from '../format';
 import { denyReason, useCan, useRole } from '../useAuth';
-import { MONO } from '../theme';
+import { MONO, rowHeight } from '../theme';
+import { useDensity } from '../useTheme';
 
 /**
  * 注單查詢。
@@ -209,7 +211,7 @@ function RoundDialog(props: {
                                         key={r.id}
                                         // 點進來的那一筆要標出來——一局有五筆注單的時候，
                                         // 「我剛剛點的是哪一列」不該讓人自己找
-                                        sx={{ background: r.id === row.id ? 'rgba(232,184,75,0.09)' : undefined }}
+                                        sx={{ background: (t) => (r.id === row.id ? alpha(t.palette.primary.main, 0.11) : undefined) }}
                                     >
                                         <TableCell>{betTypeLabel(r.betType)}</TableCell>
                                         <TableCell align="right" sx={{ fontFamily: MONO }}>{money(r.stake)}</TableCell>
@@ -320,6 +322,7 @@ function RoundDialog(props: {
 }
 
 export function BetsPage(): React.ReactElement {
+    const density = useDensity();
     const [range, setRange] = React.useState<RangeKey>('7d');
     const [game, setGame] = React.useState<GameId | 'all'>('all');
     const [player, setPlayer] = React.useState<string>('all');
@@ -527,7 +530,8 @@ export function BetsPage(): React.ReactElement {
                     rows={result.rows}
                     columns={columns}
                     localeText={zhTW.components.MuiDataGrid.defaultProps.localeText}
-                    density="compact"
+                    density={density === "comfortable" ? "standard" : "compact"}
+                    rowHeight={rowHeight(density)}
                     disableColumnFilter
                     disableRowSelectionOnClick
                     // 三個 server 開關。少了任何一個，DataGrid 就會拿「當前這一頁」
