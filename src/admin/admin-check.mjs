@@ -518,6 +518,87 @@ const changes = auditLog.diff(
 check('只記列在 labels 裡的欄位，且相同的值不記', changes.map((c) => c.field), ['a', 'b']);
 check('陣列用內容比較，不是參考比較', changes[1].after, 'x、y');
 
+/* ─────────────────────────── 同一毫秒的排序 ─────────────────────────── */
+
+console.log('\n== 同一毫秒的排序 ==');
+ledger.clear();
+// 十筆結算時間**完全相同**的注單。這不是人為的極端案例：
+// 百家樂押莊又押閒是一次結算，同一局的每一筆 settledAt 都一樣
+ledger.record(Array.from({ length: 10 }, (_, i) => row({ roundId: 'same', settledAt: T0, stake: 10 + i })));
+
+// **這一條是本節的重點。** JS 的 sort 是穩定的（ES2019 起），
+// 穩定的意思是「相等的鍵維持輸入順序」——而輸入順序是寫入先後。
+// 所以少了第二把鑰匙，降序查出來會是「最舊的排最前面」，
+// 畫面上的症狀是「明細第一列不是我剛剛做的那個動作」
+check('降序時，同一毫秒裡最後寫入的排最前面',
+    ledger.query({ sortBy: 'settledAt', sortDir: 'desc', pageSize: 3 }).rows.map((r) => r.stake),
+    [19, 18, 17]);
+check('升序時反過來', ledger.query({ sortBy: 'settledAt', sortDir: 'asc', pageSize: 3 }).rows.map((r) => r.stake),
+    [10, 11, 12]);
+
+// 翻頁的完整性。這一條不是靠 seq 守住的（穩定排序本身就保證了），
+// 但它守著另一件事：分頁的邊界算術沒有寫錯
+const seen = new Set();
+let dup = 0;
+for (let pg = 0; pg < 4; pg++) {
+    for (const r of ledger.query({ sortBy: 'settledAt', sortDir: 'desc', page: pg, pageSize: 3 }).rows) {
+        if (seen.has(r.id)) dup++;
+        seen.add(r.id);
+    }
+}
+check('翻完所有頁剛好拿到全部注單，沒有重複也沒有漏掉', [seen.size, dup], [10, 0]);
+
+// 交易表同理：連續作廢兩筆注單會在同一毫秒寫出兩筆沖正單
+txLedger.clear();
+txLedger.record(Array.from({ length: 6 }, (_, i) => tx({ amount: 100 + i, createdAt: T0 })));
+check('交易表的降序也是最新的在最前面',
+    txLedger.query({ pageSize: 2 }).rows.map((t) => t.amount), [105, 104]);
+
+/* ─────────────────────────── 爭議單（注單作廢） ─────────────────────────── */
+
+console.log('\n== 注單作廢 ==');
+ledger.clear();
+txLedger.clear();
+auditLog.clear();
+
+const [winRow, lossRow] = ledger.record([
+    // 玩家贏 150：作廢要把 150 收回來
+    { roundId: 'v1', game: 'roulette', player: 'p-1', betType: 'red', stake: 100, validStake: 100, payout: 250, net: 150, balanceBefore: 1000, balanceAfter: 1150, betAt: T0, settledAt: T0 },
+    // 玩家輸 100：作廢要把 100 退回去
+    { roundId: 'v2', game: 'slot', player: 'p-1', betType: 'spin', stake: 100, validStake: 100, payout: 0, net: -100, balanceBefore: 1150, balanceAfter: 1050, betAt: T0 + 1, settledAt: T0 + 1 },
+]);
+
+check('沒填原因不給作廢', ledger.voidBet(winRow.id, '   '), undefined);
+check('作廢不存在的注單回 undefined', ledger.voidBet('nope', '測試'), undefined);
+
+const voided = ledger.voidBet(winRow.id, '牌局中斷，本局不算');
+check('狀態推進到作廢', voided.status, 'void');
+// **金額欄位一個都不能動**：它記錄的是當初實際發生的事
+check('金額欄位維持原樣', [voided.stake, voided.payout, voided.net], [100, 250, 150]);
+check('已經作廢的不能再作廢一次（否則沖正會重複調帳）', ledger.voidBet(winRow.id, '再一次'), undefined);
+
+const adj = txLedger.query({ kind: 'adjust' }).rows;
+check('玩家贏的那筆：沖正是負的（把錢收回）', adj[0].amount, -150);
+check('沖正單關聯得回原始注單', adj[0].ref, winRow.id);
+ok('沖正單的備註帶著原因', adj[0].note.includes('牌局中斷'), adj[0].note);
+check('沖正單也滿足餘額不變式', adj[0].balanceAfter, adj[0].balanceBefore + adj[0].amount);
+
+ledger.voidBet(lossRow.id, '系統錯誤重複扣款');
+const adj2 = txLedger.query({ kind: 'adjust', sortBy: 'createdAt', sortDir: 'desc' }).rows[0];
+check('玩家輸的那筆：沖正是正的（把錢退還）', adj2.amount, 100);
+
+// 明細看得到、報表看不到——這是這兩者唯一該不一致的地方
+check('明細預設看得到作廢單', ledger.query().total, 2);
+check('可以只看作廢單', ledger.query({ status: 'void' }).total, 2);
+check('可以只看有效注單', ledger.query({ status: 'settled' }).total, 0);
+const afterVoid = ledger.stats();
+check('報表一律排除作廢單', [afterVoid.count, afterVoid.totalStake, afterVoid.totalPayout], [0, 0, 0]);
+
+const aVoid = auditLog.query({ action: 'bet.void' }).rows;
+check('作廢留下稽核紀錄', aVoid.length, 2);
+ok('稽核紀錄裡看得到原因與沖正金額',
+    aVoid[1].note.includes('牌局中斷') && aVoid[1].note.includes('-150'), aVoid[1].note);
+
 auditLog.clear();
 players.clear();
 txLedger.clear();

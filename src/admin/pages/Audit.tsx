@@ -38,6 +38,7 @@ const ACTION_LABEL: Record<AuditEntry['action'], string> = {
     'ops.reset': '設定還原',
     'player.update': '玩家處置',
     'tx.review': '提領審核',
+    'bet.void': '注單作廢',
     'data.seed': '產生資料',
     'data.clear': '清空資料',
 };
@@ -48,6 +49,7 @@ const ACTION_COLOR: Partial<Record<AuditEntry['action'], 'default' | 'warning' |
     'ops.reset': 'warning',
     'player.update': 'warning',
     'tx.review': 'info',
+    'bet.void': 'error',
     'data.seed': 'default',
     'data.clear': 'error',
 };

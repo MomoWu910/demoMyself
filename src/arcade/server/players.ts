@@ -60,7 +60,7 @@ export interface Player {
 }
 
 import * as audit from './auditLog';
-import { OPS_CHANNEL } from './ledger';
+import { OPS_CHANNEL } from './opsChannel';
 
 const STORAGE_KEY = 'arcade:players';
 

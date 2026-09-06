@@ -1,4 +1,4 @@
-import { OPS_CHANNEL } from './ledger';
+import { OPS_CHANNEL } from './opsChannel';
 
 /**
  * 操作稽核：**後台每一個會改到資料的動作，在這裡留下一筆說得出前後值的紀錄。**
@@ -49,9 +49,12 @@ export interface AuditEntry {
      * 寫入序號。**時間戳不足以排出先後。**
      *
      * 這是被測試抓到的：連續兩次改設定會落在同一毫秒，
-     * 於是「最新的那一筆」變成不確定的——`sort` 對相等的鍵不保證穩定，
-     * 而稽核紀錄如果排不出先後，「他先關掉遊戲才改限紅，還是先改限紅才關掉」
-     * 這種問題就答不了，而那正是調查事故時要問的。
+     * 而 `sort` 雖然是穩定的（ES2019 起），穩定的意思是
+     * 「相等的鍵維持輸入順序」——**降序排出來就成了「最舊的在最上面」**，
+     * 於是「最新的那一筆」拿到的是先寫的那筆。
+     *
+     * 稽核紀錄尤其不能這樣：「他先關掉遊戲才改限紅，還是先改限紅才關掉」
+     * 正是調查事故時要問的，而這一頁預設就是按時間倒序在讀。
      *
      * 真實系統靠資料庫的自增主鍵解決，這裡自己維護一個。
      */
@@ -66,7 +69,7 @@ export interface AuditEntry {
      */
     actor: string;
     /** 動作類型。用點分命名空間，方便之後按類別篩選 */
-    action: 'ops.update' | 'ops.reset' | 'player.update' | 'tx.review' | 'data.seed' | 'data.clear';
+    action: 'ops.update' | 'ops.reset' | 'player.update' | 'tx.review' | 'bet.void' | 'data.seed' | 'data.clear';
     /** 被改的東西的識別（遊戲 id、玩家 id、交易 id） */
     target: string;
     /** 被改的東西的顯示名。同樣是存下來，不是顯示時再查 */

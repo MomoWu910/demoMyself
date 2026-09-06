@@ -1,7 +1,8 @@
 import * as React from 'react';
 import {
-    Box, Button, Chip, Dialog, DialogContent, DialogTitle, Divider, MenuItem, Paper,
-    Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography,
+    Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
+    MenuItem, Paper, Snackbar, Stack, Table, TableBody, TableCell, TableHead, TableRow,
+    TextField, Typography,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/FileDownloadOutlined';
 import {
@@ -13,7 +14,7 @@ import {
 import { zhTW } from '@mui/x-data-grid/locales';
 import type { GameId } from '../../arcade/net/protocol';
 import {
-    query as queryLedger, subscribe,
+    query as queryLedger, subscribe, voidBet,
     type BetRecord, type LedgerPage, type LedgerQuery,
 } from '../../arcade/server/ledger';
 import { list as listPlayers, SELF_ID } from '../../arcade/server/players';
@@ -139,8 +140,16 @@ function RoundDialog(props: {
     row: BetRecord | null;
     nameOf: (id: string) => string;
     onClose: () => void;
+    onVoided: (msg: string) => void;
 }): React.ReactElement {
-    const { row, nameOf, onClose } = props;
+    const { row, nameOf, onClose, onVoided } = props;
+    const [voiding, setVoiding] = React.useState(false);
+    const [reason, setReason] = React.useState('');
+
+    React.useEffect(() => {
+        setVoiding(false);
+        setReason('');
+    }, [row]);
 
     const siblings = React.useMemo(
         () => (row ? queryLedger({ roundId: row.roundId, pageSize: 100, sortBy: 'stake', sortDir: 'desc' }).rows : []),
@@ -241,6 +250,13 @@ function RoundDialog(props: {
                             這個判斷放在畫面上而不是留給人看數字，是因為
                             **對沖注的特徵是「兩個注區、金額相近、淨輸贏接近零」**，
                             那需要同時看三個欄位才成立，不是掃一眼就看得出來的 */}
+                        {row.status === 'void' && (
+                            <Alert severity="error" variant="outlined" sx={{ mt: 2 }}>
+                                這一筆已經作廢，不計入任何報表數字。金額欄位維持原樣——
+                                它記錄的是當初實際發生的事，沖正走的是另一筆調整交易（見金流管理）。
+                            </Alert>
+                        )}
+
                         {validRatio < 0.3 && siblings.length > 1 && (
                             <Typography variant="caption" sx={{ display: 'block', mt: 2, color: 'warning.main', lineHeight: 1.8 }}>
                                 這一局的有效投注只有下注額的 {(validRatio * 100).toFixed(0)}%——
@@ -249,6 +265,46 @@ function RoundDialog(props: {
                             </Typography>
                         )}
                     </DialogContent>
+
+                    <DialogActions sx={{ px: 3, pb: 2 }}>
+                        {row.status === 'settled' && !voiding && (
+                            <Button color="error" size="small" onClick={() => setVoiding(true)}>
+                                作廢這一筆
+                            </Button>
+                        )}
+                        {voiding && (
+                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', width: '100%' }}>
+                                {/* **原因是必填的。** 沒有原因的作廢單在爭議升級時無法辯護，
+                                    而且三個月後沒有人記得當初為什麼要作廢這一筆 */}
+                                <TextField
+                                    size="small"
+                                    fullWidth
+                                    autoFocus
+                                    label="作廢原因（必填）"
+                                    placeholder="例：牌局中斷，本局不算"
+                                    value={reason}
+                                    onChange={(e) => setReason(e.target.value)}
+                                />
+                                <Button size="small" onClick={() => setVoiding(false)} sx={{ mt: 0.5 }}>取消</Button>
+                                <Button
+                                    size="small"
+                                    color="error"
+                                    variant="contained"
+                                    disabled={!reason.trim()}
+                                    sx={{ mt: 0.5, whiteSpace: 'nowrap' }}
+                                    onClick={() => {
+                                        voidBet(row.id, reason.trim());
+                                        onVoided(`注單 ${row.id} 已作廢，沖正 ${signedMoney(-row.net)}`);
+                                        onClose();
+                                    }}
+                                >
+                                    確定作廢
+                                </Button>
+                            </Box>
+                        )}
+                        <Box sx={{ flex: 1 }} />
+                        {!voiding && <Button onClick={onClose}>關閉</Button>}
+                    </DialogActions>
                 </>
             )}
         </Dialog>
@@ -261,7 +317,9 @@ export function BetsPage(): React.ReactElement {
     const [player, setPlayer] = React.useState<string>('all');
     const [outcome, setOutcome] = React.useState<'all' | 'win' | 'loss'>('all');
     const [minStake, setMinStake] = React.useState('');
+    const [status, setStatus] = React.useState<LedgerQuery['status']>('all');
     const [detail, setDetail] = React.useState<BetRecord | null>(null);
+    const [toast, setToast] = React.useState('');
 
     const [sortModel, setSortModel] = React.useState<GridSortModel>([{ field: 'settledAt', sort: 'desc' }]);
     const [pagination, setPagination] = React.useState<GridPaginationModel>({ page: 0, pageSize: 25 });
@@ -282,13 +340,14 @@ export function BetsPage(): React.ReactElement {
             player: player === 'all' ? undefined : player,
             from: rangeToFrom(range),
             outcome,
+            status,
             minStake: minStake ? Number(minStake) : undefined,
             sortBy: (sortModel[0]?.field as LedgerQuery['sortBy']) ?? 'settledAt',
             sortDir: sortModel[0]?.sort ?? 'desc',
             page: pagination.page,
             pageSize: pagination.pageSize,
         }),
-        [game, player, range, outcome, minStake, sortModel, pagination],
+        [game, player, range, outcome, status, minStake, sortModel, pagination],
     );
 
     // 這就是「呼叫 API」的位置。換成 fetch 的話，改的只有這一行加一個 await
@@ -329,8 +388,17 @@ export function BetsPage(): React.ReactElement {
             renderCell: (p) => <Chip size="small" label={GAME_LABEL[p.value as GameId]} variant="outlined" />,
         },
         {
-            field: 'betType', headerName: '注別', width: 110, sortable: false,
-            valueGetter: (v: string) => betTypeLabel(v),
+            field: 'betType', headerName: '注別', width: 130, sortable: false,
+            renderCell: (p) => (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, height: '100%' }}>
+                    <span>{betTypeLabel(p.row.betType)}</span>
+                    {/* 作廢單在列表上要一眼認得出來。**不要用刪除線蓋住整列**——
+                        金額還是要讀得到，因為看的人正是要確認「當初是多少」 */}
+                    {p.row.status === 'void' && (
+                        <Chip size="small" color="error" variant="outlined" label="作廢" sx={{ height: 18, fontSize: 10 }} />
+                    )}
+                </Box>
+            ),
         },
         {
             field: 'stake', headerName: '下注', width: 90, align: 'right', headerAlign: 'right',
@@ -416,6 +484,15 @@ export function BetsPage(): React.ReactElement {
                     </TextField>
 
                     <TextField
+                        select label="狀態" value={status} sx={{ minWidth: 110 }}
+                        onChange={(e) => resetPage(setStatus)(e.target.value as LedgerQuery['status'])}
+                    >
+                        <MenuItem value="all">全部</MenuItem>
+                        <MenuItem value="settled">已結算</MenuItem>
+                        <MenuItem value="void">已作廢</MenuItem>
+                    </TextField>
+
+                    <TextField
                         label="下注額 ≥" value={minStake} type="number" sx={{ width: 120 }}
                         onChange={(e) => resetPage(setMinStake)(e.target.value)}
                     />
@@ -475,7 +552,20 @@ export function BetsPage(): React.ReactElement {
                 />
             </Paper>
 
-            <RoundDialog row={detail} nameOf={nameOf} onClose={() => setDetail(null)} />
+            <RoundDialog
+                row={detail}
+                nameOf={nameOf}
+                onClose={() => setDetail(null)}
+                onVoided={(m) => { setToast(m); setRevision((n) => n + 1); }}
+            />
+
+            <Snackbar
+                open={Boolean(toast)}
+                autoHideDuration={4000}
+                onClose={() => setToast('')}
+                message={toast}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            />
         </Stack>
     );
 }

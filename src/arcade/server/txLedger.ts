@@ -1,5 +1,5 @@
 import * as audit from './auditLog';
-import { OPS_CHANNEL } from './ledger';
+import { OPS_CHANNEL } from './opsChannel';
 
 /**
  * 資金流水：**錢進出帳號的每一筆，跟注單分開記。**
@@ -49,6 +49,12 @@ export type TxStatus = 'done' | 'pending' | 'rejected';
 
 export interface Transaction {
     id: string;
+    /**
+     * 寫入序號。排序的第二把鑰匙，理由同 `BetRecord.seq`：
+     * 同一毫秒寫入的兩筆交易（例如連續作廢兩筆注單），
+     * 降序查詢時會變成「最舊的排最前面」，因為穩定排序維持的是寫入順序
+     */
+    seq: number;
     player: string;
     kind: TxKind;
     /** 帶號金額：入帳為正、出帳為負。見檔頭說明 */
@@ -168,6 +174,9 @@ function load(): Transaction[] {
     } catch {
         cache = [];
     }
+    for (const r of cache) {
+        if (r.seq >= seq) seq = r.seq + 1;
+    }
     return cache;
 }
 
@@ -186,15 +195,15 @@ function save(rows: Transaction[]): void {
 }
 
 function nextId(now: number): string {
-    seq = (seq + 1) % 100000;
-    return `t${now.toString(36)}-${seq.toString(36).padStart(4, '0')}`;
+    seq += 1;
+    return `t${now.toString(36)}-${(seq % 100000).toString(36).padStart(4, '0')}`;
 }
 
 /** 寫入交易。唯一的寫入口 */
-export function record(entries: Omit<Transaction, 'id'>[]): Transaction[] {
+export function record(entries: Omit<Transaction, 'id' | 'seq'>[]): Transaction[] {
     if (!entries.length) return [];
     const now = Date.now();
-    const rows: Transaction[] = entries.map((e) => ({ ...e, id: nextId(now) }));
+    const rows: Transaction[] = entries.map((e) => ({ ...e, id: nextId(now), seq: seq }));
 
     const all = load().concat(rows);
     save(all.length > MAX_ROWS ? all.slice(all.length - MAX_ROWS) : all);
@@ -301,7 +310,7 @@ export function query(q: TxQuery = {}): TxPage {
     if (to != null) rows = rows.filter((t) => t.createdAt <= to);
 
     const sorted = rows.slice().sort((a, b) => {
-        const d = a[sortBy] - b[sortBy];
+        const d = a[sortBy] - b[sortBy] || a.seq - b.seq;
         return sortDir === 'asc' ? d : -d;
     });
 

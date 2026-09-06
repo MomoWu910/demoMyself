@@ -77,7 +77,7 @@ export function buildRecords(
     pending: PendingBet[],
     payoutBySpot: Record<string, number>,
     opts: BuildOptions = {},
-): Omit<BetRecord, 'id' | 'status'>[] {
+): Omit<BetRecord, 'id' | 'seq' | 'status'>[] {
     if (!pending.length) return [];
 
     const settledAt = opts.settledAt ?? Date.now();
@@ -91,7 +91,7 @@ export function buildRecords(
         else bySpot.set(b.spot, [b]);
     }
 
-    const out: Omit<BetRecord, 'id' | 'status'>[] = [];
+    const out: Omit<BetRecord, 'id' | 'seq' | 'status'>[] = [];
 
     for (const [spot, list] of bySpot) {
         const spotStake = list.reduce((s, b) => s + b.amount, 0);

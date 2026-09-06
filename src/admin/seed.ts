@@ -256,9 +256,9 @@ function splitRouletteKeys(): RouletteKeys {
 }
 
 /** 一局的注單（已經帶好時間），累積起來最後一次寫入 */
-type Row = Omit<BetRecord, 'id' | 'status'>;
+type Row = Omit<BetRecord, 'id' | 'seq' | 'status'>;
 /** 一筆交易（還沒發號） */
-type Tx = Omit<Transaction, 'id'>;
+type Tx = Omit<Transaction, 'id' | 'seq'>;
 
 /* ────────────────────────────── 各玩法 ────────────────────────────── */
 

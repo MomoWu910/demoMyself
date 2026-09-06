@@ -1,4 +1,7 @@
 import type { GameId } from '../net/protocol';
+import * as audit from './auditLog';
+import { AUDIT_GAME_LABEL, OPS_CHANNEL, type OpsMessage } from './opsChannel';
+import { record as recordTx } from './txLedger';
 
 /**
  * 注單流水帳：**遊戲產生的每一筆下注，在這裡留下一筆不會被改的紀錄。**
@@ -32,6 +35,24 @@ import type { GameId } from '../net/protocol';
 export interface BetRecord {
     /** 注單號。demo 用時間戳 + 序號，真實系統會是全域唯一的發號器 */
     id: string;
+    /**
+     * 寫入序號。**排序的第二把鑰匙。**
+     *
+     * 同一局的多筆注單結算時間完全相同——百家樂押莊又押閒是一次結算，
+     * 三筆注單的 `settledAt` 一模一樣。
+     *
+     * JavaScript 的 `sort` 從 ES2019 起是**穩定**的，所以這不會弄丟資料；
+     * 問題在方向：穩定的意思是「相等的鍵維持輸入順序」，
+     * 而輸入順序是寫入先後（舊的在前）。於是**按時間降序查詢的時候，
+     * 同一毫秒裡最先寫入的那筆會排在最前面**，而使用者要的是最後寫入的那筆。
+     *
+     * 這個 bug 是寫測試時被咬到的：連續寫兩筆沖正交易，
+     * 取「最新的那一筆」拿到的卻是先寫的那筆。畫面上的症狀會是
+     * 「明細的第一列不是我剛剛做的那個動作」——很容易被當成沒有存檔。
+     *
+     * 真實系統靠資料庫的自增主鍵解決，這裡自己維護一個。
+     */
+    seq: number;
     /** 局號。同一局裡的多筆注單共用，注單查詢要能用它把一局撈齊 */
     roundId: string;
     game: GameId;
@@ -68,6 +89,13 @@ export interface LedgerQuery {
     player?: string;
     /** 只看某一局。點開一筆注單要看「同一局還押了什麼」時用 */
     roundId?: string;
+    /**
+     * 結算狀態。預設 `'all'`——**明細要看得到作廢單**，它是爭議處理的證據。
+     *
+     * 注意這跟 `stats()` 不一致：報表一律排除作廢單。
+     * 這個不對稱是刻意的，理由見 `stats()` 的說明。
+     */
+    status?: BetRecord['status'] | 'all';
     /** 時間區間（毫秒時間戳），開區間都可省略 */
     from?: number;
     to?: number;
@@ -167,21 +195,14 @@ const MAX_ROWS = 20000;
  */
 export { SELF_ID as PLAYER_ID } from './players';
 
-/** 跨頁廣播用的頻道。後台跟遊戲是兩個分頁，靠這個互相通知 */
-export const OPS_CHANNEL = 'arcade:ops';
-
-/** 廣播事件。ledger 只發 'bets'，設定變更由 opsConfig 發 'config' */
-export type OpsMessage =
-    | { kind: 'bets'; rows: BetRecord[] }
-    | { kind: 'config' }
-    // 玩家名冊的變動（停用、標記、改等級）。由 players 發，
-    // 遊戲端靠它知道自己的帳號被停用了
-    | { kind: 'players' }
-    // 資金流水的變動。訊息由 txLedger 發，ledger 這邊不處理，
-    // 但型別要列在這裡——**這個聯合型別是「這條頻道上會出現什麼」的完整清單**，
-    // 少列一種，下一個人就會以為自己可以安全地 switch 到 default
-    | { kind: 'tx' }
-    | { kind: 'cleared' };
+/**
+ * 頻道與訊息型別都搬到 `opsChannel.ts` 了，這裡只轉出。
+ *
+ * 搬家是為了解開相依循環：注單作廢要開一筆沖正交易，
+ * 於是 ledger 得匯入 txLedger，而 txLedger 早就匯入了這裡的 OPS_CHANNEL。
+ * 詳見 opsChannel.ts 的檔頭。
+ */
+export { OPS_CHANNEL, type OpsMessage } from './opsChannel';
 
 let cache: BetRecord[] | null = null;
 let seq = 0;
@@ -206,7 +227,13 @@ function getChannel(): BroadcastChannel | null {
                 // 不直接把 msg.rows 併進快取，是因為那樣兩邊的順序可能不一致——
                 // localStorage 才是唯一的真相來源，記憶體只是它的快取。
                 cache = null;
-                for (const fn of listeners) fn(msg.rows);
+                // opsChannel 不認識 BetRecord（它是相依圖的葉節點，不該知道任何一張表的內容），
+                // 所以型別在這裡收斂。**斷言只出現在邊界上**是刻意的：
+                // 跨分頁傳來的資料本來就只能靠約定，而約定寫在 OpsMessage 那個聯合型別裡
+                for (const fn of listeners) fn(msg.rows as BetRecord[]);
+            } else if (msg?.kind === 'bets.void') {
+                cache = null;
+                for (const fn of listeners) fn([]);
             } else if (msg?.kind === 'cleared') {
                 cache = null;
                 for (const fn of listeners) fn([]);
@@ -225,6 +252,11 @@ function load(): BetRecord[] {
         cache = raw ? (JSON.parse(raw) as BetRecord[]) : [];
     } catch {
         cache = [];
+    }
+    // 序號接續既有資料。重新整理之後寫的注單，序號不能比重整前的還小，
+    // 否則新注單會排到舊注單前面去
+    for (const r of cache) {
+        if (r.seq >= seq) seq = r.seq + 1;
     }
     return cache;
 }
@@ -255,8 +287,8 @@ function save(rows: BetRecord[]): void {
 
 /** 產生注單號。時間戳 + 序號，同一毫秒內連開多筆也不會撞號 */
 function nextId(now: number): string {
-    seq = (seq + 1) % 100000;
-    return `${now.toString(36)}-${seq.toString(36).padStart(4, '0')}`;
+    seq += 1;
+    return `${now.toString(36)}-${(seq % 100000).toString(36).padStart(4, '0')}`;
 }
 
 /** 產生局號。同一局的多筆注單要共用它 */
@@ -265,10 +297,10 @@ export function newRoundId(game: GameId, now = Date.now()): string {
 }
 
 /** 寫入注單。**這是唯一的寫入口**，玩法 server 都走這裡 */
-export function record(entries: Omit<BetRecord, 'id' | 'status'>[]): BetRecord[] {
+export function record(entries: Omit<BetRecord, 'id' | 'seq' | 'status'>[]): BetRecord[] {
     if (!entries.length) return [];
     const now = Date.now();
-    const rows: BetRecord[] = entries.map((e) => ({ ...e, id: nextId(now), status: 'settled' as const }));
+    const rows: BetRecord[] = entries.map((e) => ({ ...e, id: nextId(now), seq: seq, status: 'settled' as const }));
 
     const all = load().concat(rows);
     // 超過上限就砍最舊的
@@ -296,6 +328,7 @@ export function query(q: LedgerQuery = {}): LedgerPage {
         game = 'all',
         player,
         roundId,
+        status = 'all',
         from,
         to,
         minStake,
@@ -311,6 +344,7 @@ export function query(q: LedgerQuery = {}): LedgerPage {
     if (game !== 'all') rows = rows.filter((r) => r.game === game);
     if (player) rows = rows.filter((r) => r.player === player);
     if (roundId) rows = rows.filter((r) => r.roundId === roundId);
+    if (status !== 'all') rows = rows.filter((r) => r.status === status);
     if (from != null) rows = rows.filter((r) => r.settledAt >= from);
     if (to != null) rows = rows.filter((r) => r.settledAt <= to);
     if (minStake != null) rows = rows.filter((r) => r.stake >= minStake);
@@ -320,7 +354,10 @@ export function query(q: LedgerQuery = {}): LedgerPage {
     // 排序前先複製：load() 回的是快取本體，就地排序會把儲存順序也改掉，
     // 而儲存順序是「寫入先後」，那是注單表唯一不該被查詢條件動到的東西
     const sorted = rows.slice().sort((a, b) => {
-        const d = a[sortBy] - b[sortBy];
+        // 主鍵相等時用寫入序號決勝，而且**方向要跟主鍵一致**。
+        // 少了這一段，同一毫秒的注單在降序查詢時會是「最舊的排最前面」——
+        // 因為 sort 是穩定的，相等的鍵維持的是寫入順序（見 BetRecord.seq）
+        const d = a[sortBy] - b[sortBy] || a.seq - b.seq;
         return sortDir === 'asc' ? d : -d;
     });
 
@@ -332,7 +369,17 @@ export function query(q: LedgerQuery = {}): LedgerPage {
 /** 彙總。條件跟 query 共用，所以報表跟明細**永遠是同一組篩選算出來的** */
 export function stats(q: LedgerQuery = {}): LedgerStats {
     // 借用 query 的篩選但不分頁：pageSize 給一個大數，避免兩邊的篩選邏輯各寫一份而走鐘
-    const all = query({ ...q, page: 0, pageSize: Number.MAX_SAFE_INTEGER }).rows;
+    //
+    // **作廢的注單一律排除，而且是寫死的不是預設值。**
+    //
+    // 這是報表與明細唯一該不一致的地方：一筆被作廢的注單在明細裡必須看得到
+    // （它是爭議處理的證據，連同沖正交易一起構成完整的來龍去脈），
+    // 但它**不該進任何一個統計數字**——派彩率、平台淨收、有效投注，
+    // 算進去的話報表就在描述一件已經被推翻的事。
+    //
+    // 寫死而不是給呼叫端選，是因為「不小心把作廢單算進報表」這種錯誤
+    // 在畫面上完全看不出來，只有對帳的時候才會發現差了幾百塊。
+    const all = query({ ...q, status: 'settled', page: 0, pageSize: Number.MAX_SAFE_INTEGER }).rows;
 
     const byGame: LedgerStats['byGame'] = {};
     const byPlayer: LedgerStats['byPlayer'] = {};
@@ -373,6 +420,72 @@ export function stats(q: LedgerQuery = {}): LedgerStats {
         byGame,
         byPlayer,
     };
+}
+
+/**
+ * 作廢一筆注單（爭議單處理）。
+ *
+ * ---
+ *
+ * **注單是 append-only 的，那為什麼可以改？**
+ *
+ * 改的是**狀態**，不是金額。`settled → void` 是狀態推進，
+ * 跟提領從「待審」變成「放行」是同一類事情——
+ * 而金額、注別、時間、餘額前後這些欄位一個都不動，因為它們是發生過的事實。
+ *
+ * **錢怎麼調回去？開一筆沖正交易，不是改注單。**
+ *
+ * 作廢的財務效果是「這一局不算」：玩家贏了就收回，輸了就退還，
+ * 也就是 `-net`。這筆調整走 `txLedger`，關聯回原注單號。
+ * 於是帳上留下的是一條完整的線：原始注單（作廢）→ 沖正交易 → 稽核紀錄，
+ * **三份文件互相指得回去**，而不是一筆被改過所以說不清楚的舊紀錄。
+ *
+ * @param reason 作廢原因。**必填**——沒有原因的作廢單在爭議升級時無法辯護
+ */
+export function voidBet(id: string, reason: string): BetRecord | undefined {
+    if (!reason.trim()) return undefined;
+
+    const rows = load();
+    const idx = rows.findIndex((r) => r.id === id);
+    if (idx < 0) return undefined;
+    const target = rows[idx];
+    // 已經作廢的不能再作廢一次。第二次的沖正交易會把錢重複調一遍
+    if (target.status !== 'settled') return undefined;
+
+    const next: BetRecord = { ...target, status: 'void' };
+    const copy = rows.slice();
+    copy[idx] = next;
+    save(copy);
+
+    const now = Date.now();
+    const amount = -target.net;
+    if (amount !== 0) {
+        recordTx([{
+            player: target.player,
+            kind: 'adjust',
+            amount,
+            balanceBefore: target.balanceAfter,
+            balanceAfter: target.balanceAfter + amount,
+            status: 'done',
+            ref: target.id,
+            note: `注單作廢沖正：${reason}`,
+            createdAt: now,
+            reviewedAt: now,
+        }]);
+    }
+
+    audit.record({
+        action: 'bet.void',
+        target: target.id,
+        targetLabel: `${AUDIT_GAME_LABEL[target.game]} ${target.roundId}`,
+        changes: [{ field: 'status', label: '注單狀態', before: '已結算', after: '已作廢' }],
+        note: `${reason}${amount !== 0 ? `（沖正 ${amount > 0 ? '+' : ''}${amount}）` : '（金額為零，未開立沖正單）'}`,
+        at: now,
+    });
+
+    getChannel()?.postMessage({ kind: 'bets.void', id } satisfies OpsMessage);
+    for (const fn of listeners) fn([next]);
+    return next;
 }
 
 /** 訂閱注單寫入（自己這一頁寫的、或別的分頁廣播過來的都會通知） */
