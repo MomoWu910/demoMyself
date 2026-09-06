@@ -13,7 +13,8 @@ import {
 import type { GameId } from '../arcade/net/protocol';
 import { BaccaratShoe } from '../arcade/server/baccaratShoe';
 import { buildRecords, netExposureValidStake, type PendingBet } from '../arcade/server/betSlip';
-import { count, record, type BetRecord } from '../arcade/server/ledger';
+import * as audit from '../arcade/server/auditLog';
+import { clear as clearLedger, count, record, type BetRecord } from '../arcade/server/ledger';
 import { forGame } from '../arcade/server/opsConfig';
 import {
     clear as clearPlayers,
@@ -26,6 +27,7 @@ import {
 import { SlotServer } from '../arcade/server/slotServer';
 import {
     clear as clearTx,
+    count as txCount,
     rebateFor,
     record as recordTx,
     type Transaction,
@@ -425,7 +427,45 @@ export function seed(): number {
     seedPlayers(players);
     recordTx(transactions);
     record(bets);
+
+    audit.record({
+        action: 'data.seed',
+        target: 'seed',
+        targetLabel: '展示資料',
+        changes: [],
+        note: `重新產生 ${bets.length} 筆注單、${players.length} 個帳號、${transactions.length} 筆交易`,
+    });
     return bets.length;
+}
+
+/**
+ * 清空展示資料。
+ *
+ * **三張表一起清，而且不清稽核。**
+ *
+ * 一起清是因為只清注單的話，玩家名冊會留下四十個「一筆注單都沒有」的帳號，
+ * 而金流表裡還有他們的返水——那是比空資料更難解釋的狀態。
+ *
+ * 不清稽核是刻意的，而且這正是稽核表的用途：
+ * **資料被清掉之後，「是誰清的、什麼時候清的」還在。**
+ * 一個會被同一個按鈕清掉的稽核紀錄，等於沒有稽核。
+ *
+ * 包成一支函式而不是讓頁面呼叫三個 clear，是為了讓留痕發生在資料層——
+ * 理由同 auditLog 的檔頭：記錄要寫在唯一入口裡。
+ */
+export function clearAll(): void {
+    const before = { bets: count(), players: playerCount(), tx: txCount() };
+    clearLedger();
+    clearPlayers();
+    clearTx();
+
+    audit.record({
+        action: 'data.clear',
+        target: 'all',
+        targetLabel: '展示資料',
+        changes: [],
+        note: `清空 ${before.bets} 筆注單、${before.players} 個帳號、${before.tx} 筆交易`,
+    });
 }
 
 export interface GenerateOptions {

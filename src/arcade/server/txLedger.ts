@@ -1,3 +1,4 @@
+import * as audit from './auditLog';
 import { OPS_CHANNEL } from './ledger';
 
 /**
@@ -99,6 +100,12 @@ export interface TxStats {
     pendingAmount: number;
     /** 淨存入 = 儲值 − 提領。這是平台真正收到的錢 */
     netDeposit: number;
+    /**
+     * 按玩家彙總。玩家頁一次要顯示四十個帳號的儲值與返水，
+     * **在這裡一趟算完，不是讓頁面逐人查詢四十次**——
+     * 那種寫法在四十個帳號時只是慢一點，在四萬個帳號時是頁面打不開
+     */
+    byPlayer: Record<string, { deposit: number; withdraw: number; rebate: number; adjust: number; pendingCount: number }>;
 }
 
 /**
@@ -231,6 +238,22 @@ export function review(id: string, decision: 'done' | 'rejected', at = Date.now(
     copy[idx] = next;
     save(copy);
 
+    // 放行一筆提領是把錢送出去。**這是整個後台金額最大的單一動作**，
+    // 沒有留痕的話，「這筆五十萬是誰放的」就沒有答案
+    audit.record({
+        action: 'tx.review',
+        target: tx.id,
+        targetLabel: `${tx.player} 的提領 ${Math.abs(tx.amount)}`,
+        changes: [{
+            field: 'status',
+            label: '審核結果',
+            before: '待審',
+            after: decision === 'done' ? '放行' : '退件',
+        }],
+        note: decision === 'rejected' ? '退件並開立退款單' : '',
+        at,
+    });
+
     if (decision === 'rejected') {
         // 退款。餘額基準取原單扣款後的餘額——demo 裡沒有即時錢包可查，
         // 真實系統這裡要向錢包服務請一次當下餘額，因為這中間可能已經有別的交易
@@ -295,11 +318,15 @@ export function stats(q: TxQuery = {}): TxStats {
     let adjust = 0;
     let pendingCount = 0;
     let pendingAmount = 0;
+    const byPlayer: TxStats['byPlayer'] = {};
+    const bucket = (id: string): TxStats['byPlayer'][string] =>
+        (byPlayer[id] ??= { deposit: 0, withdraw: 0, rebate: 0, adjust: 0, pendingCount: 0 });
 
     for (const t of all) {
         if (t.status === 'pending') {
             pendingCount++;
             pendingAmount += Math.abs(t.amount);
+            bucket(t.player).pendingCount++;
             continue;
         }
         // 退件的單不計入金額統計：那筆錢沒有真的出去。
@@ -307,10 +334,20 @@ export function stats(q: TxQuery = {}): TxStats {
         // 「這個帳號被退過三次提領」是風控訊號，不該被清乾淨
         if (t.status === 'rejected') continue;
 
-        if (t.kind === 'deposit') deposit += t.amount;
-        else if (t.kind === 'withdraw') withdraw += Math.abs(t.amount);
-        else if (t.kind === 'rebate') rebate += t.amount;
-        else adjust += t.amount;
+        const b = bucket(t.player);
+        if (t.kind === 'deposit') {
+            deposit += t.amount;
+            b.deposit += t.amount;
+        } else if (t.kind === 'withdraw') {
+            withdraw += Math.abs(t.amount);
+            b.withdraw += Math.abs(t.amount);
+        } else if (t.kind === 'rebate') {
+            rebate += t.amount;
+            b.rebate += t.amount;
+        } else {
+            adjust += t.amount;
+            b.adjust += t.amount;
+        }
     }
 
     return {
@@ -322,6 +359,7 @@ export function stats(q: TxQuery = {}): TxStats {
         pendingCount,
         pendingAmount,
         netDeposit: deposit - withdraw,
+        byPlayer,
     };
 }
 

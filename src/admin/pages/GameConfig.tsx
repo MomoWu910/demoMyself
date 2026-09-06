@@ -6,11 +6,11 @@ import { Formik, Form, Field, type FieldProps } from 'formik';
 import * as Yup from 'yup';
 import type { GameId } from '../../arcade/net/protocol';
 import { clear as clearLedger, count as ledgerCount } from '../../arcade/server/ledger';
-import { clear as clearPlayers, count as playerCount } from '../../arcade/server/players';
-import { clear as clearTx, count as txCount } from '../../arcade/server/txLedger';
+import { count as playerCount } from '../../arcade/server/players';
+import { count as txCount } from '../../arcade/server/txLedger';
 import { forGame, reset as resetOps, subscribe as subscribeOps, update, type GameOps } from '../../arcade/server/opsConfig';
 import { GAME_IDS, GAME_LABEL, money } from '../format';
-import { seed } from '../seed';
+import { clearAll, seed } from '../seed';
 
 /**
  * 遊戲設定。**這一頁是整個後台唯一會寫回去的地方。**
@@ -218,13 +218,11 @@ export function GameConfigPage(): React.ReactElement {
                         color="error"
                         variant="outlined"
                         onClick={() => {
-                            // 清空要三張一起。只清注單的話，玩家名冊會留下四十個
-                            // 「一筆注單都沒有」的帳號，而金流表裡還有他們的返水——
-                            // 那是比空資料更難解釋的狀態
-                            clearLedger();
-                            clearPlayers();
-                            clearTx();
-                            setToast('注單、玩家與金流已清空');
+                            // 清空走資料層的 clearAll()，不是在這裡呼叫三個 clear——
+                            // 因為它要在稽核表裡留下一筆「誰清的、清掉了多少」，
+                            // 而那筆紀錄**不會**被這個按鈕清掉
+                            clearAll();
+                            setToast('注單、玩家與金流已清空（稽核紀錄保留）');
                         }}
                     >
                         清空全部（注單 {money(ledgerCount())} 筆 · 交易 {money(txCount())} 筆）

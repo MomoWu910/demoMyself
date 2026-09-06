@@ -128,7 +128,14 @@ export interface LedgerStats {
      * 幾十個玩家的規模下，在這裡一次算完比讓前端逐人查詢便宜得多。
      * 真實系統上百萬個帳號時，這支要換成資料庫的 GROUP BY 加上時間區間的物化表。
      */
-    byPlayer: Record<string, { count: number; stake: number; validStake: number; payout: number }>;
+    byPlayer: Record<string, {
+        count: number;
+        stake: number;
+        validStake: number;
+        payout: number;
+        /** 最後一筆注單的結算時間。「這個帳號多久沒來了」是留存的第一個問題 */
+        lastAt: number;
+    }>;
 }
 
 const STORAGE_KEY = 'arcade:ledger';
@@ -167,6 +174,9 @@ export const OPS_CHANNEL = 'arcade:ops';
 export type OpsMessage =
     | { kind: 'bets'; rows: BetRecord[] }
     | { kind: 'config' }
+    // 玩家名冊的變動（停用、標記、改等級）。由 players 發，
+    // 遊戲端靠它知道自己的帳號被停用了
+    | { kind: 'players' }
     // 資金流水的變動。訊息由 txLedger 發，ledger 這邊不處理，
     // 但型別要列在這裡——**這個聯合型別是「這條頻道上會出現什麼」的完整清單**，
     // 少列一種，下一個人就會以為自己可以安全地 switch 到 default
@@ -342,11 +352,14 @@ export function stats(q: LedgerQuery = {}): LedgerStats {
         g.stakeSq += r.stake * r.stake;
         g.payout += r.payout;
 
-        const p = (byPlayer[r.player] ??= { count: 0, stake: 0, validStake: 0, payout: 0 });
+        const p = (byPlayer[r.player] ??= { count: 0, stake: 0, validStake: 0, payout: 0, lastAt: 0 });
         p.count++;
         p.stake += r.stake;
         p.validStake += r.validStake;
         p.payout += r.payout;
+        // 取最大值而不是「最後一筆」：`query()` 的結果順序跟著排序條件走，
+        // 假設它是時間序的話，換一個排序這個欄位就悄悄變成別的意思
+        if (r.settledAt > p.lastAt) p.lastAt = r.settledAt;
     }
 
     return {

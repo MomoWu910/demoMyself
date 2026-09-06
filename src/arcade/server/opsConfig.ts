@@ -1,4 +1,21 @@
 import type { GameId } from '../net/protocol';
+import * as audit from './auditLog';
+
+/**
+ * 玩法的顯示名。**稽核紀錄要存顯示名而不是 id**——
+ * 三年後查紀錄的人不一定知道 `baccaratLive` 是哪一款
+ * （見 auditLog 檔頭：稽核紀錄必須能獨立閱讀）。
+ *
+ * 這份對照跟 admin/format.ts 的 `GAME_LABEL` 內容一樣但故意各存一份：
+ * 那一份是**顯示層**的，會跟著 i18n 走；這一份是**寫進紀錄裡**的，
+ * 一旦寫下去就不該再變。
+ */
+const GAME_LABEL: Record<GameId, string> = {
+    slot: '幸運轉輪',
+    baccarat: '百家樂',
+    baccaratLive: '視訊百家樂',
+    roulette: '輪盤',
+};
 import { OPS_CHANNEL, type OpsMessage } from './ledger';
 
 /**
@@ -126,9 +143,11 @@ export function forGame(id: GameId): GameOps {
  */
 export function update(id: GameId, patch: Partial<GameOps>): OpsConfig {
     const cur = get();
+    const before = cur.games[id];
+    const after: GameOps = { ...before, ...patch };
     const next: OpsConfig = {
         version: cur.version + 1,
-        games: { ...cur.games, [id]: { ...cur.games[id], ...patch } },
+        games: { ...cur.games, [id]: after },
     };
     cache = next;
     try {
@@ -136,6 +155,29 @@ export function update(id: GameId, patch: Partial<GameOps>): OpsConfig {
     } catch {
         /* 寫不進去就只有這一頁生效，不擋住操作 */
     }
+
+    /**
+     * 留痕。**寫在這裡而不是讓後台頁面自己記**——
+     * 這支函式是設定的唯一入口，記在入口裡，就沒有繞得過去的路徑。
+     * 交給呼叫端的話，任何一個忘記記錄的地方都是一個沒有留痕的後門，
+     * 而那種遺漏在審查程式碼時看不出來。
+     */
+    audit.record({
+        action: 'ops.update',
+        target: id,
+        targetLabel: GAME_LABEL[id],
+        changes: audit.diff(before, after, {
+            enabled: '上架',
+            maintenance: '維護中',
+            minBet: '單注下限',
+            maxBet: '單注上限（限紅）',
+        }, {
+            enabled: (v) => (v ? '是' : '否'),
+            maintenance: (v) => (v ? '是' : '否'),
+        }),
+        note: '',
+    });
+
     getChannel()?.postMessage({ kind: 'config' } satisfies OpsMessage);
     for (const fn of listeners) fn(next);
     return next;
@@ -143,7 +185,22 @@ export function update(id: GameId, patch: Partial<GameOps>): OpsConfig {
 
 /** 還原預設值 */
 export function reset(): OpsConfig {
+    // 還原之前先記下現在是什麼。**「他把設定還原了」不夠**，
+    // 要回答的是「還原之前限紅是多少」——那個值在下一行就消失了
+    const before = get();
     cache = merge(null);
+    const changed = (Object.keys(cache.games) as GameId[])
+        .filter((id) => JSON.stringify(before.games[id]) !== JSON.stringify(cache!.games[id]))
+        .map((id) => `${GAME_LABEL[id]}（限紅 ${before.games[id].minBet}~${before.games[id].maxBet}${before.games[id].enabled ? '' : '、已下架'}${before.games[id].maintenance ? '、維護中' : ''}）`);
+    if (changed.length) {
+        audit.record({
+            action: 'ops.reset',
+            target: 'all',
+            targetLabel: '全部玩法',
+            changes: [],
+            note: `還原預設值。原本：${changed.join('，')}`,
+        });
+    }
     try {
         localStorage.removeItem(STORAGE_KEY);
     } catch {

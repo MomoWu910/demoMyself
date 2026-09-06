@@ -3,7 +3,7 @@ import type { GameServer } from './gameServer';
 import { Wallet } from './wallet';
 import { canSubstitute, LINE_COUNT, PAYLINES, PAYOUTS, REELS, ROWS, Sym, SYMBOLS, WEIGHTS } from '../games/slot/rules';
 import { newRoundId, record } from './ledger';
-import { SELF_ID } from './players';
+import { checkPlayer, SELF_ID } from './players';
 import { checkBet } from './opsConfig';
 
 /**
@@ -70,6 +70,10 @@ export class SlotServer implements GameServer<SlotC2S, SlotS2C> {
         if (packet.type !== 'spin') return null;
 
         // 營運層的擋人。回代碼不回布林，玩家才知道是限紅擋的還是維護中
+        // 帳號狀態先於遊戲設定檢查：被停用的帳號連「這款遊戲維護中」都不必知道
+        const frozen = checkPlayer(SELF_ID);
+        if (frozen) return { type: 'error', reason: frozen };
+
         const denied = checkBet(this.id, packet.bet);
         if (denied) return { type: 'error', reason: denied };
 

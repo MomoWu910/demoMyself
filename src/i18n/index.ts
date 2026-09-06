@@ -569,6 +569,16 @@ export const DICT: Record<string, Entry> = {
     'arcade.error.insufficient_balance': { en: 'Insufficient balance', zh: '餘額不足' },
     'arcade.error.invalid_bet': { en: 'Invalid bet', zh: '押注金額無效' },
     'arcade.error.bet_closed': { en: 'Betting is closed', zh: '已封盤，來不及了' },
+    // 營運層擋下來的四種。**這幾條原本不在字典裡**，於是玩家被限紅擋住的時候，
+    // 紅色提示上印的是 `arcade.error.above_max_bet` 這串 key 本身
+    // （t() 查不到就回 key，見 i18n/index.ts 的 t()）。
+    // 後台做完限紅卻沒回頭補這裡，是「功能做完了但沒走完最後一哩」的典型
+    'arcade.error.game_disabled': { en: 'This game is currently unavailable', zh: '這款遊戲目前未開放' },
+    'arcade.error.game_maintenance': { en: 'Under maintenance, please try again later', zh: '維護中，請稍後再試' },
+    'arcade.error.below_min_bet': { en: 'Below the minimum bet', zh: '低於單注下限' },
+    'arcade.error.above_max_bet': { en: 'Above the table limit', zh: '超過單注上限' },
+    // 帳號被後台停用。訊息要說得出「去找誰」，不然玩家只會反覆重試
+    'arcade.error.account_frozen': { en: 'Your account is suspended. Please contact support', zh: '帳號已停用，請聯絡客服' },
     // 起轉演法：純表演，不影響結果。兩種轉法只差起轉前那 0.2 秒，講不清楚，要按過才知道
     'arcade.spinStyle': { en: 'Spin-up', zh: '起轉' },
     'arcade.style.direct': { en: 'Direct', zh: '直接' },

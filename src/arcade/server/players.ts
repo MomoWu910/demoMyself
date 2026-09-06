@@ -59,6 +59,9 @@ export interface Player {
     profile: PlayerProfile;
 }
 
+import * as audit from './auditLog';
+import { OPS_CHANNEL } from './ledger';
+
 const STORAGE_KEY = 'arcade:players';
 
 /**
@@ -71,6 +74,44 @@ const STORAGE_KEY = 'arcade:players';
 export const SELF_ID = 'demo-player';
 
 let cache: Player[] | null = null;
+let channel: BroadcastChannel | null = null;
+const listeners = new Set<() => void>();
+
+/**
+ * 跨分頁廣播。
+ *
+ * **這一層是停用帳號能不能真的生效的關鍵。**
+ *
+ * 名冊讀進記憶體之後就一直是那一份，而遊戲跑在另一個分頁——
+ * 後台按下停用、寫進 localStorage，遊戲那邊的 `checkPlayer()` 讀的仍是舊快取，
+ * 於是被停用的帳號照樣下得了注。**症狀是「功能沒反應」，
+ * 但真因是兩個分頁各自持有同一份資料的副本。**
+ *
+ * 走的是跟 opsConfig 同一條頻道，訊息用 kind 區分。
+ */
+function getChannel(): BroadcastChannel | null {
+    if (channel) return channel;
+    try {
+        channel = new BroadcastChannel(OPS_CHANNEL);
+        channel.onmessage = (ev: MessageEvent<{ kind?: string }>) => {
+            if (ev.data?.kind !== 'players') return;
+            // 作廢快取而不是把新資料併進來：localStorage 才是真相來源，
+            // 記憶體只是它的快取（同 ledger 的處理）
+            cache = null;
+            for (const fn of listeners) fn();
+        };
+    } catch {
+        channel = null;
+    }
+    return channel;
+}
+
+/** 訂閱名冊變更。後台頁面用它重繪，遊戲端不需要——它每次下注都會重新讀 */
+export function subscribe(fn: () => void): () => void {
+    getChannel();
+    listeners.add(fn);
+    return () => listeners.delete(fn);
+}
 
 function load(): Player[] {
     if (cache) return cache;
@@ -135,6 +176,28 @@ export function update(id: string, patch: Partial<Pick<Player, 'vipLevel' | 'sta
     const copy = rows.slice();
     copy[idx] = next;
     save(copy);
+
+    // 留痕。停用一個帳號跟改一個備註在畫面上只差一個開關的距離，
+    // 但在稽核紀錄裡它們是完全不同份量的兩件事——所以連備註都要記
+    audit.record({
+        action: 'player.update',
+        target: id,
+        targetLabel: rows[idx].nickname,
+        changes: audit.diff(rows[idx], next, {
+            nickname: '暱稱',
+            vipLevel: 'VIP 等級',
+            status: '帳號狀態',
+            tags: '風控標記',
+            note: '營運備註',
+        }, {
+            status: (v) => (v === 'frozen' ? '停用' : '正常'),
+            note: (v) => (v ? String(v) : '（空）'),
+        }),
+        note: '',
+    });
+
+    getChannel()?.postMessage({ kind: 'players' });
+    for (const fn of listeners) fn();
     return next;
 }
 
@@ -146,6 +209,33 @@ export function clear(): void {
         /* 同上 */
     }
     cache = [];
+}
+
+/**
+ * 這個帳號現在能不能玩。
+ *
+ * ---
+ *
+ * **為什麼不併進 `opsConfig.checkBet()`？**
+ *
+ * 因為那兩個函式回答的是不同的問題。`checkBet` 問的是
+ * 「**這款遊戲**現在收不收這筆注」——下架了、維護中、超過限紅。
+ * 這裡問的是「**這個人**現在能不能玩」。
+ *
+ * 兩個問題的答案來自不同的表，也在不同的時候改變：營運調限紅是一次設定變更，
+ * 停用帳號是一次風控決定。混成一支函式的話，
+ * 「調限紅」跟「停權」會共用同一條稽核紀錄，而那正是之後要分開查的兩件事。
+ *
+ * 呼叫點跟 `checkBet` 一樣在**封包層**（各 server 的 `handle()`），
+ * 不在遊戲的數學模型裡——理由見 slotServer 的 `spin()`：
+ * 那支函式要被驗證腳本拿去跑十萬把算期望值，不能被營運狀態牽動。
+ */
+export function checkPlayer(id: string): string | null {
+    const p = get(id);
+    // 查無此人不擋。**這是刻意的**：名冊還沒建立（例如清空過資料）時，
+    // 擋下來會讓整個遊樂場變成不能玩，而那是比「有個帳號沒登記」嚴重得多的故障
+    if (!p) return null;
+    return p.status === 'frozen' ? 'account_frozen' : null;
 }
 
 /** 顯示用：分型的中文名。後台看的是人的行為，不是 enum 值 */

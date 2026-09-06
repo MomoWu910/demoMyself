@@ -41,7 +41,7 @@ function load(entry) {
 // 三個模組要共用同一份 ledger 狀態，所以整包一起打進來，不能分開 load
 // （分開 load 會各自得到一份獨立的模組實例，record 寫進去的東西 query 讀不到）
 const bundle = load('src/admin/check-entry.ts');
-const { ledger, opsConfig, betSlip, SlotServer, Wallet, rouletteRules, players, txLedger, seed, baseline } = bundle;
+const { ledger, opsConfig, betSlip, SlotServer, Wallet, rouletteRules, players, txLedger, seed, baseline, i18n, auditLog } = bundle;
 
 let pass = 0;
 let fail = 0;
@@ -377,9 +377,152 @@ const again = seed.generate({ days: 5, roundsPerDay: { min: 80, max: 100 }, play
 check('同一組參數產生同一份資料', again.bets.length, gen.bets.length);
 check('連金額都一樣', again.bets.reduce((s, b) => s + b.stake, 0), gen.bets.reduce((s, b) => s + b.stake, 0));
 
+/* ─────────────────────────── 帳號狀態與遊戲的連動 ─────────────────────────── */
+
+console.log('\n== 帳號停用 ==');
+players.clear();
+opsConfig.reset();
+ledger.clear();
+players.seedPlayers([
+    { id: players.SELF_ID, nickname: '本機', vipLevel: 1, status: 'active', tags: [], note: '', registeredAt: T0, profile: 'regular' },
+]);
+
+check('正常帳號放行', players.checkPlayer(players.SELF_ID), null);
+// 查無此人不擋是刻意的：名冊還沒建立時擋下來，整個遊樂場會變成不能玩
+check('查無此人不擋', players.checkPlayer('nobody'), null);
+
+const frozenServer = new SlotServer(new Wallet(10000));
+check('停用前下得了注', frozenServer.handle({ type: 'spin', bet: 100 }).type, 'spinResult');
+
+players.update(players.SELF_ID, { status: 'frozen' });
+check('停用後 checkPlayer 擋下', players.checkPlayer(players.SELF_ID), 'account_frozen');
+// **這一條才是重點**：後台改一個欄位，遊戲的封包層下一次下注就吃到，
+// 而且用的是同一個 server 實例——如果名冊被快取住，這裡會照樣放行
+check('停用後封包層擋下下注', frozenServer.handle({ type: 'spin', bet: 100 }), { type: 'error', reason: 'account_frozen' });
+
+// 帳號狀態不能影響遊戲的數學模型。理由同限紅：spin() 要被拿去跑十萬把驗期望值
+const stillWorks = frozenServer.spin(100);
+ok('spin() 不受帳號狀態影響', !('error' in stillWorks), JSON.stringify(stillWorks));
+
+players.update(players.SELF_ID, { status: 'active' });
+check('解除停用後又能下注', frozenServer.handle({ type: 'spin', bet: 100 }).type, 'spinResult');
+
+/* ─────────────────────────── 錯誤代碼的翻譯 ─────────────────────────── */
+
+console.log('\n== 錯誤訊息 ==');
+// t() 查不到 key 就回 key 本身（見 i18n/index.ts），所以少一條字典
+// 玩家看到的就是 `arcade.error.above_max_bet` 這串英文。
+// **這在後台做完限紅之後真的發生過**——功能做完了，但沒走完最後一哩
+const REASONS = [
+    'game_disabled', 'game_maintenance', 'below_min_bet', 'above_max_bet',
+    'account_frozen', 'insufficient_balance', 'invalid_bet', 'bet_closed',
+];
+for (const r of REASONS) {
+    const key = `arcade.error.${r}`;
+    ok(`錯誤代碼 ${r} 有對應文字`, i18n.t(key) !== key, `t('${key}') 回傳 key 本身`);
+}
+
+/* ─────────────────────────── 玩家維度的彙總 ─────────────────────────── */
+
+console.log('\n== 玩家彙總 ==');
+ledger.clear();
+txLedger.clear();
+ledger.record([
+    { roundId: 'r1', game: 'slot', player: 'p-1', betType: 'spin', stake: 100, validStake: 100, payout: 0, net: -100, balanceBefore: 500, balanceAfter: 400, betAt: T0, settledAt: T0 },
+    { roundId: 'r2', game: 'slot', player: 'p-1', betType: 'spin', stake: 200, validStake: 40, payout: 250, net: 50, balanceBefore: 400, balanceAfter: 450, betAt: T0 + 10, settledAt: T0 + 10 },
+    { roundId: 'r3', game: 'slot', player: 'p-2', betType: 'spin', stake: 50, validStake: 50, payout: 0, net: -50, balanceBefore: 900, balanceAfter: 850, betAt: T0 + 20, settledAt: T0 + 20 },
+]);
+
+const ps = ledger.stats().byPlayer;
+check('按玩家分開加總', [ps['p-1'].count, ps['p-1'].stake, ps['p-2'].stake], [2, 300, 50]);
+check('有效投注也按玩家加總（風控的分子）', ps['p-1'].validStake, 140);
+// lastAt 取最大值而不是「最後一筆」：query 的順序跟著排序條件走
+check('最後活動時間取最大值', ps['p-1'].lastAt, T0 + 10);
+
+txLedger.record([
+    tx({ player: 'p-1', kind: 'deposit', amount: 1000, createdAt: T0 }),
+    tx({ player: 'p-1', kind: 'rebate', amount: 20, createdAt: T0 + 1 }),
+    tx({ player: 'p-2', kind: 'withdraw', amount: -300, createdAt: T0 + 2 }),
+]);
+const tps = txLedger.stats().byPlayer;
+check('金流也按玩家分開', [tps['p-1'].deposit, tps['p-1'].rebate, tps['p-2'].withdraw], [1000, 20, 300]);
+
+/* ─────────────────────────── 操作稽核 ─────────────────────────── */
+
+console.log('\n== 操作稽核 ==');
+auditLog.clear();
+opsConfig.reset();
+auditLog.clear();
+
+opsConfig.update('slot', { maxBet: 50000 });
+const a1 = auditLog.query().rows[0];
+check('改限紅會留下一筆紀錄', [a1.action, a1.target], ['ops.update', 'slot']);
+// **只記「他改過」是沒有用的。** 事故調查要回答的是「改成了什麼」
+check('紀錄帶著前後值', [a1.changes[0].label, a1.changes[0].before, a1.changes[0].after],
+    ['單注上限（限紅）', '1000', '50000']);
+check('對象存的是顯示名，不是 id', a1.targetLabel, '幸運轉輪');
+
+const beforeNoop = auditLog.count();
+opsConfig.update('slot', { maxBet: 50000 });
+// 打開表單、什麼都沒改就按儲存，不該在稽核表裡留下空紀錄——
+// 那只會讓真正的變更被稀釋掉
+check('沒有變更就不記', auditLog.count(), beforeNoop);
+
+// 布林要記成人看得懂的字，不是 true/false
+opsConfig.update('slot', { enabled: false });
+check('布林值格式化成中文', auditLog.query().rows[0].changes[0].after, '否');
+
+// 還原要記下「還原之前是什麼」——那個值在下一行就消失了
+opsConfig.reset();
+const aReset = auditLog.query({ action: 'ops.reset' }).rows[0];
+ok('還原預設值會記下原本的設定', aReset && aReset.note.includes('50000'), JSON.stringify(aReset));
+
+/* 玩家處置 */
+players.clear();
+players.seedPlayers([
+    { id: 'p-9', nickname: '測試員', vipLevel: 1, status: 'active', tags: [], note: '', registeredAt: T0, profile: 'regular' },
+]);
+auditLog.clear();
+players.update('p-9', { status: 'frozen', tags: ['對沖', '待查'] });
+const a2 = auditLog.query({ action: 'player.update' }).rows[0];
+check('停用帳號留下紀錄', a2.changes.map((c) => [c.label, c.before, c.after]),
+    [['帳號狀態', '正常', '停用'], ['風控標記', '（無）', '對沖、待查']]);
+
+/* 提領審核 */
+txLedger.clear();
+auditLog.clear();
+txLedger.record([tx({ player: 'p-9', kind: 'withdraw', amount: -500000, status: 'pending', createdAt: T0 })]);
+const pend = txLedger.query({ status: 'pending' }).rows[0];
+txLedger.review(pend.id, 'done', T0 + 60_000);
+const a3 = auditLog.query({ action: 'tx.review' }).rows[0];
+// 放行一筆提領是整個後台金額最大的單一動作，沒有留痕的話
+// 「這筆五十萬是誰放的」就沒有答案
+check('提領放行留下紀錄', [a3.changes[0].before, a3.changes[0].after], ['待審', '放行']);
+ok('紀錄裡看得到金額', a3.targetLabel.includes('500000'), a3.targetLabel);
+
+/* 稽核活得比資料久 */
+const auditBefore = auditLog.count();
+seed.clearAll();
+ok('清空資料不會清掉稽核紀錄', auditLog.count() > auditBefore,
+    `清空前 ${auditBefore}、清空後 ${auditLog.count()}`);
+const aClear = auditLog.query({ action: 'data.clear' }).rows[0];
+ok('清空這個動作本身也留了痕', Boolean(aClear), JSON.stringify(aClear));
+
+/* diff 的行為 */
+const changes = auditLog.diff(
+    { a: 1, b: ['x'], c: 'same', d: 9 },
+    { a: 2, b: ['x', 'y'], c: 'same', d: 8 },
+    { a: '甲', b: '乙', c: '丙' },
+);
+// d 不在 labels 裡所以不記——稽核表不該被內部欄位塞滿
+check('只記列在 labels 裡的欄位，且相同的值不記', changes.map((c) => c.field), ['a', 'b']);
+check('陣列用內容比較，不是參考比較', changes[1].after, 'x、y');
+
+auditLog.clear();
 players.clear();
 txLedger.clear();
 ledger.clear();
+opsConfig.reset();
 
 console.log(`\n通過 ${pass} 項，失敗 ${fail} 項\n`);
 process.exit(fail ? 1 : 0);

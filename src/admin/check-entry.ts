@@ -10,10 +10,12 @@
  * 打成同一包就只有一份實例，跟瀏覽器裡的情況一致。
  */
 export * as ledger from '../arcade/server/ledger';
+export * as auditLog from '../arcade/server/auditLog';
 export * as players from '../arcade/server/players';
 export * as txLedger from '../arcade/server/txLedger';
 export * as seed from './seed';
 export * as baseline from './baseline';
+export * as i18n from '../i18n';
 export * as opsConfig from '../arcade/server/opsConfig';
 export * as betSlip from '../arcade/server/betSlip';
 export * as rouletteRules from '../arcade/games/roulette/rules';

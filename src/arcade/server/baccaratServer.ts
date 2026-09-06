@@ -4,6 +4,7 @@ import { BET_SPOTS, settleBets, type BetSpot, type Bets, type Round } from '../g
 import { buildRecords, netExposureValidStake, type PendingBet } from './betSlip';
 import { newRoundId, record } from './ledger';
 import { checkBet } from './opsConfig';
+import { checkPlayer, SELF_ID } from './players';
 import { BaccaratShoe } from './baccaratShoe';
 import {
     applyTotals,
@@ -186,6 +187,10 @@ export class BaccaratServer implements GameServer<BaccaratC2S, BaccaratS2C> {
         if (!Number.isFinite(amount) || amount <= 0) return { type: 'error', reason: 'invalid_bet' };
         // 營運層的限紅與維護開關（後台可即時改，見 server/opsConfig.ts）。
         // 擋在扣款之前——扣完才回錯誤，玩家的錢就憑空少一筆
+        // 帳號狀態先於遊戲設定檢查：被停用的帳號連「這款遊戲維護中」都不必知道
+        const frozen = checkPlayer(SELF_ID);
+        if (frozen) return { type: 'error', reason: frozen };
+
         const denied = checkBet(this.id, amount);
         if (denied) return { type: 'error', reason: denied };
 

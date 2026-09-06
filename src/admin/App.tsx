@@ -5,12 +5,17 @@ import {
 } from '@mui/material';
 import CasinoIcon from '@mui/icons-material/Casino';
 import DashboardIcon from '@mui/icons-material/InsertChartOutlined';
+import HistoryIcon from '@mui/icons-material/HistoryToggleOff';
+import PeopleIcon from '@mui/icons-material/PeopleAltOutlined';
 import ReceiptIcon from '@mui/icons-material/ReceiptLong';
 import SettingsIcon from '@mui/icons-material/Tune';
 import { count, subscribe } from '../arcade/server/ledger';
+import { count as playerCount } from '../arcade/server/players';
 import { BetsPage } from './pages/Bets';
 import { DashboardPage } from './pages/Dashboard';
 import { GameConfigPage } from './pages/GameConfig';
+import { AuditPage } from './pages/Audit';
+import { PlayersPage } from './pages/Players';
 import { money } from './format';
 
 /**
@@ -26,7 +31,12 @@ import { money } from './format';
 const PAGES = [
     { key: 'dashboard', label: '營運總覽', icon: <DashboardIcon fontSize="small" />, render: () => <DashboardPage /> },
     { key: 'bets', label: '注單查詢', icon: <ReceiptIcon fontSize="small" />, render: () => <BetsPage /> },
+    // 玩家排在注單與設定中間，不是排最後：**後台的動線是「看到異常 → 找出是誰 → 處置」**，
+    // 而選單的順序就是那條動線
+    { key: 'players', label: '玩家管理', icon: <PeopleIcon fontSize="small" />, render: () => <PlayersPage /> },
     { key: 'games', label: '遊戲設定', icon: <SettingsIcon fontSize="small" />, render: () => <GameConfigPage /> },
+    // 操作紀錄排最後：它不是日常動線的一部分，是出事之後才會打開的那一頁
+    { key: 'audit', label: '操作紀錄', icon: <HistoryIcon fontSize="small" />, render: () => <AuditPage /> },
 ] as const;
 
 const SIDEBAR = 216;
@@ -120,6 +130,9 @@ export function App(): React.ReactElement {
                     </Typography>
                     <Typography sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 18 }}>
                         {money(total)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        {money(playerCount())} 個帳號
                     </Typography>
                 </Box>
             </Drawer>
