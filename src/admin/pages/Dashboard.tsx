@@ -4,7 +4,11 @@ import {
     ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import { query, stats, subscribe, type LedgerStats } from '../../arcade/server/ledger';
-import { BASELINE_OVERALL, BASELINE_PAYOUT_RATE, BASELINE_SAMPLE, deviationLevel } from '../baseline';
+import { stats as txStats, subscribe as subscribeTx, type TxStats } from '../../arcade/server/txLedger';
+import {
+    BASELINE_BET_STD, BASELINE_OVERALL, BASELINE_OVERALL_STD, BASELINE_PAYOUT_RATE,
+    BASELINE_SAMPLE, deviationLevel, effectiveSample,
+} from '../baseline';
 import { GAME_IDS, GAME_LABEL, money, percent, signedMoney } from '../format';
 import { MONO } from '../theme';
 
@@ -45,20 +49,28 @@ function Kpi(props: { label: string; value: string; note?: string; tone?: 'good'
 }
 
 /**
- * 近七天的長條圖。
+ * 逐日投注額的長條圖。
  *
  * 刻意不裝圖表套件。這張圖要表達的東西只有「哪一天量比較大」，
  * 一個 flex 容器加幾個 div 就做得完——為了它多背一個 300KB 的相依，
  * 在後台這種要長期維護的專案裡不划算。
+ *
+ * （範圍拉到三十天之後這個判斷仍然成立：柱子從 7 根變 30 根，
+ * 要處理的只是標籤會擠在一起，那是一行取模的事。真的需要圖表套件的是
+ * 折線疊圖、雙軸、縮放框選那些——**在還沒有那些需求的時候就先裝，
+ * 才是後台專案最典型的技術債**。）
  */
-function DailyBars(props: { days: { at: number; stake: number; payout: number }[] }): React.ReactElement {
+function DailyBars(props: { days: { at: number; stake: number; payout: number }[]; label: string }): React.ReactElement {
     const max = Math.max(1, ...props.days.map((d) => d.stake));
+    // 柱子多的時候標籤要抽稀，不然三十個日期會疊成一團黑
+    const labelEvery = props.days.length > 14 ? 5 : 1;
     return (
         <Paper sx={{ p: 2 }}>
-            <Typography variant="caption" color="text.secondary">近 7 日投注額</Typography>
+            <Typography variant="caption" color="text.secondary">{props.label}投注額</Typography>
             <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1, height: 130, mt: 1.5 }}>
-                {props.days.map((d) => {
+                {props.days.map((d, i) => {
                     const rate = d.stake > 0 ? d.payout / d.stake : 0;
+                    const showLabel = i % labelEvery === 0 || i === props.days.length - 1;
                     return (
                         <Tooltip
                             key={d.at}
@@ -76,8 +88,8 @@ function DailyBars(props: { days: { at: number; stake: number; payout: number }[
                                         background: 'linear-gradient(180deg, #e8b84b 0%, #a8802a 100%)',
                                     }}
                                 />
-                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
-                                    {new Date(d.at).getMonth() + 1}/{new Date(d.at).getDate()}
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, whiteSpace: 'nowrap' }}>
+                                    {showLabel ? `${new Date(d.at).getMonth() + 1}/${new Date(d.at).getDate()}` : '\u00a0'}
                                 </Typography>
                             </Box>
                         </Tooltip>
@@ -88,14 +100,31 @@ function DailyBars(props: { days: { at: number; stake: number; payout: number }[
     );
 }
 
-/** 儀表板的時間範圍。真實後台一定有這個切換——營運早上看今日、週會看近 7 日 */
-type Range = 'today' | '7d';
+/**
+ * 儀表板的時間範圍。真實後台一定有這個切換——
+ * 營運早上看今日、週會看近 7 日、月報看近 30 日。
+ *
+ * 三十天這一檔是資料擴充之後才有意義的：**在只有七天資料的時候，
+ * 「近 30 日」跟「全部」是同一個數字**，那個選項只會讓人以為報表壞了。
+ */
+const RANGES = [
+    { key: 'today', label: '今日', days: 1 },
+    { key: '7d', label: '近 7 日', days: 7 },
+    { key: '30d', label: '近 30 日', days: 30 },
+] as const;
+type Range = (typeof RANGES)[number]['key'];
+
+function rangeDays(r: Range): number {
+    return RANGES.find((x) => x.key === r)?.days ?? 7;
+}
 
 function rangeStart(r: Range): number {
-    if (r === '7d') return Date.now() - 7 * DAY;
     const d = new Date();
     d.setHours(0, 0, 0, 0);
-    return d.getTime();
+    // 「近 N 日」含今天，所以往回推 N−1 天的午夜。
+    // 用「現在往回推 N×24 小時」的話，區間的頭尾都會切在半天中間，
+    // 而長條圖的每一根是自然日——兩者對不起來，加總就跟圖對不上
+    return d.getTime() - (rangeDays(r) - 1) * DAY;
 }
 
 export function DashboardPage(): React.ReactElement {
@@ -103,11 +132,19 @@ export function DashboardPage(): React.ReactElement {
     React.useEffect(() => subscribe(() => setRevision((n) => n + 1)), []);
 
     const [range, setRange] = React.useState<Range>('7d');
-    const rangeLabel = range === 'today' ? '今日' : '近 7 日';
+    const rangeLabel = RANGES.find((r) => r.key === range)?.label ?? '';
+
+    // 金流的變動也要重繪：後台審一筆提領，待審那個數字要當場少一筆
+    React.useEffect(() => subscribeTx(() => setRevision((n) => n + 1)), []);
 
     // KPI 跟著範圍走。`all` 是不分範圍的累計，只給側欄那種「總共有多少」用
     const scoped: LedgerStats = React.useMemo(() => stats({ from: rangeStart(range) }), [range, revision]);
     const all: LedgerStats = React.useMemo(() => stats(), [revision]);
+    const money$: TxStats = React.useMemo(() => txStats({ from: rangeStart(range) }), [range, revision]);
+
+    // 整體派彩率的偏離判斷。用**有效樣本數**而不是注單筆數——
+    // 大戶的單注是苦工的兩百倍，按筆數算會把誤差低估好幾倍（見 baseline.ts）
+    const scopedEff = effectiveSample(scoped.totalStake, scoped.totalStakeSq);
 
     // 近七天逐日彙總。用 query 拉出區間內的注單再自己分桶——
     // 分桶邏輯放在這裡是因為它是**顯示**的需求（時區、一天從幾點算起），
@@ -115,8 +152,9 @@ export function DashboardPage(): React.ReactElement {
     const days = React.useMemo(() => {
         const start = new Date();
         start.setHours(0, 0, 0, 0);
-        const buckets = Array.from({ length: 7 }, (_, i) => ({
-            at: start.getTime() - (6 - i) * DAY,
+        const n = rangeDays(range);
+        const buckets = Array.from({ length: n }, (_, i) => ({
+            at: start.getTime() - (n - 1 - i) * DAY,
             stake: 0,
             payout: 0,
         }));
@@ -129,7 +167,7 @@ export function DashboardPage(): React.ReactElement {
             b.payout += r.payout;
         }
         return buckets;
-    }, [revision]);
+    }, [range, revision]);
 
     return (
         <Stack spacing={2}>
@@ -142,8 +180,9 @@ export function DashboardPage(): React.ReactElement {
                     value={range}
                     onChange={(_, v: Range | null) => v && setRange(v)}
                 >
-                    <ToggleButton value="today">今日</ToggleButton>
-                    <ToggleButton value="7d">近 7 日</ToggleButton>
+                    {RANGES.map((r) => (
+                        <ToggleButton key={r.key} value={r.key}>{r.label}</ToggleButton>
+                    ))}
                 </ToggleButtonGroup>
             </Box>
 
@@ -159,19 +198,46 @@ export function DashboardPage(): React.ReactElement {
                 <Kpi
                     label={`${rangeLabel}派彩率`}
                     value={scoped.count ? percent(scoped.payoutRate) : '—'}
-                    note={`基準 ${percent(BASELINE_OVERALL)} · ${money(scoped.count)} 筆`}
+                    note={`基準 ${percent(BASELINE_OVERALL)} · 有效樣本 ${money(scopedEff)}`}
                     tone={
                         scoped.count === 0
                             ? undefined
-                            : deviationLevel(scoped.payoutRate, BASELINE_OVERALL, scoped.count) === 'alert'
+                            : deviationLevel(scoped.payoutRate, BASELINE_OVERALL, scopedEff, BASELINE_OVERALL_STD) === 'alert'
                                 ? 'bad'
                                 : undefined
                     }
                 />
-                <Kpi label="累計注單" value={money(all.count)} note="保留最近 7 日" />
+                <Kpi label="累計注單" value={money(all.count)} note={`${money(Object.keys(all.byPlayer).length)} 個帳號有紀錄`} />
             </Box>
 
-            <DailyBars days={days} />
+            {/* 金流。**這排數字跟上面那排來自不同的表**——
+                上面是注單（玩家押了多少、平台賠了多少），這裡是資金進出。
+                兩者要分開看：一個平台可以「贏了玩家很多」但同時「淨存入是負的」，
+                那代表玩家在提領先前存進來的錢，而那是現金流的問題不是遊戲的問題 */}
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                <Kpi label={`${rangeLabel}儲值`} value={money(money$.deposit)} note={`${money(money$.count)} 筆交易`} />
+                <Kpi label={`${rangeLabel}提領`} value={money(money$.withdraw)} note="已放行的部分" />
+                <Kpi
+                    label={`${rangeLabel}淨存入`}
+                    value={signedMoney(money$.netDeposit)}
+                    tone={money$.netDeposit >= 0 ? 'good' : 'bad'}
+                    note="儲值 − 提領"
+                />
+                <Kpi
+                    label={`${rangeLabel}返水支出`}
+                    value={money(money$.rebate)}
+                    note="按有效投注計"
+                    tone={money$.rebate > scoped.grossWin ? 'bad' : undefined}
+                />
+                <Kpi
+                    label="待審提領"
+                    value={money$.pendingCount ? `${money$.pendingCount} 筆` : '—'}
+                    note={money$.pendingCount ? `${money(money$.pendingAmount)} 待處理` : '沒有待處理的申請'}
+                    tone={money$.pendingCount ? 'bad' : undefined}
+                />
+            </Box>
+
+            <DailyBars days={days} label={rangeLabel} />
 
             <Paper>
                 <Box sx={{ px: 2, pt: 2 }}>
@@ -187,6 +253,7 @@ export function DashboardPage(): React.ReactElement {
                             <TableCell align="right">平台淨收</TableCell>
                             <TableCell align="right">派彩率</TableCell>
                             <TableCell align="right">理論值</TableCell>
+                            <TableCell align="right">有效樣本</TableCell>
                             <TableCell align="center">偏離</TableCell>
                         </TableRow>
                     </TableHead>
@@ -197,7 +264,7 @@ export function DashboardPage(): React.ReactElement {
                                 return (
                                     <TableRow key={id}>
                                         <TableCell>{GAME_LABEL[id]}</TableCell>
-                                        <TableCell colSpan={7} align="center" sx={{ color: 'text.secondary' }}>
+                                        <TableCell colSpan={8} align="center" sx={{ color: 'text.secondary' }}>
                                             尚無注單
                                         </TableCell>
                                     </TableRow>
@@ -221,10 +288,19 @@ export function DashboardPage(): React.ReactElement {
                                     <TableCell align="right" sx={{ fontFamily: MONO, color: 'text.secondary' }}>
                                         {percent(BASELINE_PAYOUT_RATE[id] ?? 0)}
                                     </TableCell>
+                                    {/* 有效樣本數擺在偏離判定的左邊，是因為**它是那個判定的分母**。
+                                        看到「五千筆注單但有效樣本只有六百」的人，才會知道
+                                        右邊那個「樣本內」不是敷衍 */}
+                                    <TableCell align="right" sx={{ fontFamily: MONO, color: 'text.secondary' }}>
+                                        <Tooltip title={`注單 ${money(g.count)} 筆。有效樣本 = (Σ下注)² ÷ Σ下注²，注額越不均它越小`}>
+                                            <span>{money(effectiveSample(g.stake, g.stakeSq))}</span>
+                                        </Tooltip>
+                                    </TableCell>
                                     <TableCell align="center">
                                         {(() => {
                                             const base = BASELINE_PAYOUT_RATE[id] ?? 0;
-                                            const lv = deviationLevel(rate, base, g.count);
+                                            const eff = effectiveSample(g.stake, g.stakeSq);
+                                            const lv = deviationLevel(rate, base, eff, BASELINE_BET_STD[id]);
                                             const pp = (rate - base) * 100;
                                             const map = {
                                                 normal: { label: '樣本內', color: 'default' as const },
@@ -251,18 +327,26 @@ export function DashboardPage(): React.ReactElement {
 
             <Typography variant="caption" color="text.secondary" sx={{ px: 0.5, lineHeight: 1.9 }}>
                 注單由四款玩法真正的規則跑出來（老虎機走 <code>SlotServer.spin()</code>、
-                百家樂用真的牌靴與補牌規則、輪盤走同一支 <code>settleBets</code>）。
+                百家樂用真的牌靴與補牌規則、輪盤走同一支 <code>settleBets</code>），
+                下注的是四十個有不同行為的帳號——大戶、對沖客、只轉老虎機的苦工，
+                他們的籌碼、玩法偏好與活躍度都不一樣（見 <code>admin/seed.ts</code> 的 <code>PERSONA</code>）。
                 <br />
                 「理論值」欄是拿同一套產生邏輯跑 {money(BASELINE_SAMPLE)} 筆注單算出來的
                 （<code>yarn baseline:rtp</code>），不是查表填的——押和局跟押莊的期望值差很遠，
                 所以基準線一定要跟玩家實際的下注結構同源。
                 <br />
-                「偏離」的門檻隨樣本數變動，不是固定的百分點：一百筆偏 10 個百分點是常態，
-                十萬筆偏 2 個百分點才值得看。用固定門檻的報表會在資料少的時候一直誤報。
+                「有效樣本」不是注單筆數，是 <code>(Σ下注)² ÷ Σ下注²</code>：
+                派彩率是<strong>按金額加權</strong>的平均，一千筆 10 元的注加上一筆 10000 元的注，
+                筆數是 1001 但可信度接近兩筆。這裡大戶的單注是苦工的兩百倍，
+                所以老虎機五千多筆注單的有效樣本只有六百上下。
                 <br />
-                所以這裡會出現「差了十幾個百分點但判定是樣本內」的情況——那不是判斷失靈，
-                是這個樣本數本來就分不出訊號與雜訊。老虎機尤其明顯：它的單注變異最大
-                （中獎率三成、但有大獎），要看出真的異常需要的局數比其他玩法多一個量級。
+                「偏離」的門檻由<strong>該玩法自己的單注報酬標準差</strong>除以有效樣本數的平方根算出來，
+                不是固定的百分點，也不是所有玩法共用一個係數。
+                老虎機的標準差是 {BASELINE_BET_STD.slot}、百家樂是 {BASELINE_BET_STD.baccarat}——
+                用同一個門檻看這兩款，不是對老虎機誤報，就是對百家樂漏報。
+                <br />
+                所以這裡會出現「差了十幾個百分點但判定是樣本內」的情況。那不是判斷失靈，
+                是這個樣本數本來就分不出訊號與雜訊。
             </Typography>
         </Stack>
     );

@@ -41,7 +41,7 @@ function load(entry) {
 // 三個模組要共用同一份 ledger 狀態，所以整包一起打進來，不能分開 load
 // （分開 load 會各自得到一份獨立的模組實例，record 寫進去的東西 query 讀不到）
 const bundle = load('src/admin/check-entry.ts');
-const { ledger, opsConfig, betSlip, SlotServer, Wallet, rouletteRules } = bundle;
+const { ledger, opsConfig, betSlip, SlotServer, Wallet, rouletteRules, players, txLedger, seed, baseline } = bundle;
 
 let pass = 0;
 let fail = 0;
@@ -228,6 +228,157 @@ server.spin(100);
 check('直接呼叫 spin() 不寫注單（那是封包層的責任）', ledger.count(), beforeDirect);
 
 opsConfig.reset();
+ledger.clear();
+
+/* ─────────────────────────── 玩家名冊 ─────────────────────────── */
+
+console.log('\n== 玩家名冊 ==');
+players.clear();
+players.seedPlayers([
+    { id: 'p-1', nickname: '甲', vipLevel: 1, status: 'active', tags: [], note: '', registeredAt: T0, profile: 'regular' },
+    { id: 'p-2', nickname: '乙', vipLevel: 3, status: 'active', tags: ['對沖'], note: '', registeredAt: T0, profile: 'hedger' },
+]);
+check('名冊寫得進去也讀得回來', players.count(), 2);
+check('可以按 id 取單一玩家', players.get('p-2').nickname, '乙');
+
+players.update('p-1', { tags: ['待查'], note: '客服標記' });
+check('標記與備註改得動', [players.get('p-1').tags, players.get('p-1').note], [['待查'], '客服標記']);
+
+// 白名單：即使 patch 裡帶了 id 與註冊時間，也不該被覆蓋。
+// 這條擋的是「表單多送一個欄位就把註冊時間洗掉」，那種事故在對帳時最難查
+players.update('p-1', { id: 'hacked', registeredAt: 0, vipLevel: 4 });
+check('只有白名單裡的欄位改得動', [players.get('p-1').id, players.get('p-1').registeredAt, players.get('p-1').vipLevel], ['p-1', T0, 4]);
+check('改不存在的玩家回 undefined', players.update('nobody', { vipLevel: 5 }), undefined);
+
+/* ─────────────────────────── 資金流水 ─────────────────────────── */
+
+console.log('\n== 資金流水 ==');
+txLedger.clear();
+
+/** 產一筆交易。餘額前後照不變式算，測試自己不該偷偷寫出違反不變式的資料 */
+function tx(over = {}) {
+    const amount = over.amount ?? 1000;
+    const balanceBefore = over.balanceBefore ?? 5000;
+    return {
+        player: 'p-1', kind: 'deposit', amount, balanceBefore,
+        balanceAfter: balanceBefore + amount, status: 'done',
+        ref: '', note: '', createdAt: T0, reviewedAt: 0,
+        ...over,
+    };
+}
+
+txLedger.record([
+    tx({ kind: 'deposit', amount: 1000, createdAt: T0 }),
+    tx({ kind: 'withdraw', amount: -400, createdAt: T0 + 1000 }),
+    tx({ kind: 'rebate', amount: 30, createdAt: T0 + 2000 }),
+    tx({ kind: 'deposit', amount: 500, player: 'p-2', createdAt: T0 + 3000 }),
+]);
+check('交易寫得進去', txLedger.count(), 4);
+check('按玩家篩選', txLedger.query({ player: 'p-2' }).total, 1);
+check('按類型篩選', txLedger.query({ kind: 'deposit' }).total, 2);
+
+const ts = txLedger.stats();
+check('儲值與提領分開加總（提領取正數方便並排比較）', [ts.deposit, ts.withdraw, ts.rebate], [1500, 400, 30]);
+check('淨存入 = 儲值 − 提領', ts.netDeposit, 1100);
+
+// 待審的提領不計入已提領金額，但要單獨算出來——營運早上第一個看的就是這個數
+txLedger.record([tx({ kind: 'withdraw', amount: -900, status: 'pending', createdAt: T0 + 4000 })]);
+const ts2 = txLedger.stats();
+check('待審提領單獨計，不混進已提領', [ts2.withdraw, ts2.pendingCount, ts2.pendingAmount], [400, 1, 900]);
+
+/* 提領審核 */
+const pendingRow = txLedger.query({ status: 'pending' }).rows[0];
+const beforeReject = txLedger.count();
+txLedger.review(pendingRow.id, 'rejected', T0 + 5000);
+const rejected = txLedger.query({ status: 'rejected' }).rows[0];
+
+// **退件不能把金額洗掉。** 第一版把 amount 歸零、餘額還原，
+// 結果是「被退掉的五十萬提領」在報表上跟一筆從未存在的紀錄長得一樣，
+// 而且打破了 balanceAfter = balanceBefore + amount 這條可以驗全表的等式
+check('退件保留原本的申請金額', rejected.amount, -900);
+check('退件會另外開一筆退款交易', txLedger.count(), beforeReject + 1);
+const refund = txLedger.query({ kind: 'adjust' }).rows[0];
+check('退款單關聯得回原始的提領單', [refund.kind, refund.amount, refund.ref], ['adjust', 900, pendingRow.id]);
+const ts3 = txLedger.stats();
+check('退件後：提領金額不變，退款計入調整', [ts3.withdraw, ts3.adjust, ts3.pendingCount], [400, 900, 0]);
+
+check('已審過的單不能再審一次', txLedger.review(rejected.id, 'done'), undefined);
+check('儲值單不是提領，審不了', txLedger.review(txLedger.query({ kind: 'deposit' }).rows[0].id, 'done'), undefined);
+
+/* 返水 */
+check('返水按等級計算', [txLedger.rebateFor(10000, 0), txLedger.rebateFor(10000, 5)], [30, 80]);
+check('等級超出範圍取最高階，不會回 NaN', txLedger.rebateFor(10000, 99), 80);
+// 無條件捨去：返水是平台付出去的錢，四捨五入會讓總成本比預期高
+check('返水無條件捨去', txLedger.rebateFor(333, 0), 0);
+
+/* ─────────────────────────── 有效樣本數與偏離門檻 ─────────────────────────── */
+
+console.log('\n== 偏離判定 ==');
+
+// 十筆等額的注：有效樣本數等於筆數
+check('等額下注時，有效樣本數等於筆數', baseline.effectiveSample(1000, 100 * 100 * 10), 10);
+// 一筆大注加九筆小注：筆數 10，但有效樣本數遠低於 10
+const eff = baseline.effectiveSample(9 * 10 + 1000, 9 * 100 + 1000 * 1000);
+ok('注額不均時，有效樣本數遠小於筆數', eff < 2, `得到 ${eff.toFixed(2)}`);
+
+// 同樣的偏離幅度、同樣的樣本數，變異大的玩法不該被判成異常——
+// 這條就是老虎機一直誤報的那個 bug。
+// 樣本數取 1000 是刻意的：這個區間剛好落在兩款玩法的判定分界之間
+// （老虎機的標準誤 8.4pp、百家樂 4.3pp，而偏離都是 14.2pp），
+// 換句話說**同一份數字，換一款玩法就是完全不同的結論**
+const lvSlot = baseline.deviationLevel(0.80, 0.9421, 1000, baseline.BASELINE_BET_STD.slot);
+const lvBac = baseline.deviationLevel(0.80, 0.9421, 1000, baseline.BASELINE_BET_STD.baccarat);
+check('同一個偏離：高變異的玩法判樣本內、低變異的判異常', [lvSlot, lvBac], ['normal', 'alert']);
+check('有效樣本數太少時不做判斷', baseline.deviationLevel(0.5, 0.94, 10, 1), 'normal');
+
+/* ─────────────────────────── 種子資料 ─────────────────────────── */
+
+console.log('\n== 種子資料 ==');
+opsConfig.reset();
+const gen = seed.generate({ days: 5, roundsPerDay: { min: 80, max: 100 }, playerCount: 12 });
+
+ok('產生了多個玩家', gen.players.length === 13, `得到 ${gen.players.length}（12 個歷史帳號 + 本機帳號）`);
+const ids = new Set(gen.players.map((p) => p.id));
+ok('每一筆注單的玩家都在名冊裡', gen.bets.every((b) => ids.has(b.player)), '有注單指向不存在的帳號');
+ok('每一筆交易的玩家都在名冊裡', gen.transactions.every((t) => ids.has(t.player)), '有交易指向不存在的帳號');
+
+// 種子繞過封包層直接呼叫 spin()／settleBets()，所以限紅要自己夾。
+// 沒夾的時候產生過一批「真實遊戲裡根本押不進去」的注單，
+// 而它在報表上的症狀是老虎機的派彩率掉了二十個百分點
+const overLimit = gen.bets.filter((b) => {
+    const ops = opsConfig.forGame(b.game);
+    return b.stake < ops.minBet || b.stake > ops.maxBet;
+});
+check('沒有任何一筆注單違反限紅', overLimit.length, 0);
+
+const badTx = gen.transactions.filter((t) => t.balanceAfter !== t.balanceBefore + t.amount);
+check('每一筆交易都滿足 balanceAfter = balanceBefore + amount', badTx.length, 0);
+ok('沒有負餘額的注單', gen.bets.every((b) => b.balanceAfter >= 0), '有注單把餘額打成負的');
+
+// 對沖客要真的看得出來，否則風控頁沒有東西可以抓
+const ratio = {};
+for (const b of gen.bets) {
+    const r = (ratio[b.player] ??= { stake: 0, valid: 0 });
+    r.stake += b.stake;
+    r.valid += b.validStake;
+}
+const profileOf = Object.fromEntries(gen.players.map((p) => [p.id, p.profile]));
+const hedgers = Object.entries(ratio).filter(([id]) => profileOf[id] === 'hedger');
+const others = Object.entries(ratio).filter(([id]) => profileOf[id] !== 'hedger' && ratio[id].stake > 0);
+const worstHedger = Math.max(...hedgers.map(([, r]) => r.valid / r.stake));
+const bestOther = Math.min(...others.map(([, r]) => r.valid / r.stake));
+ok('對沖客的有效投注比明顯低於其他玩家（風控抓得到）',
+    hedgers.length > 0 && worstHedger < 0.3 && bestOther > 0.5,
+    `對沖客最高 ${(worstHedger * 100).toFixed(1)}%、其他人最低 ${(bestOther * 100).toFixed(1)}%`);
+
+// 種子的亂數有固定種子，同樣的參數要跑出同樣的資料——
+// demo 重跑一次不該因為剛好開出一串大獎就得臨場解釋變異數
+const again = seed.generate({ days: 5, roundsPerDay: { min: 80, max: 100 }, playerCount: 12 });
+check('同一組參數產生同一份資料', again.bets.length, gen.bets.length);
+check('連金額都一樣', again.bets.reduce((s, b) => s + b.stake, 0), gen.bets.reduce((s, b) => s + b.stake, 0));
+
+players.clear();
+txLedger.clear();
 ledger.clear();
 
 console.log(`\n通過 ${pass} 項，失敗 ${fail} 項\n`);

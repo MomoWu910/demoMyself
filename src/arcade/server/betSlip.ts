@@ -1,5 +1,6 @@
 import type { GameId } from '../net/protocol';
-import { PLAYER_ID, type BetRecord } from './ledger';
+import type { BetRecord } from './ledger';
+import { SELF_ID } from './players';
 
 /**
  * 注單組裝：把「玩家這一局押了哪幾筆」加上「每個注區賠了多少」，變成一列一列的注單。
@@ -38,6 +39,16 @@ export interface PendingBet {
 }
 
 export interface BuildOptions {
+    /**
+     * 這一局是誰下的。不給就是遊戲端登入中的那個帳號。
+     *
+     * 這個參數是**多玩家展示資料的入口**：正常遊戲流程只有一個玩家在玩，
+     * 所以預設值就對了；但種子要造出四十個帳號的歷史，
+     * 每一局都得指定是誰。把它做成參數而不是全域可設定的狀態，
+     * 是因為後者會讓「現在是誰在下注」變成一個要小心維護的隱含狀態
+     */
+    player?: string;
+
     /**
      * 結算時間。不給就用現在。
      *
@@ -98,7 +109,7 @@ export function buildRecords(
             out.push({
                 roundId,
                 game,
-                player: PLAYER_ID,
+                player: opts.player ?? SELF_ID,
                 betType: spot,
                 stake: b.amount,
                 validStake: validStakes?.get(b) ?? b.amount,

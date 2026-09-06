@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import type { GameId } from '../../arcade/net/protocol';
 import { query as queryLedger, subscribe, type LedgerPage, type LedgerQuery } from '../../arcade/server/ledger';
+import { list as listPlayers, SELF_ID } from '../../arcade/server/players';
 import { betTypeLabel, dateTime, GAME_IDS, GAME_LABEL, money, signedMoney } from '../format';
 import { MONO } from '../theme';
 
@@ -46,6 +47,7 @@ function rangeToFrom(key: RangeKey): number | undefined {
 export function BetsPage(): React.ReactElement {
     const [range, setRange] = React.useState<RangeKey>('7d');
     const [game, setGame] = React.useState<GameId | 'all'>('all');
+    const [player, setPlayer] = React.useState<string>('all');
     const [outcome, setOutcome] = React.useState<'all' | 'win' | 'loss'>('all');
     const [minStake, setMinStake] = React.useState('');
     const [sortBy, setSortBy] = React.useState<NonNullable<LedgerQuery['sortBy']>>('settledAt');
@@ -59,9 +61,20 @@ export function BetsPage(): React.ReactElement {
     const [revision, setRevision] = React.useState(0);
     React.useEffect(() => subscribe(() => setRevision((n) => n + 1)), []);
 
+    /**
+     * 玩家名冊。載一次就好——它在後台這個工作階段裡不會變
+     * （改標記不影響暱稱，而暱稱是這裡唯一用到的欄位）。
+     *
+     * 做成 Map 是因為表格每一列都要查一次：四十個帳號用 `find()` 也不會慢，
+     * 但**這是那種資料一長大就會變成效能問題、而且症狀是「表格捲動卡頓」
+     * 這種很難聯想回來的地方**。
+     */
+    const roster = React.useMemo(() => new Map(listPlayers().map((p) => [p.id, p])), []);
+
     const params: LedgerQuery = React.useMemo(
         () => ({
             game,
+            player: player === 'all' ? undefined : player,
             from: rangeToFrom(range),
             outcome,
             minStake: minStake ? Number(minStake) : undefined,
@@ -70,7 +83,7 @@ export function BetsPage(): React.ReactElement {
             page,
             pageSize,
         }),
-        [game, range, outcome, minStake, sortBy, sortDir, page, pageSize],
+        [game, player, range, outcome, minStake, sortBy, sortDir, page, pageSize],
     );
 
     // 這就是「呼叫 API」的位置。換成 fetch 的話，改的只有這一行加一個 await
@@ -123,6 +136,24 @@ export function BetsPage(): React.ReactElement {
                         ))}
                     </TextField>
 
+                    {/* 四十個帳號用下拉還可以，但這個元件撐不到「上千個帳號」——
+                        那時候要的是可以打字搜尋的 Autocomplete，而且選項要從後端查。
+                        現在就換的話是在解一個還不存在的問題 */}
+                    <TextField
+                        select label="玩家" value={player} sx={{ minWidth: 190 }}
+                        onChange={(e) => resetPage(setPlayer)(e.target.value)}
+                    >
+                        <MenuItem value="all">全部玩家</MenuItem>
+                        {[...roster.values()]
+                            // 本機帳號排最前面：demo 的時候最常要看的就是「我剛剛下的那一注」
+                            .sort((a, b) => (a.id === SELF_ID ? -1 : b.id === SELF_ID ? 1 : a.id.localeCompare(b.id)))
+                            .map((p) => (
+                                <MenuItem key={p.id} value={p.id}>
+                                    {p.nickname}
+                                </MenuItem>
+                            ))}
+                    </TextField>
+
                     <TextField
                         select label="輸贏" value={outcome} sx={{ minWidth: 120 }}
                         onChange={(e) => resetPage(setOutcome)(e.target.value as 'all' | 'win' | 'loss')}
@@ -158,6 +189,7 @@ export function BetsPage(): React.ReactElement {
                                         結算時間
                                     </TableSortLabel>
                                 </TableCell>
+                                <TableCell>玩家</TableCell>
                                 <TableCell>玩法</TableCell>
                                 <TableCell>注別</TableCell>
                                 <TableCell align="right" sortDirection={sortBy === 'stake' ? sortDir : false}>
@@ -190,6 +222,12 @@ export function BetsPage(): React.ReactElement {
                                     <TableCell sx={{ fontFamily: MONO, whiteSpace: 'nowrap' }}>
                                         {dateTime(r.settledAt)}
                                     </TableCell>
+                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                        {roster.get(r.player)?.nickname ?? r.player}
+                                        {/* 名冊裡查不到就退回顯示 id。**不要顯示空白**——
+                                            注單指向一個不存在的帳號是資料問題，
+                                            而空白會讓它看起來像「這一列還沒載完」 */}
+                                    </TableCell>
                                     <TableCell><Chip size="small" label={GAME_LABEL[r.game]} variant="outlined" /></TableCell>
                                     <TableCell>{betTypeLabel(r.betType)}</TableCell>
                                     <TableCell align="right" sx={{ fontFamily: MONO }}>{money(r.stake)}</TableCell>
@@ -220,7 +258,7 @@ export function BetsPage(): React.ReactElement {
                             ))}
                             {result.rows.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={9} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                                    <TableCell colSpan={10} align="center" sx={{ py: 6, color: 'text.secondary' }}>
                                         這組條件查不到注單
                                     </TableCell>
                                 </TableRow>

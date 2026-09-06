@@ -61,6 +61,13 @@ export interface BetRecord {
 /** 注單查詢的條件。**這組參數是照「送給後端」的形狀設計的**，理由見 query() */
 export interface LedgerQuery {
     game?: GameId | 'all';
+    /**
+     * 只看某個玩家。**玩家頁與風控查詢的地基**——
+     * 沒有這個條件，「調出這個帳號的所有注單」就得把全站的注單撈回前端再過濾
+     */
+    player?: string;
+    /** 只看某一局。點開一筆注單要看「同一局還押了什麼」時用 */
+    roundId?: string;
     /** 時間區間（毫秒時間戳），開區間都可省略 */
     from?: number;
     to?: number;
@@ -99,27 +106,59 @@ export interface LedgerStats {
      * 一天的數字偏低就以為機台有問題，其實只是樣本不夠。
      */
     payoutRate: number;
-    byGame: Record<string, { count: number; stake: number; payout: number }>;
+    /**
+     * 下注額的平方和。**這個欄位只有一個用途：算有效樣本數**
+     * （見 admin/baseline.ts 的 `effectiveSample`）。
+     *
+     * 派彩率是按金額加權的平均，所以判斷它「偏離得算不算多」時，
+     * 該用的樣本量不是注單筆數，而是 (Σstake)²/Σstake²。
+     * 這個數在資料層算，是因為它要跟總和走同一趟迴圈——
+     * 讓前端拿全部注單回去自己平方加總，正是這一層存在要避免的事。
+     */
+    totalStakeSq: number;
+    byGame: Record<string, { count: number; stake: number; stakeSq: number; payout: number }>;
+    /**
+     * 按玩家彙總。**玩家排行、大戶監控、對沖偵測全部從這裡長出來。**
+     *
+     * 這裡多帶了 `validStake`，因為玩家維度最有用的一個指標是
+     * **有效投注比 = 有效投注 ÷ 下注額**：正常玩家接近 1，
+     * 押莊又押閒的對沖客會掉到 0.2 以下。這個比值不用另外算模型，
+     * 它是既有欄位相除就得到的，而且**它是返水成本的直接來源**。
+     *
+     * 幾十個玩家的規模下，在這裡一次算完比讓前端逐人查詢便宜得多。
+     * 真實系統上百萬個帳號時，這支要換成資料庫的 GROUP BY 加上時間區間的物化表。
+     */
+    byPlayer: Record<string, { count: number; stake: number; validStake: number; payout: number }>;
 }
 
 const STORAGE_KEY = 'arcade:ledger';
 /**
- * 保留上限。localStorage 通常只有 5MB，一筆注單 JSON 大約 250 bytes，
- * 兩萬筆就會逼近上限而且 JSON.parse 會開始有感。
+ * 保留上限。localStorage 通常只有 5MB，一筆注單 JSON 大約 250 bytes。
+ *
+ * 這個數字從 8000 提到 20000，是因為展示資料從「7 天、1 個玩家」擴到
+ * 「30 天、40 個玩家」——**而玩家維度一加進來，需要的樣本量就不是等比例增加的**：
+ * 要看得出某個帳號的行為異常，那個帳號自己就得有夠多的注單，
+ * 不是全站總筆數夠就好。
+ *
+ * 實測 30 天種子約 1.3 萬筆、JSON 約 3.4MB，仍在 5MB 之內但已經沒有很多餘裕。
+ * 再往上加就該換 IndexedDB 了——localStorage 是同步 API，
+ * 檔案再大下去，每次寫注單都會卡住主執行緒。
  *
  * 真實系統不會有這個問題（注單在資料庫裡，舊的搬去冷儲存），
  * 這個常數存在純粹是因為 demo 把「資料庫」放在瀏覽器裡。
  */
-const MAX_ROWS = 8000;
+const MAX_ROWS = 20000;
 
 /**
  * 這個 demo 的玩家識別。
  *
- * 寫死一個值而不是省略欄位，是因為**注單表少了玩家欄位就沒有意義**——
- * 營運後台第一個要問的問題就是「誰下的」。demo 只有一個玩家，
- * 但表的形狀要照真的來，之後接真的登入只是換掉這個常數的來源。
+ * ⚠️ **已經搬到 `players.ts` 的 `SELF_ID`**，這裡只留一個轉出。
+ *
+ * 搬家的理由值得記一筆：這個常數原本住在注單表裡，因為當時「玩家」只是注單的一個欄位。
+ * 等到真的有了玩家名冊，它就該住在名冊那邊——**注單表不該是「玩家是誰」的權威來源**，
+ * 它只是引用了一個 id。留在這裡會變成兩個模組各自宣稱自己知道玩家是誰。
  */
-export const PLAYER_ID = 'demo-player';
+export { SELF_ID as PLAYER_ID } from './players';
 
 /** 跨頁廣播用的頻道。後台跟遊戲是兩個分頁，靠這個互相通知 */
 export const OPS_CHANNEL = 'arcade:ops';
@@ -128,6 +167,10 @@ export const OPS_CHANNEL = 'arcade:ops';
 export type OpsMessage =
     | { kind: 'bets'; rows: BetRecord[] }
     | { kind: 'config' }
+    // 資金流水的變動。訊息由 txLedger 發，ledger 這邊不處理，
+    // 但型別要列在這裡——**這個聯合型別是「這條頻道上會出現什麼」的完整清單**，
+    // 少列一種，下一個人就會以為自己可以安全地 switch 到 default
+    | { kind: 'tx' }
     | { kind: 'cleared' };
 
 let cache: BetRecord[] | null = null;
@@ -241,6 +284,8 @@ export function record(entries: Omit<BetRecord, 'id' | 'status'>[]): BetRecord[]
 export function query(q: LedgerQuery = {}): LedgerPage {
     const {
         game = 'all',
+        player,
+        roundId,
         from,
         to,
         minStake,
@@ -254,6 +299,8 @@ export function query(q: LedgerQuery = {}): LedgerPage {
     let rows = load();
 
     if (game !== 'all') rows = rows.filter((r) => r.game === game);
+    if (player) rows = rows.filter((r) => r.player === player);
+    if (roundId) rows = rows.filter((r) => r.roundId === roundId);
     if (from != null) rows = rows.filter((r) => r.settledAt >= from);
     if (to != null) rows = rows.filter((r) => r.settledAt <= to);
     if (minStake != null) rows = rows.filter((r) => r.stake >= minStake);
@@ -278,28 +325,40 @@ export function stats(q: LedgerQuery = {}): LedgerStats {
     const all = query({ ...q, page: 0, pageSize: Number.MAX_SAFE_INTEGER }).rows;
 
     const byGame: LedgerStats['byGame'] = {};
+    const byPlayer: LedgerStats['byPlayer'] = {};
     let totalStake = 0;
+    let totalStakeSq = 0;
     let totalValidStake = 0;
     let totalPayout = 0;
 
     for (const r of all) {
         totalStake += r.stake;
+        totalStakeSq += r.stake * r.stake;
         totalValidStake += r.validStake;
         totalPayout += r.payout;
-        const g = (byGame[r.game] ??= { count: 0, stake: 0, payout: 0 });
+        const g = (byGame[r.game] ??= { count: 0, stake: 0, stakeSq: 0, payout: 0 });
         g.count++;
         g.stake += r.stake;
+        g.stakeSq += r.stake * r.stake;
         g.payout += r.payout;
+
+        const p = (byPlayer[r.player] ??= { count: 0, stake: 0, validStake: 0, payout: 0 });
+        p.count++;
+        p.stake += r.stake;
+        p.validStake += r.validStake;
+        p.payout += r.payout;
     }
 
     return {
         count: all.length,
         totalStake,
+        totalStakeSq,
         totalValidStake,
         totalPayout,
         grossWin: totalStake - totalPayout,
         payoutRate: totalStake > 0 ? totalPayout / totalStake : 0,
         byGame,
+        byPlayer,
     };
 }
 

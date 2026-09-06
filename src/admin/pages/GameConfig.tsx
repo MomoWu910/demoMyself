@@ -6,6 +6,8 @@ import { Formik, Form, Field, type FieldProps } from 'formik';
 import * as Yup from 'yup';
 import type { GameId } from '../../arcade/net/protocol';
 import { clear as clearLedger, count as ledgerCount } from '../../arcade/server/ledger';
+import { clear as clearPlayers, count as playerCount } from '../../arcade/server/players';
+import { clear as clearTx, count as txCount } from '../../arcade/server/txLedger';
 import { forGame, reset as resetOps, subscribe as subscribeOps, update, type GameOps } from '../../arcade/server/opsConfig';
 import { GAME_IDS, GAME_LABEL, money } from '../format';
 import { seed } from '../seed';
@@ -178,9 +180,13 @@ export function GameConfigPage(): React.ReactElement {
 
             <Paper sx={{ p: 2.5 }}>
                 <Typography sx={{ fontWeight: 600, mb: 0.5 }}>資料工具</Typography>
-                <Typography variant="caption" color="text.secondary">
-                    種子注單是用四款玩法真正的規則跑出來的，亂數有固定種子，
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.8 }}>
+                    種子資料是用四款玩法真正的規則跑出來的，亂數有固定種子，
                     所以重新產生會得到同一份資料。
+                    <br />
+                    產生的注額會<strong>夾進上面那四張卡的限紅區間</strong>——把單注上限調小再重新產生，
+                    歷史注單會跟著變。這不是為了展示而設計的連動，
+                    是因為一筆超過限紅的注單在真實系統裡本來就不可能存在。
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
                     <Button
@@ -197,23 +203,31 @@ export function GameConfigPage(): React.ReactElement {
                         size="small"
                         variant="outlined"
                         onClick={() => {
+                            // 三張表一起清。seed() 內部也會清玩家與交易，
+                            // 但注單得在這裡清——**留著舊注單的話 seedIfEmpty 的語意會不一致**，
+                            // 而且新舊兩批資料的玩家 id 對不上
                             clearLedger();
                             const n = seed();
-                            setToast(`已重新產生 ${money(n)} 筆注單`);
+                            setToast(`已重新產生 ${money(n)} 筆注單、${money(playerCount())} 個帳號、${money(txCount())} 筆交易`);
                         }}
                     >
-                        重新產生種子注單
+                        重新產生種子資料
                     </Button>
                     <Button
                         size="small"
                         color="error"
                         variant="outlined"
                         onClick={() => {
+                            // 清空要三張一起。只清注單的話，玩家名冊會留下四十個
+                            // 「一筆注單都沒有」的帳號，而金流表裡還有他們的返水——
+                            // 那是比空資料更難解釋的狀態
                             clearLedger();
-                            setToast('注單已清空');
+                            clearPlayers();
+                            clearTx();
+                            setToast('注單、玩家與金流已清空');
                         }}
                     >
-                        清空注單（目前 {money(ledgerCount())} 筆）
+                        清空全部（注單 {money(ledgerCount())} 筆 · 交易 {money(txCount())} 筆）
                     </Button>
                 </Box>
             </Paper>

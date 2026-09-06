@@ -2,7 +2,8 @@ import type { SlotC2S, SlotS2C, WinLine } from '../net/games/slot';
 import type { GameServer } from './gameServer';
 import { Wallet } from './wallet';
 import { canSubstitute, LINE_COUNT, PAYLINES, PAYOUTS, REELS, ROWS, Sym, SYMBOLS, WEIGHTS } from '../games/slot/rules';
-import { newRoundId, PLAYER_ID, record } from './ledger';
+import { newRoundId, record } from './ledger';
+import { SELF_ID } from './players';
 import { checkBet } from './opsConfig';
 
 /**
@@ -84,7 +85,7 @@ export class SlotServer implements GameServer<SlotC2S, SlotS2C> {
             {
                 roundId: newRoundId(this.id, betAt),
                 game: this.id,
-                player: PLAYER_ID,
+                player: SELF_ID,
                 betType: 'spin',
                 stake: packet.bet,
                 // 老虎機沒有對沖的可能（只有一種押法），有效投注就等於下注額
