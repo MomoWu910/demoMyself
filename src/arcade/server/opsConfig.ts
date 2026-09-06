@@ -1,5 +1,6 @@
 import type { GameId } from '../net/protocol';
 import * as audit from './auditLog';
+import { can } from './auth';
 
 /**
  * 玩法的顯示名。**稽核紀錄要存顯示名而不是 id**——
@@ -141,7 +142,11 @@ export function forGame(id: GameId): GameOps {
  * 回傳新的整份設定而不是 void，是為了讓呼叫端不必再讀一次——
  * 「寫完再讀」中間會有一個窗口，另一個分頁的寫入可能插進來。
  */
-export function update(id: GameId, patch: Partial<GameOps>): OpsConfig {
+export function update(id: GameId, patch: Partial<GameOps>): OpsConfig | null {
+    // 權限先於一切。**擋在這裡而不是只把按鈕變灰**——
+    // 按鈕變灰是體驗，這一行才是權限（見 auth.ts）
+    if (!can('ops.write')) return null;
+
     const cur = get();
     const before = cur.games[id];
     const after: GameOps = { ...before, ...patch };
@@ -184,7 +189,9 @@ export function update(id: GameId, patch: Partial<GameOps>): OpsConfig {
 }
 
 /** 還原預設值 */
-export function reset(): OpsConfig {
+export function reset(): OpsConfig | null {
+    if (!can('ops.write')) return null;
+
     // 還原之前先記下現在是什麼。**「他把設定還原了」不夠**，
     // 要回答的是「還原之前限紅是多少」——那個值在下一行就消失了
     const before = get();

@@ -1,4 +1,5 @@
 import * as audit from './auditLog';
+import { can } from './auth';
 import { OPS_CHANNEL } from './opsChannel';
 
 /**
@@ -236,6 +237,8 @@ export function record(entries: Omit<Transaction, 'id' | 'seq'>[]): Transaction[
  * 這也正是 append-only 的精神——錢流反向，就多記一筆反向的。
  */
 export function review(id: string, decision: 'done' | 'rejected', at = Date.now()): Transaction | undefined {
+    if (!can('tx.review')) return undefined;
+
     const rows = load();
     const idx = rows.findIndex((t) => t.id === id);
     if (idx < 0) return undefined;

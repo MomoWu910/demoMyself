@@ -1,7 +1,7 @@
 import * as React from 'react';
 import {
     AppBar, Box, Chip, CssBaseline, Divider, Drawer, List, ListItemButton, ListItemIcon,
-    ListItemText, Toolbar, Typography,
+    ListItemText, MenuItem, TextField, Toolbar, Tooltip, Typography,
 } from '@mui/material';
 import CasinoIcon from '@mui/icons-material/Casino';
 import DashboardIcon from '@mui/icons-material/InsertChartOutlined';
@@ -19,6 +19,7 @@ import { AuditPage } from './pages/Audit';
 import { FinancePage } from './pages/Finance';
 import { PlayersPage } from './pages/Players';
 import { money } from './format';
+import { ROLES, setRole, useRole, type Role } from './useAuth';
 
 /**
  * 後台的外殼。
@@ -59,6 +60,7 @@ function useHashRoute(): [string, (k: string) => void] {
 
 export function App(): React.ReactElement {
     const [route, go] = useHashRoute();
+    const role = useRole();
     const page = PAGES.find((p) => p.key === route) ?? PAGES[0];
 
     // 注單筆數放在側欄底部，遊戲那頁下注時會即時跳動——
@@ -85,6 +87,27 @@ export function App(): React.ReactElement {
                     </Typography>
                     <Chip size="small" label="DEMO" variant="outlined" sx={{ height: 20, fontSize: 11 }} />
                     <Box sx={{ flex: 1 }} />
+
+                    {/* 身分切換。
+                        **這裡刻意不做登入表單。** 假的帳號密碼框會讓人以為有真的驗證
+                        （而驗證只能發生在後端），而且教人把密碼打進一個沒有後端的表單
+                        本身就是壞示範。展示權限系統真正有內容的那一半就好：誰能做什麼。 */}
+                    <Tooltip title={ROLES[role].description}>
+                        <TextField
+                            select
+                            size="small"
+                            value={role}
+                            onChange={(e) => setRole(e.target.value as Role)}
+                            sx={{ minWidth: 130, '& .MuiOutlinedInput-root': { fontSize: 13 } }}
+                        >
+                            {(Object.keys(ROLES) as Role[]).map((r) => (
+                                <MenuItem key={r} value={r} sx={{ fontSize: 13 }}>
+                                    {ROLES[r].label}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                    </Tooltip>
+
                     <Typography
                         component="a"
                         href="arcade.html"

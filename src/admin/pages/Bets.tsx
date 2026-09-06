@@ -2,7 +2,7 @@ import * as React from 'react';
 import {
     Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
     MenuItem, Paper, Snackbar, Stack, Table, TableBody, TableCell, TableHead, TableRow,
-    TextField, Typography,
+    TextField, Tooltip, Typography,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/FileDownloadOutlined';
 import {
@@ -19,6 +19,7 @@ import {
 } from '../../arcade/server/ledger';
 import { list as listPlayers, SELF_ID } from '../../arcade/server/players';
 import { betTypeLabel, dateTime, GAME_IDS, GAME_LABEL, money, signedMoney } from '../format';
+import { denyReason, useCan, useRole } from '../useAuth';
 import { MONO } from '../theme';
 
 /**
@@ -143,6 +144,9 @@ function RoundDialog(props: {
     onVoided: (msg: string) => void;
 }): React.ReactElement {
     const { row, nameOf, onClose, onVoided } = props;
+    const can = useCan();
+    const role = useRole();
+    const voidable = can('bet.void');
     const [voiding, setVoiding] = React.useState(false);
     const [reason, setReason] = React.useState('');
 
@@ -268,9 +272,13 @@ function RoundDialog(props: {
 
                     <DialogActions sx={{ px: 3, pb: 2 }}>
                         {row.status === 'settled' && !voiding && (
-                            <Button color="error" size="small" onClick={() => setVoiding(true)}>
-                                作廢這一筆
-                            </Button>
+                            <Tooltip title={voidable ? '' : denyReason('bet.void', role)}>
+                                <span>
+                                    <Button color="error" size="small" disabled={!voidable} onClick={() => setVoiding(true)}>
+                                        作廢這一筆
+                                    </Button>
+                                </span>
+                            </Tooltip>
                         )}
                         {voiding && (
                             <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', width: '100%' }}>

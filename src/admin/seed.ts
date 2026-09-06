@@ -14,6 +14,7 @@ import type { GameId } from '../arcade/net/protocol';
 import { BaccaratShoe } from '../arcade/server/baccaratShoe';
 import { buildRecords, netExposureValidStake, type PendingBet } from '../arcade/server/betSlip';
 import * as audit from '../arcade/server/auditLog';
+import { can } from '../arcade/server/auth';
 import { clear as clearLedger, count, record, type BetRecord } from '../arcade/server/ledger';
 import { forGame } from '../arcade/server/opsConfig';
 import {
@@ -421,6 +422,8 @@ export function seedIfEmpty(): number {
  * 而後台如果剛好在那時候重繪，玩家欄會是一片空白。
  */
 export function seed(): number {
+    if (!can('data.manage')) return 0;
+
     const { players, bets, transactions } = generate();
     clearPlayers();
     clearTx();
@@ -454,6 +457,8 @@ export function seed(): number {
  * 理由同 auditLog 的檔頭：記錄要寫在唯一入口裡。
  */
 export function clearAll(): void {
+    if (!can('data.manage')) return;
+
     const before = { bets: count(), players: playerCount(), tx: txCount() };
     clearLedger();
     clearPlayers();

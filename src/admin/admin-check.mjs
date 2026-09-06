@@ -41,7 +41,7 @@ function load(entry) {
 // 三個模組要共用同一份 ledger 狀態，所以整包一起打進來，不能分開 load
 // （分開 load 會各自得到一份獨立的模組實例，record 寫進去的東西 query 讀不到）
 const bundle = load('src/admin/check-entry.ts');
-const { ledger, opsConfig, betSlip, SlotServer, Wallet, rouletteRules, players, txLedger, seed, baseline, i18n, auditLog } = bundle;
+const { ledger, opsConfig, betSlip, SlotServer, Wallet, rouletteRules, players, txLedger, seed, baseline, i18n, auditLog, auth } = bundle;
 
 let pass = 0;
 let fail = 0;
@@ -599,6 +599,64 @@ check('作廢留下稽核紀錄', aVoid.length, 2);
 ok('稽核紀錄裡看得到原因與沖正金額',
     aVoid[1].note.includes('牌局中斷') && aVoid[1].note.includes('-150'), aVoid[1].note);
 
+/* ─────────────────────────── 角色與權限 ─────────────────────────── */
+
+console.log('\n== 角色權限 ==');
+auth.reset();
+opsConfig.reset();
+players.clear();
+txLedger.clear();
+ledger.clear();
+auditLog.clear();
+
+players.seedPlayers([
+    { id: 'p-x', nickname: '受測帳號', vipLevel: 1, status: 'active', tags: [], note: '', registeredAt: T0, profile: 'regular' },
+]);
+txLedger.record([tx({ player: 'p-x', kind: 'withdraw', amount: -1000, status: 'pending', createdAt: T0 })]);
+const pendingId = txLedger.query({ status: 'pending' }).rows[0].id;
+const betForVoid = ledger.record([row({ player: 'p-x' })])[0];
+
+check('預設角色是管理員（沒有登入機制的系統，預設只能是最高權限）', auth.getRole(), 'admin');
+
+/* 客服：看得到全部，改不了任何東西 */
+auth.setRole('viewer');
+// **這幾條才是真正的權限測試。** 它們呼叫的是資料層，不是點按鈕——
+// 把按鈕變灰只是體驗，少寫一個 disabled 權限就漏了，而畫面上完全正常
+check('客服改不了遊戲設定', opsConfig.update('slot', { maxBet: 99999 }), null);
+check('客服改不了玩家', players.update('p-x', { tags: ['測試'] }), undefined);
+check('客服審不了提領', txLedger.review(pendingId, 'done'), undefined);
+check('客服作廢不了注單', ledger.voidBet(betForVoid.id, '測試'), undefined);
+check('被擋下來的操作不會留下稽核紀錄（因為什麼都沒發生）', auditLog.count(), 0);
+check('但看得到資料', ledger.query().total > 0, true);
+
+/* 營運：管遊戲與玩家標記，碰不到錢，也不能停權 */
+auth.setRole('operator');
+ok('營運改得了限紅', opsConfig.update('slot', { maxBet: 2000 }) !== null);
+ok('營運標記得了玩家', players.update('p-x', { tags: ['待查'] }) !== undefined);
+// 停用是斷掉某個人的服務，該往上報一層——這正是 player.write 與 player.freeze 分開的理由
+check('營運停不了權', players.update('p-x', { status: 'frozen' }), undefined);
+check('營運審不了提領', txLedger.review(pendingId, 'done'), undefined);
+
+/* 財務：審提領，改不了限紅 */
+auth.setRole('finance');
+check('財務改不了限紅', opsConfig.update('slot', { maxBet: 3000 }), null);
+ok('財務審得了提領', txLedger.review(pendingId, 'done') !== undefined);
+
+/* 停權要管理員 */
+auth.setRole('admin');
+ok('管理員停得了權', players.update('p-x', { status: 'frozen' }) !== undefined);
+
+/* 稽核記的是角色，不是寫死的字串 */
+auditLog.clear();
+auth.setRole('operator');
+opsConfig.update('slot', { maxBet: 4000 });
+check('稽核紀錄記下操作者的角色', auditLog.query().rows[0].actor, '營運(operator)');
+auth.setRole('finance');
+txLedger.record([tx({ player: 'p-x', kind: 'withdraw', amount: -50, status: 'pending', createdAt: T0 })]);
+txLedger.review(txLedger.query({ status: 'pending' }).rows[0].id, 'rejected');
+check('換一個角色，稽核也跟著換', auditLog.query({ action: 'tx.review' }).rows[0].actor, '財務(finance)');
+
+auth.reset();
 auditLog.clear();
 players.clear();
 txLedger.clear();

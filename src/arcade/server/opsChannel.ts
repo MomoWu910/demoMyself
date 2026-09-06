@@ -42,6 +42,8 @@ export type OpsMessage =
     | { kind: 'tx' }
     /** 操作稽核新增 */
     | { kind: 'audit' }
+    /** 後台切換了角色。開著兩個後台分頁時，兩邊的權限要一致 */
+    | { kind: 'role' }
     /** 資料被清空 */
     | { kind: 'cleared' };
 

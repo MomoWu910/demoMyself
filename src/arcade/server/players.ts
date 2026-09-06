@@ -60,6 +60,7 @@ export interface Player {
 }
 
 import * as audit from './auditLog';
+import { can } from './auth';
 import { OPS_CHANNEL } from './opsChannel';
 
 const STORAGE_KEY = 'arcade:players';
@@ -161,6 +162,16 @@ export function seedPlayers(rows: Player[]): void {
  * 「表單多送了一個欄位就把註冊時間洗掉」這類事故，而那種事故在對帳時最難查。
  */
 export function update(id: string, patch: Partial<Pick<Player, 'vipLevel' | 'status' | 'tags' | 'note' | 'nickname'>>): Player | undefined {
+    if (!can('player.write')) return undefined;
+    /**
+     * 停用帳號需要**額外**的權限，不是 `player.write` 就夠。
+     *
+     * 分開的理由：改標記與備註是日常工作，停用一個帳號是讓玩家玩不了。
+     * 兩者在畫面上只差一個開關的距離，在權限上不該是同一件事——
+     * 這條線也讓「客服可以標記、只有主管能停權」這種常見的分工做得出來。
+     */
+    if (patch.status != null && !can('player.freeze')) return undefined;
+
     const rows = load();
     const idx = rows.findIndex((p) => p.id === id);
     if (idx < 0) return undefined;

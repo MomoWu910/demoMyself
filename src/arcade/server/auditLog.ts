@@ -1,3 +1,4 @@
+import { actorName } from './auth';
 import { OPS_CHANNEL } from './opsChannel';
 
 /**
@@ -60,12 +61,11 @@ export interface AuditEntry {
      */
     seq: number;
     /**
-     * 操作者。
+     * 操作者。取自目前的角色（見 auth.ts）。
      *
-     * 這個 demo 沒有登入，所以永遠是 `admin`。
-     * 但欄位一定要在——**沒有操作者的稽核紀錄只能證明「有人改過」**，
-     * 而稽核要回答的第一個問題就是誰。等到權限系統接上來，
-     * 這裡換成登入者的識別就好，表的形狀不用動。
+     * **沒有操作者的稽核紀錄只能證明「有人改過」**，而稽核要回答的第一個問題就是誰。
+     * 這個 demo 沒有登入，所以填的是角色而不是帳號——
+     * 真實系統換成登入者的識別即可，表的形狀不用動。
      */
     actor: string;
     /** 動作類型。用點分命名空間，方便之後按類別篩選 */
@@ -93,12 +93,16 @@ let seq = 0;
 let channel: BroadcastChannel | null = null;
 const listeners = new Set<() => void>();
 
-/** 目前的操作者。權限系統接上來之後由登入狀態決定 */
-let actor = 'admin';
-
-export function setActor(name: string): void {
-    actor = name;
-}
+/**
+ * 操作者由 `auth` 決定，這裡不自己維護一份。
+ *
+ * 原本這裡有一個模組層級的 `actor` 變數加一支 `setActor()`，
+ * 那是在權限系統還不存在時的暫時做法——**而暫時做法的問題是它會被忘記呼叫**：
+ * 切換角色之後如果沒有人記得同步這個變數，稽核紀錄就會記到上一個人頭上，
+ * 而那種錯誤沒有任何辦法在事後分辨。
+ *
+ * 改成每次寫入時去問 auth，就沒有「兩份狀態要保持一致」這回事。
+ */
 
 function getChannel(): BroadcastChannel | null {
     if (channel) return channel;
@@ -156,7 +160,7 @@ export function record(entry: Omit<AuditEntry, 'id' | 'at' | 'seq' | 'actor'> & 
         id: `a${at.toString(36)}-${mySeq.toString(36).padStart(4, '0')}`,
         at,
         seq: mySeq,
-        actor,
+        actor: actorName(),
         action: entry.action,
         target: entry.target,
         targetLabel: entry.targetLabel,

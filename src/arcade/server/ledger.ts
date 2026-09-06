@@ -1,5 +1,6 @@
 import type { GameId } from '../net/protocol';
 import * as audit from './auditLog';
+import { can } from './auth';
 import { AUDIT_GAME_LABEL, OPS_CHANNEL, type OpsMessage } from './opsChannel';
 import { record as recordTx } from './txLedger';
 
@@ -443,6 +444,7 @@ export function stats(q: LedgerQuery = {}): LedgerStats {
  * @param reason 作廢原因。**必填**——沒有原因的作廢單在爭議升級時無法辯護
  */
 export function voidBet(id: string, reason: string): BetRecord | undefined {
+    if (!can('bet.void')) return undefined;
     if (!reason.trim()) return undefined;
 
     const rows = load();

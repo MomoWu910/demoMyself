@@ -1,6 +1,7 @@
 import * as React from 'react';
 import {
-    Alert, Box, Button, Divider, FormControlLabel, Paper, Snackbar, Stack, Switch, TextField, Typography,
+    Alert, Box, Button, Divider, FormControlLabel, Paper, Snackbar, Stack, Switch, TextField,
+    Tooltip, Typography,
 } from '@mui/material';
 import { Formik, Form, Field, type FieldProps } from 'formik';
 import * as Yup from 'yup';
@@ -11,6 +12,7 @@ import { count as txCount } from '../../arcade/server/txLedger';
 import { forGame, reset as resetOps, subscribe as subscribeOps, update, type GameOps } from '../../arcade/server/opsConfig';
 import { GAME_IDS, GAME_LABEL, money } from '../format';
 import { clearAll, seed } from '../seed';
+import { denyReason, useCan, useRole } from '../useAuth';
 
 /**
  * 遊戲設定。**這一頁是整個後台唯一會寫回去的地方。**
@@ -54,6 +56,9 @@ const schema = Yup.object({
 /** 一款遊戲一張卡。每張卡是獨立的表單，改一款不影響另一款還沒存的編輯 */
 function GameCard(props: { id: GameId; onSaved: (msg: string) => void }): React.ReactElement {
     const { id, onSaved } = props;
+    const can = useCan();
+    const role = useRole();
+    const writable = can('ops.write');
 
     // 別的分頁改了設定要跟著更新（例如同時開兩個後台分頁）
     const [revision, setRevision] = React.useState(0);
@@ -142,9 +147,18 @@ function GameCard(props: { id: GameId; onSaved: (msg: string) => void }): React.
                             </Typography>
 
                             <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Button type="submit" variant="contained" disabled={!dirty || !isValid} size="small">
-                                    儲存
-                                </Button>
+                                {/* 沒權限的時候要說得出原因。**一個不說為什麼的灰色按鈕，
+                                    使用者只會覺得系統壞了然後跑去問客服** */}
+                                <Tooltip title={writable ? '' : denyReason('ops.write', role)}>
+                                    <span>
+                                        <Button
+                                            type="submit" variant="contained" size="small"
+                                            disabled={!writable || !dirty || !isValid}
+                                        >
+                                            儲存
+                                        </Button>
+                                    </span>
+                                </Tooltip>
                                 <Button onClick={() => resetForm()} disabled={!dirty} size="small">
                                     取消
                                 </Button>
@@ -158,6 +172,10 @@ function GameCard(props: { id: GameId; onSaved: (msg: string) => void }): React.
 }
 
 export function GameConfigPage(): React.ReactElement {
+    const can = useCan();
+    const role = useRole();
+    const manageable = can('data.manage');
+    const opsWritable = can('ops.write');
     const [toast, setToast] = React.useState('');
 
     return (
@@ -189,44 +207,59 @@ export function GameConfigPage(): React.ReactElement {
                     是因為一筆超過限紅的注單在真實系統裡本來就不可能存在。
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                            resetOps();
-                            setToast('營運設定已還原為預設值');
-                        }}
-                    >
-                        還原預設設定
-                    </Button>
-                    <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                            // 三張表一起清。seed() 內部也會清玩家與交易，
-                            // 但注單得在這裡清——**留著舊注單的話 seedIfEmpty 的語意會不一致**，
-                            // 而且新舊兩批資料的玩家 id 對不上
-                            clearLedger();
-                            const n = seed();
-                            setToast(`已重新產生 ${money(n)} 筆注單、${money(playerCount())} 個帳號、${money(txCount())} 筆交易`);
-                        }}
-                    >
-                        重新產生種子資料
-                    </Button>
-                    <Button
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                        onClick={() => {
-                            // 清空走資料層的 clearAll()，不是在這裡呼叫三個 clear——
-                            // 因為它要在稽核表裡留下一筆「誰清的、清掉了多少」，
-                            // 而那筆紀錄**不會**被這個按鈕清掉
-                            clearAll();
-                            setToast('注單、玩家與金流已清空（稽核紀錄保留）');
-                        }}
-                    >
-                        清空全部（注單 {money(ledgerCount())} 筆 · 交易 {money(txCount())} 筆）
-                    </Button>
+                    <Tooltip title={opsWritable ? '' : denyReason('ops.write', role)}>
+                        <span>
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                disabled={!opsWritable}
+                                onClick={() => {
+                                    resetOps();
+                                    setToast('營運設定已還原為預設值');
+                                }}
+                            >
+                                還原預設設定
+                            </Button>
+                        </span>
+                    </Tooltip>
+                    <Tooltip title={manageable ? '' : denyReason('data.manage', role)}>
+                        <span>
+                            <Button
+                                size="small"
+                                variant="outlined"
+                                disabled={!manageable}
+                                onClick={() => {
+                                    // 三張表一起清。seed() 內部也會清玩家與交易，
+                                    // 但注單得在這裡清——**留著舊注單的話 seedIfEmpty 的語意會不一致**，
+                                    // 而且新舊兩批資料的玩家 id 對不上
+                                    clearLedger();
+                                    const n = seed();
+                                    setToast(`已重新產生 ${money(n)} 筆注單、${money(playerCount())} 個帳號、${money(txCount())} 筆交易`);
+                                }}
+                            >
+                                重新產生種子資料
+                            </Button>
+                        </span>
+                    </Tooltip>
+                    <Tooltip title={manageable ? '' : denyReason('data.manage', role)}>
+                        <span>
+                            <Button
+                                size="small"
+                                color="error"
+                                variant="outlined"
+                                disabled={!manageable}
+                                onClick={() => {
+                                    // 清空走資料層的 clearAll()，不是在這裡呼叫三個 clear——
+                                    // 因為它要在稽核表裡留下一筆「誰清的、清掉了多少」，
+                                    // 而那筆紀錄**不會**被這個按鈕清掉
+                                    clearAll();
+                                    setToast('注單、玩家與金流已清空（稽核紀錄保留）');
+                                }}
+                            >
+                                清空全部（注單 {money(ledgerCount())} 筆 · 交易 {money(txCount())} 筆）
+                            </Button>
+                        </span>
+                    </Tooltip>
                 </Box>
             </Paper>
 

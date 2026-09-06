@@ -1,7 +1,7 @@
 import * as React from 'react';
 import {
     Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
-    MenuItem, Paper, Snackbar, Stack, Tab, Tabs, TextField, Typography,
+    MenuItem, Paper, Snackbar, Stack, Tab, Tabs, TextField, Tooltip, Typography,
 } from '@mui/material';
 import { DataGrid, type GridColDef, type GridPaginationModel, type GridSortModel } from '@mui/x-data-grid';
 import { zhTW } from '@mui/x-data-grid/locales';
@@ -11,6 +11,7 @@ import {
     type Transaction, type TxKind, type TxQuery, type TxStatus,
 } from '../../arcade/server/txLedger';
 import { dateTime, money, signedMoney } from '../format';
+import { denyReason, useCan, useRole } from '../useAuth';
 import { MONO } from '../theme';
 
 /**
@@ -139,6 +140,9 @@ export function FinancePage(): React.ReactElement {
     const [confirm, setConfirm] = React.useState<{ tx: Transaction; decision: 'done' | 'rejected' } | null>(null);
     const [toast, setToast] = React.useState('');
     const [revision, setRevision] = React.useState(0);
+    const can = useCan();
+    const role = useRole();
+    const reviewable = can('tx.review');
 
     React.useEffect(() => subscribeTx(() => setRevision((n) => n + 1)), []);
 
@@ -216,18 +220,26 @@ export function FinancePage(): React.ReactElement {
             {
                 field: 'actions', headerName: '處理', width: 170, sortable: false,
                 renderCell: (p) => (
-                    <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', height: '100%' }}>
-                        <Button size="small" variant="contained" onClick={() => setConfirm({ tx: p.row, decision: 'done' })}>
-                            放行
-                        </Button>
-                        <Button size="small" color="error" variant="outlined" onClick={() => setConfirm({ tx: p.row, decision: 'rejected' })}>
-                            退件
-                        </Button>
-                    </Box>
+                    <Tooltip title={reviewable ? '' : denyReason('tx.review', role)}>
+                        <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', height: '100%' }}>
+                            <Button
+                                size="small" variant="contained" disabled={!reviewable}
+                                onClick={() => setConfirm({ tx: p.row, decision: 'done' })}
+                            >
+                                放行
+                            </Button>
+                            <Button
+                                size="small" color="error" variant="outlined" disabled={!reviewable}
+                                onClick={() => setConfirm({ tx: p.row, decision: 'rejected' })}
+                            >
+                                退件
+                            </Button>
+                        </Box>
+                    </Tooltip>
                 ),
             },
         ];
-    }, [tab, nameOf]);
+    }, [tab, nameOf, reviewable, role]);
 
     return (
         <Stack spacing={2}>

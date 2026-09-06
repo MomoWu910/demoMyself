@@ -13,6 +13,7 @@ import {
 } from '../../arcade/server/players';
 import { REBATE_RATE, stats as txStats, subscribe as subscribeTx } from '../../arcade/server/txLedger';
 import { betTypeLabel, dateTime, GAME_LABEL, money, percent, signedMoney } from '../format';
+import { denyReason, useCan, useRole } from '../useAuth';
 import { MONO } from '../theme';
 
 /**
@@ -105,6 +106,10 @@ function PlayerDialog(props: {
     onSaved: (msg: string) => void;
 }): React.ReactElement {
     const { row, from, onClose, onSaved } = props;
+    const can = useCan();
+    const role = useRole();
+    const writable = can('player.write');
+    const freezable = can('player.freeze');
 
     // 表單狀態。開啟時從 row 帶入，**關閉不儲存**——
     // 後台的編輯要是明確的動作，滑鼠移開就寫進去的表單沒有人敢用
@@ -239,6 +244,7 @@ function PlayerDialog(props: {
                         <Switch
                             color="error"
                             checked={frozen}
+                            disabled={!freezable}
                             onChange={(e) => {
                                 // 停用要多按一次。**這是唯一會讓玩家玩不了的操作**，
                                 // 而它跟旁邊的「改備註」在畫面上只差一個開關的距離
@@ -249,7 +255,14 @@ function PlayerDialog(props: {
                                 }
                             }}
                         />
-                        <Typography variant="body2">停用帳號</Typography>
+                        <Typography variant="body2" color={freezable ? undefined : 'text.disabled'}>停用帳號</Typography>
+                        {/* 停用比一般編輯需要更高的權限。**分開的理由寫在 players.update() 裡**：
+                            改標記是日常工作，停用是讓玩家玩不了 */}
+                        {!freezable && (
+                            <Typography variant="caption" color="text.secondary">
+                                {denyReason('player.freeze', role)}
+                            </Typography>
+                        )}
                         {row.id === SELF_ID && (
                             <Typography variant="caption" color="warning.main">
                                 這是遊樂場那一頁正在用的帳號——停用之後回去下注會被擋下來
@@ -344,7 +357,11 @@ function PlayerDialog(props: {
 
             <DialogActions>
                 <Button onClick={onClose}>取消</Button>
-                <Button variant="contained" disabled={!dirty} onClick={save}>儲存</Button>
+                <Tooltip title={writable ? '' : denyReason('player.write', role)}>
+                    <span>
+                        <Button variant="contained" disabled={!writable || !dirty} onClick={save}>儲存</Button>
+                    </span>
+                </Tooltip>
             </DialogActions>
         </Dialog>
     );
