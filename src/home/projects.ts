@@ -166,7 +166,7 @@ export const NODES: ProjectNode[] = [
     },
     {
         id: 'arcade',
-        href: './arcade.html',
+        href: './park.html',
         i18nKey: 'home.arcade',
         // 葉尖朝右上。**不能取正上方（-90）**：那會讓葉柄指向正下方，而葉柄那端比葉尖
         // 多伸出約 0.36×r（見 leaf.ts 的 leafStem），垂直總長 1.51×r 就超過 scene.ts
@@ -174,11 +174,11 @@ export const NODES: ProjectNode[] = [
         leafAngle: -45,
         // 「Simulated socket」不寫成 WebSocket：這裡是仿 WebSocket 介面的同行程實作
         // （net/fakeSocket.ts），沒有真的連線——標籤要對得上 source 才禁得起追問
-        tags: ['PixiJS v8', 'React', 'Simulated socket'],
+        tags: ['Three.js Park', 'PixiJS Arcade', 'WASD / Touch'],
         // 玩法全畫在 Pixi 裡，HUD／面板是 React——跟 Shader Lab 同一套分工。
         // 假 WebSocket 那層沒有對應的顏色：色彩語彙只給引擎與著色器（見 Tone），
         // 多開一色會讓外框的讀法從「用什麼畫的」變成「用了哪些技術」。
-        stack: ['pixi', 'react'],
+        stack: ['three', 'pixi', 'react'],
         tone: 'pixi',
         // 這是唯一擺在圖上緣的節點，x 不能再往左：左上角的 wordmark 寬度是**固定的**
         // （30ch 的 tagline），而節點座標是正規化的——瀏覽器視窗越窄，葉子越靠近那塊字。

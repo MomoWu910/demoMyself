@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#c6e9ee"><meta name="description" content="自由探索雲朵樂園：搭乘摩天輪、收集星星，或前往星光賭場。Three.js 互動 3D 作品。"><title>雲朵樂園 Cloud Park | Eric Wu</title></head>
+<body>
+<div id="park">
+    <canvas id="world" aria-label="雲朵樂園 3D 場景，WASD 移動、滑鼠轉向、F 互動" tabindex="0"></canvas>
+    <div class="top-left">
+        <button id="minimap" aria-label="開啟樂園地圖與快速旅行"><span class="map-north">N</span><svg id="mini-svg" viewBox="-50 -50 100 100" aria-hidden="true"></svg><span class="mini-caption">樂園地圖 <kbd>M</kbd> <span>↗</span></span></button>
+        <div class="location"><i></i><span id="location">迎賓花園</span></div>
+    </div>
+    <header class="brand"><div class="brand-kicker">A LITTLE WORLD OF WONDER</div><h1>雲朵樂園<span>CLOUD PARK</span></h1><div class="brand-actions"><button id="help" aria-label="操作說明">?</button><a href="./index.html" aria-label="返回作品集首頁">⌂</a><button id="fullscreen" aria-label="全螢幕">⛶</button></div></header>
+    <div class="passport"><span class="passport-star">✦</span><div><small>星星收集冊</small><strong><span id="stars-count">0</span> <span>/ 5</span></strong></div><span id="passport-note">沿著小徑，找一點閃閃發光</span></div>
+    <div id="desktop-hint"><kbd>W A S D</kbd> 移動 <b>·</b> 滑鼠轉向 <b>·</b> <kbd>F</kbd> 互動 <b>·</b> <kbd>M</kbd> 地圖</div>
+    <button id="resume" hidden>點擊場景繼續探索 <span>Esc 釋放滑鼠 · 也可拖曳轉向</span></button>
+    <button id="interact" hidden><kbd>F</kbd><span id="interaction-label">互動</span><span>→</span></button>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <div id="joystick" aria-label="移動搖桿"><div id="stick"></div><span>移動</span></div>
+    <div id="look-hint">右側滑動 · 轉動視角</div>
+    <button id="touch-action" aria-label="互動" disabled>F<small>互動</small></button>
+    <div id="travel-fade"></div>
+    <dialog id="welcome" aria-labelledby="welcome-title">
+        <div class="welcome-icon">✦</div><p class="eyebrow">YOUR TICKET TO A LITTLE ESCAPE</p><h2 id="welcome-title">今天，來玩一會吧。</h2><p class="intro">搭上摩天輪，許個小願望。<br>沿著星星散步，發現屬於你的遊樂園。</p>
+        <div class="instructions desktop-instructions"><span><kbd>W A S D</kbd>自由移動</span><span><kbd>滑鼠</kbd>環顧四周</span><span><kbd>F</kbd>設施互動</span></div>
+        <div class="instructions touch-instructions"><span>◉ 左手搖桿移動</span><span>↔ 右手滑動視角</span><span>F 點擊互動</span></div>
+        <button id="start" class="primary">出發探索 <span>→</span></button><p class="welcome-foot">左上角打開地圖，就能快速前往星光賭場。</p>
+    </dialog>
+    <dialog id="map-dialog" aria-labelledby="map-title">
+        <div class="map-heading"><div><p class="eyebrow">PICK YOUR NEXT LITTLE ADVENTURE</p><h2 id="map-title">樂園導覽 <span>PARK MAP</span></h2></div><button id="close-map" aria-label="關閉地圖">✕</button></div>
+        <div class="map-content"><div class="map-art"><svg id="full-map" viewBox="-50 -50 100 100" aria-label="全樂園俯視地圖"></svg><span class="map-legend"><i></i> 你的位置 <span>✦</span> 待收集星星</span></div><div class="map-destinations"><p>想先去哪裡？<small>選擇目的地，立即抵達設施門口。</small></p><div id="destinations"></div></div></div>
+        <footer class="map-footer">每一段小路，都有驚喜。<span><kbd>Esc</kbd> / <kbd>M</kbd> 返回樂園</span></footer>
+    </dialog>
+    <div id="error" hidden><h2>樂園暫時無法開啟</h2><p>請使用支援 WebGL 的瀏覽器，或直接前往遊戲大廳。</p><a href="./arcade.html">前往遊戲大廳 →</a></div>
+</div>
+</body></html>

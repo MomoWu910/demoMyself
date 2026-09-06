@@ -2,6 +2,7 @@
     "compilerOptions": {
         "baseUrl": ".",
         "sourceMap": true,
+        "skipLibCheck": true,
         "allowJs": true,
         "outDir": "./dist",
         "removeComments": false,

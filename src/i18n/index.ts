@@ -24,6 +24,7 @@ export const DICT: Record<string, Entry> = {
     // ---- 導覽 ----
     'nav.back': { en: '← Back', zh: '← 返回' },
     'nav.backHome': { en: '← Back to Home', zh: '← 返回首頁' },
+    'nav.backPark': { en: '← Cloud Park', zh: '← 返回雲朵樂園' },
     'nav.backHub': { en: '← PixiJS Experiments', zh: '← PixiJS 實驗場' },
     'nav.backFindings': { en: '← Findings', zh: '← 實驗結論' },
 
@@ -84,8 +85,8 @@ export const DICT: Record<string, Entry> = {
     'home.shader.foot': { en: 'GLSL + WGSL, both written by hand', zh: 'GLSL + WGSL，兩份都自己寫' },
     'home.arcade.title': { en: 'Arcade', zh: '遊樂場' },
     'home.arcade.desc': {
-        en: 'Built like an H5 gaming platform: pick a table from the lobby, then play a slot machine or baccarat with other people betting at the same table. I wanted the whole thing rather than a single game screen, because the hard parts of a platform are not on screen — switching games cannot slow the page down, and the client cannot be the one deciding who wins.',
-        zh: '做成 H5 線上遊戲平台的樣子：大廳選台，進去玩老虎機或百家樂，桌上還有其他人一起下注。會想做整套而不是單一個遊戲畫面，是因為平台麻煩的地方不在畫面——在切換遊戲不能拖慢，以及輸贏不能由前端說了算。',
+        en: 'Explore a pastel Three.js theme park with a third-person character, rides, a live map and fast travel. Walk into the casino to discover the PixiJS arcade: slots, baccarat, video baccarat and roulette.',
+        zh: '在 Three.js 製作的可愛 3D 遊樂園自由散步、搭乘設施、收集星星，用小地圖快速旅行。走進賭場，再進入 PixiJS 遊戲大廳，體驗老虎機、百家樂、視訊百家樂與輪盤。',
     },
 
     // ---- RWD Showcase ----
@@ -112,6 +113,7 @@ export const DICT: Record<string, Entry> = {
     'rwd.page.find': { en: 'Findings', zh: '實測結論' },
     'rwd.page.shader': { en: 'Shader Lab', zh: 'Shader Lab' },
     'rwd.page.arcade': { en: 'Arcade', zh: '遊樂場' },
+    'rwd.page.park': { en: 'Cloud Park', zh: '3D 雲朵樂園' },
 
     // ---- pixiHub ----
     'hub.title': { en: 'PixiJS Experiments', zh: 'PixiJS 實驗場' },

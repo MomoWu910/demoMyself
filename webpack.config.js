@@ -137,6 +137,7 @@ module.exports = {
         findings: './src/findings/index.ts',                  // 渲染效能實測結論
         shader_lab: './src/shaderLab/index.tsx',              // 自訂 Shader Lab（GLSL + WGSL）＋ React/Zustand 面板
         arcade: './src/arcade/index.tsx',                     // 博弈遊樂場：假 server + 玩法模組熱插拔
+        park: './src/park/index.ts',                          // Three.js 可探索遊樂園 → 賭場入口
         admin: './src/admin/index.tsx',                       // 遊戲營運管理後台：MUI + 注單／報表／設定
     },
     output: {
@@ -252,6 +253,12 @@ module.exports = {
             // 不吃 bootHead：那套遮罩是為了首屏字體與天色而做的（見上面的說明），
             // 這一頁沒有隨時間變的底色，套上去只會多壓一次 body 的淡入
             templateParameters: { i18nBoot: i18nBootFor('./src/arcade/index.html'), i18nHead: i18nHeadFor('./src/arcade/index.html') },
+        }),
+        new HtmlWebpackPlugin({
+            filename: 'park.html',
+            template: './src/park/index.html',
+            chunks: ['park'],
+            title: 'Cloud Park',
         }),
         new HtmlWebpackPlugin({
             filename: 'admin.html',
