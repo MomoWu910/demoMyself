@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { isTableScene, useArcadeStore } from '../store';
 import { useT } from '../../i18n/useT';
-import { wireGoBack } from '../../shell/goBack';
 
 /**
  * 頂列：不管在大廳還是在牌桌上都在的那一條。
@@ -87,8 +86,8 @@ function BackLink() {
     }
 
     return (
-        <a className="back" href="./index.html" ref={wireGoBack}>
-            {t('nav.backHome')}
+        <a className="back" href="./park.html">
+            {t('nav.backPark')}
         </a>
     );
 }

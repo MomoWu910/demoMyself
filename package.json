@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "start": "webpack serve --node-env development",
+    "check:park": "node src/park/check.mjs",
     "build": "webpack --mode production",
     "deploy": "npm run build && gh-pages -d dist",
     "check:slot": "node src/arcade/server/rtp-check.mjs",
