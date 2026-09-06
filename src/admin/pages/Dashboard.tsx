@@ -3,6 +3,11 @@ import {
     Box, Chip, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow,
     ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs, { type Dayjs } from 'dayjs';
+import 'dayjs/locale/zh-tw';
 import { query, stats, subscribe, type LedgerStats } from '../../arcade/server/ledger';
 import { stats as txStats, subscribe as subscribeTx, type TxStats } from '../../arcade/server/txLedger';
 import {
@@ -106,11 +111,16 @@ function DailyBars(props: { days: { at: number; stake: number; payout: number }[
  *
  * 三十天這一檔是資料擴充之後才有意義的：**在只有七天資料的時候，
  * 「近 30 日」跟「全部」是同一個數字**，那個選項只會讓人以為報表壞了。
+ *
+ * 第四個選項是自訂區間。快捷鍵解決九成的情況，
+ * 但**剩下那一成是「上個月的對帳單對不起來，我要看 3/12 到 3/18」**——
+ * 那種需求沒有快捷鍵可以涵蓋。
  */
 const RANGES = [
     { key: 'today', label: '今日', days: 1 },
     { key: '7d', label: '近 7 日', days: 7 },
     { key: '30d', label: '近 30 日', days: 30 },
+    { key: 'custom', label: '自訂', days: 0 },
 ] as const;
 type Range = (typeof RANGES)[number]['key'];
 
@@ -127,20 +137,118 @@ function rangeStart(r: Range): number {
     return d.getTime() - (rangeDays(r) - 1) * DAY;
 }
 
+/**
+ * 時段熱區：星期 × 小時。
+ *
+ * ---
+ *
+ * **這張圖回答的是長條圖答不了的問題：人什麼時候來。**
+ *
+ * 逐日長條圖看得到「哪一天量大」，但排班、推播時間、維護視窗要看的是
+ * 「禮拜幾的幾點量大」——而那兩件事在同一份資料裡，只是分桶方式不同。
+ *
+ * 一樣不裝圖表套件：這是 7×24 個格子加一個色階，
+ * CSS grid 就做得完，而且**格子圖最麻煩的部分本來就不是繪製，是色階**——
+ * 線性色階會讓少數幾個尖峰把其他格子全部壓成同一個顏色。
+ */
+function HourHeatmap(props: { cells: number[][]; max: number; spanDays: number }): React.ReactElement {
+    const { cells, max, spanDays } = props;
+    const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
+    /**
+     * 區間太短的時候要說出來。
+     *
+     * **七天資料的「星期 × 小時」圖，每個星期幾只有一天的資料**——
+     * 那張圖畫得出來，但它顯示的是「上週三下午」而不是「週三下午通常如何」，
+     * 而看的人會把它當成後者。要看出週期性至少要兩三輪，也就是十四天以上。
+     */
+    const thin = spanDays < 14;
+
+    /**
+     * 色階用平方根，不是線性。
+     *
+     * 投注量的分布是長尾的：深夜幾乎沒有人，尖峰時段是它的幾十倍。
+     * 線性映射的結果是**整張圖只有兩三格是亮的，其餘全黑**——
+     * 那張圖看起來很乾淨，但它把「凌晨三點跟下午三點的差別」也一起抹掉了。
+     * 開根號把低端拉開，代價是高端被壓縮，而高端本來就看得出來。
+     */
+    const intensity = (v: number): number => (max <= 0 ? 0 : Math.sqrt(v / max));
+
+    return (
+        <Paper sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, flexWrap: 'wrap' }}>
+                <Typography variant="caption" color="text.secondary">投注時段分布（星期 × 小時）</Typography>
+                {thin && (
+                    <Typography variant="caption" color="warning.main">
+                        這個區間只涵蓋 {spanDays} 天，每個星期幾最多只有一天的資料——
+                        看得到「上週三下午」，但看不出「週三下午通常如何」。要看週期性請拉到 14 天以上。
+                    </Typography>
+                )}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 0.5, mt: 1.5 }}>
+                <Box sx={{ display: 'grid', gridTemplateRows: 'repeat(7, 18px)', gap: '2px', mr: 0.5 }}>
+                    {WEEK.map((w) => (
+                        <Typography key={w} variant="caption" sx={{ fontSize: 10, lineHeight: '18px', color: 'text.secondary' }}>
+                            {w}
+                        </Typography>
+                    ))}
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gridTemplateRows: 'repeat(7, 18px)', gap: '2px' }}>
+                        {cells.map((rowCells, day) =>
+                            rowCells.map((v, hour) => (
+                                <Tooltip key={`${day}-${hour}`} title={`週${WEEK[day]} ${hour}:00 — 投注 ${money(v)}`}>
+                                    <Box
+                                        sx={{
+                                            borderRadius: '2px',
+                                            background: v > 0
+                                                ? `rgba(232, 184, 75, ${0.08 + intensity(v) * 0.92})`
+                                                : 'rgba(255,255,255,0.035)',
+                                        }}
+                                    />
+                                </Tooltip>
+                            )),
+                        )}
+                    </Box>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: '2px', mt: 0.5 }}>
+                        {Array.from({ length: 24 }, (_, h) => (
+                            <Typography key={h} variant="caption" sx={{ fontSize: 9, color: 'text.secondary', textAlign: 'center' }}>
+                                {h % 3 === 0 ? h : '\u00a0'}
+                            </Typography>
+                        ))}
+                    </Box>
+                </Box>
+            </Box>
+        </Paper>
+    );
+}
+
 export function DashboardPage(): React.ReactElement {
     const [revision, setRevision] = React.useState(0);
     React.useEffect(() => subscribe(() => setRevision((n) => n + 1)), []);
 
     const [range, setRange] = React.useState<Range>('7d');
-    const rangeLabel = RANGES.find((r) => r.key === range)?.label ?? '';
+    // 自訂區間的預設值給「上週那七天」而不是空的——**空的日期欄位需要按兩次才看得到東西**，
+    // 而使用者切到「自訂」時想看的通常就是最近某一段
+    const [customFrom, setCustomFrom] = React.useState<Dayjs | null>(() => dayjs().subtract(13, 'day').startOf('day'));
+    const [customTo, setCustomTo] = React.useState<Dayjs | null>(() => dayjs().subtract(7, 'day').endOf('day'));
+
+    const custom = range === 'custom';
+    const from = custom ? (customFrom?.startOf('day').valueOf() ?? 0) : rangeStart(range);
+    // 結束時間取當天的 23:59:59.999。**取當天 00:00 的話那一整天都不會被算進去**，
+    // 而使用者選的是「到 3/18」，他要的是含 3/18
+    const to = custom ? customTo?.endOf('day').valueOf() : undefined;
+
+    const rangeLabel = custom
+        ? `${customFrom?.format('M/D') ?? ''}–${customTo?.format('M/D') ?? ''}`
+        : RANGES.find((r) => r.key === range)?.label ?? '';
 
     // 金流的變動也要重繪：後台審一筆提領，待審那個數字要當場少一筆
     React.useEffect(() => subscribeTx(() => setRevision((n) => n + 1)), []);
 
     // KPI 跟著範圍走。`all` 是不分範圍的累計，只給側欄那種「總共有多少」用
-    const scoped: LedgerStats = React.useMemo(() => stats({ from: rangeStart(range) }), [range, revision]);
+    const scoped: LedgerStats = React.useMemo(() => stats({ from, to }), [from, to, revision]);
     const all: LedgerStats = React.useMemo(() => stats(), [revision]);
-    const money$: TxStats = React.useMemo(() => txStats({ from: rangeStart(range) }), [range, revision]);
+    const money$: TxStats = React.useMemo(() => txStats({ from, to }), [from, to, revision]);
 
     // 整體派彩率的偏離判斷。用**有效樣本數**而不是注單筆數——
     // 大戶的單注是苦工的兩百倍，按筆數算會把誤差低估好幾倍（見 baseline.ts）
@@ -149,25 +257,43 @@ export function DashboardPage(): React.ReactElement {
     // 近七天逐日彙總。用 query 拉出區間內的注單再自己分桶——
     // 分桶邏輯放在這裡是因為它是**顯示**的需求（時區、一天從幾點算起），
     // 不是資料層該決定的事
-    const days = React.useMemo(() => {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        const n = rangeDays(range);
-        const buckets = Array.from({ length: n }, (_, i) => ({
-            at: start.getTime() - (n - 1 - i) * DAY,
+    /**
+     * 逐日分桶與時段熱區。**一次查詢餵兩張圖。**
+     *
+     * 兩張圖看的是同一批注單，只是分桶方式不同（一個按自然日、一個按星期×小時）。
+     * 各查一次的話，中間如果有新注單進來，兩張圖會對不起來——
+     * 而那種不一致沒有人會懷疑是查了兩次造成的。
+     */
+    const { days, heat, heatMax } = React.useMemo(() => {
+        const startDay = new Date(from);
+        startDay.setHours(0, 0, 0, 0);
+        const spanDays = custom
+            ? Math.max(1, Math.round(((to ?? Date.now()) - startDay.getTime()) / DAY))
+            : rangeDays(range);
+
+        const buckets = Array.from({ length: spanDays }, (_, i) => ({
+            at: startDay.getTime() + i * DAY,
             stake: 0,
             payout: 0,
         }));
-        const rows = query({ from: buckets[0].at, page: 0, pageSize: Number.MAX_SAFE_INTEGER }).rows;
+        const cells: number[][] = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
+        let max = 0;
+
+        const rows = query({ from, to, page: 0, pageSize: Number.MAX_SAFE_INTEGER }).rows;
         for (const r of rows) {
             const idx = Math.floor((r.settledAt - buckets[0].at) / DAY);
             const b = buckets[idx];
-            if (!b) continue;
-            b.stake += r.stake;
-            b.payout += r.payout;
+            if (b) {
+                b.stake += r.stake;
+                b.payout += r.payout;
+            }
+            const d = new Date(r.settledAt);
+            const cell = cells[d.getDay()];
+            cell[d.getHours()] += r.stake;
+            if (cell[d.getHours()] > max) max = cell[d.getHours()];
         }
-        return buckets;
-    }, [range, revision]);
+        return { days: buckets, heat: cells, heatMax: max };
+    }, [from, to, custom, range, revision]);
 
     return (
         <Stack spacing={2}>
@@ -185,6 +311,34 @@ export function DashboardPage(): React.ReactElement {
                     ))}
                 </ToggleButtonGroup>
             </Box>
+
+            {/* 自訂區間。**只有選了「自訂」才出現**——
+                四個快捷鍵旁邊常駐兩個日期欄位，會讓九成只想看「今日」的人
+                每次都要先掃過兩個不相干的輸入框 */}
+            {custom && (
+                <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="zh-tw">
+                    <Paper sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <DatePicker
+                            label="起" value={customFrom} onChange={setCustomFrom}
+                            slotProps={{ textField: { size: 'small' } }}
+                            // 起日不能晚於訖日。**在元件上擋，不是等使用者按下查詢才報錯**
+                            maxDate={customTo ?? undefined}
+                        />
+                        <Typography color="text.secondary">—</Typography>
+                        <DatePicker
+                            label="訖" value={customTo} onChange={setCustomTo}
+                            slotProps={{ textField: { size: 'small' } }}
+                            minDate={customFrom ?? undefined}
+                            disableFuture
+                        />
+                        <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 460, lineHeight: 1.7 }}>
+                            MUI X 的 <code>DateRangePicker</code>（單一元件選一段區間）是付費版的元件，
+                            這裡用兩個 MIT 版的 <code>DatePicker</code> 組出同樣的能力——
+                            少了拖曳選取的手感，換來的是不必為了一個日期欄位付授權費。
+                        </Typography>
+                    </Paper>
+                </LocalizationProvider>
+            )}
 
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                 <Kpi label={`${rangeLabel}投注`} value={money(scoped.totalStake)} note={`${money(scoped.count)} 筆注單`} />
@@ -238,6 +392,8 @@ export function DashboardPage(): React.ReactElement {
             </Box>
 
             <DailyBars days={days} label={rangeLabel} />
+
+            <HourHeatmap cells={heat} max={heatMax} spanDays={days.length} />
 
             <Paper>
                 <Box sx={{ px: 2, pt: 2 }}>

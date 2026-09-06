@@ -3,9 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--
+        告訴瀏覽器「這一頁自己有深色版本」。
+
+        管的是**瀏覽器自己畫的那些東西**：捲軸、下拉選單的原生外觀、
+        表單控制項的預設配色。少了這一行，一個深色頁面上會出現淺色的捲軸，
+        因為瀏覽器不知道該用哪一套。
+    -->
+    <meta name="color-scheme" content="dark">
     <title>遊戲營運管理後台</title>
     <style>
-        /* 先把底色鋪上，避免 MUI 的 CssBaseline 生效前閃一片白 */
+        /* 先把底色鋪上，避免 MUI 的 CssBaseline 生效前閃一片白。
+           color-scheme 在 CSS 這邊再宣告一次：meta 先生效、CSS 是權威來源 */
+        html { color-scheme: dark; }
         html, body { margin: 0; background: #0e1015; color: #e6e8ee; }
     </style>
 </head>
