@@ -12,3 +12,13 @@
 #park.rotated #map-dialog { width: min(800px, 92dvh); max-width: 92dvh; max-height: 95dvw; }
 body.touch .map-art svg { max-height: calc(95dvh - 135px); }
 body.touch .rotated .map-art svg { max-height: calc(95dvw - 135px); }
+#motion-label { text-align: center; font-size: 10px; color: #567669; text-shadow: 0 1px #ffffffb0; }
+#cursor-hint { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); border: 1px solid #fff; background: #fffcf1ef; padding: 10px 18px; border-radius: 18px; font-size: 12px; box-shadow: 0 4px 20px #3f686326; pointer-events: none; }
+#cursor-hint span { display: block; font-size: 9px; color: #839487; margin-top: 4px; }
+.alt-help { font-size: 10px; color: #859589; margin: -8px 0 19px; line-height: 1.6; }
+#touch-jump { display: none; position: absolute; right: max(120px, calc(env(safe-area-inset-right) + 85px)); bottom: 44px; width: 54px; height: 54px; border: 2px solid #fff; border-radius: 50%; background: #fff9e1dc; color: #5f8075; font-size: 22px; touch-action: none; box-shadow: 0 4px 20px #45635122; }
+#touch-jump small { display: block; font-size: 9px; }
+#touch-jump:disabled { opacity: .45; }
+body.touch #touch-jump { display: block; }
+body.touch #motion-label { font-size: 8px; }
+body.touch .alt-help { display: none; }
