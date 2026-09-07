@@ -31,6 +31,14 @@ src/arcade/
 │   ├── wallet.ts        餘額。活在連線之外，跨桌延續的只有它
 │   ├── gameServer.ts    玩法 server 的介面
 │   ├── slotServer.ts / baccaratServer.ts / baccaratLiveServer.ts / rouletteServer.ts
+│   ├── opsChannel.ts    廣播頻道名與訊息型別。相依圖的葉節點，誰都可以匯入
+│   ├── storage.ts       IndexedDB 持久層（記憶體是快取、寫入非同步落地）
+│   ├── ledger.ts        注單流水（append-only）           ┐
+│   ├── txLedger.ts      資金流水（儲值／提領／返水／調整）│ 後台在管的六張表
+│   ├── players.ts       玩家名冊 + 帳號狀態檢查           │ 住在這裡，因為那是
+│   ├── auditLog.ts      操作稽核（記前後值）              │「伺服器」該做的事
+│   ├── opsConfig.ts     營運設定（上下架／維護／限紅）    │
+│   ├── auth.ts          角色與權限                        ┘
 │   └── *-check.mjs      驗證腳本（Node 直跑，不進 bundle）
 ├── common/              籌碼、牌、路圖、桌面版面、畫布內的介面元件
 ├── games/<玩法>/        規則、視圖、該玩法的 store
@@ -93,6 +101,7 @@ export interface ModuleContext {
 ## 驗證腳本
 
 規則層五支，共 318 項判定。用 Node 直跑，Pixi 與 GSAP 的替身在 `dev/stub-*.mjs`（不進 production bundle）。
+（加上元件層與後台，遊樂場相關的自動驗證合計 588 項。）
 
 ```bash
 npm run check:slot       # 十萬把取樣 + 21 項：RTP、中獎率、賠付表
@@ -103,6 +112,8 @@ npm run check:roulette   # 70 項：賠率恆等式、球軌跡反解、桌布�
 ```
 
 另有元件層的 `check:cards`、`check:chips`、`check:video`，以及兩支跑真瀏覽器的整合驗證：`check:live`（視訊桌台）與 `verify:roulette`（輪盤，38 項，要先 `npm run build`）。
+
+`npm run check:admin`（176 項）驗的是上面那六張表：注單查詢的篩選／排序／分頁、派彩分攤的餘數、金流的餘額不變式、四個角色的權限邊界、稽核的前後值，以及**前端預檢與後端規則對同一筆注要給出同一個錯誤代碼**。後台本身見 [`../admin/`](../admin/) 與根目錄 README 的第 6 節。
 
 **改了什麼就要重跑哪一支**：`PAYOUTS` / `WEIGHTS` → `check:slot`；`COAST_CELLS` / `SNAP_TIME` / `STOP_STAGGER` / `DIR` / `stopOrder` → `check:reel`。
 

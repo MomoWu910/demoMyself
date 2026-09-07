@@ -1,6 +1,8 @@
 # Interactive 3D & Cross-Engine Frontend Demos
 
 > TypeScript 打造的高互動前端技術作品集——聚焦前端比較複雜的部分：**跨引擎渲染整合**、**即時 3D / PBR 渲染**、**手寫 shader（GLSL 與 WGSL 雙寫）**，以及**可重現的渲染效能分析**。
+>
+> 另外有一套**營運管理後台**（React + MUI），管的是站內那四款遊戲玩法本身——在後台改一個限紅，遊戲那一頁下一次下注就會被擋下來。
 
 🔗 **線上 Demo**：https://momowu910.github.io/demoMyself/
 
@@ -33,9 +35,12 @@
 ├─ 3D Product Configurator（Babylon.js）
 ├─ Shader Lab（GLSL + WGSL）
 ├─ Arcade 遊樂場（假 socket + 玩法模組熱插拔）
-│     └─ 頁內切換的兩款玩法：
-│        ├─ 老虎機（五軸三列）
-│        └─ 百家樂（四張路圖 / 八副牌靴）
+│     ├─ 頁內切換的四款玩法：
+│     │  ├─ 老虎機（五軸三列）
+│     │  ├─ 百家樂（四張路圖 / 八副牌靴）
+│     │  ├─ 視訊百家樂（影片是節奏的主人 / 追趕對時）
+│     │  └─ 輪盤（歐式單零 / 兩個反向座標系相減）
+│     └─ 營運管理後台（頂列進入，管的是上面那四款）
 ├─ RWD Showcase（裝置模擬器）
 └─ Rendering Findings（實驗結論）
       └─ 底下的三個壓測實驗：
@@ -199,7 +204,7 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 
 ![遊樂場的老虎機：符號是程序生成的，右上角那排 tracked / leaked / tex 是切換玩法後的資源核對](docs/screenshots/arcade.png)
 
-站內 [`/arcade.html`](https://momowu910.github.io/demoMyself/arcade.html)。大廳與兩款玩法（老虎機、百家樂）跑在**同一個 `Application`、同一個 ticker、同一份 GPU 記憶體**上。細節見 [`src/arcade/README.md`](src/arcade/README.md)。
+站內 [`/arcade.html`](https://momowu910.github.io/demoMyself/arcade.html)。大廳與四款玩法（老虎機、百家樂、視訊百家樂、輪盤）跑在**同一個 `Application`、同一個 ticker、同一份 GPU 記憶體**上。細節見 [`src/arcade/README.md`](src/arcade/README.md)。
 
 **這一頁在架構上要證明的事**：站內跨頁切換是整頁導覽，瀏覽器會把 document、JS heap、WebGL context 一起丟掉，隔離是免費的；**頁內切換沒有這道保險**。所以資源不是靠「記得在 unmount 清掉」來管——玩法模組拿不到裸的 `app`，要每幀邏輯得走 `ctx.frame()`、要長期持有物件得走 `ctx.track()`，全部登記在案，卸載時由 host 統一收回並核對，數字直接顯示在 HUD 上。
 
@@ -213,14 +218,17 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 
 玩法不直接呼叫 server，中間隔一層仿 WebSocket 的介面（`net/fakeSocket.ts`）。前端連 server 的參考都拿不到，就寫不出「先偷看結果再決定怎麼轉」的程式碼；而封包帶著 180–320ms 的模擬 RTT，UI 因此被迫處理「按鈕鎖住、轉軸先空轉、不能連按兩次」這些狀態，而不是寫成同步呼叫、上線才發現整套互動要重做。一條連線＝一張桌，離桌就斷；跨桌延續的只有錢包，而錢包活在連線之外（`server/wallet.ts`）——從老虎機贏的錢走到百家樂桌還在。
 
-**數學是驗過的，不是宣稱的**（四支 Node 腳本，共 216 項判定）
+**數學是驗過的，不是宣稱的**（Node 腳本，遊樂場與後台合計 588 項判定）
 
 | 指令 | 驗什麼 | 抓到過什麼 |
 |---|---|---|
 | `npm run check:slot` | 十萬把取樣 + 21 項判定 | 第一版 RTP **105.9%**（玩家長期淨賺＝賠付表與權重配錯），調到 93%（十萬把取樣實測 93.4%） |
-| `npm run check:baccarat` | 50 萬局，對**公開真值**（莊 1.06% / 閒 1.24% / 和 14.36% / 對子 10.36%） | 補牌表整張 8×10 攤開來比，並斷言「真的比了 80 格」 |
-| `npm run check:reel` | 81 項轉軸時序與落點 | 停軸順序倒置（見下） |
+| `npm run check:baccarat` | 50 萬局，對**公開真值**（莊 1.06% / 閒 1.24% / 和 14.36% / 對子 10.36%），72 項 | 補牌表整張 8×10 攤開來比，並斷言「真的比了 80 格」 |
+| `npm run check:reel` | 117 項轉軸時序與落點 | 停軸順序倒置（見下） |
 | `npm run check:road` | 38 項路圖推算 | 把拖尾過的長龍當成好幾條龍 |
+| `npm run check:roulette` | 70 項賠率與角度換算 | 所有注別期望值必須同為 −2.70%（歐式），任一注別配錯就會被這條恆等式抓到 |
+| `npm run check:video` / `check:live` | 46 + 21 項串流時序 | 影片當節奏主人時的追趕對時 |
+| `npm run check:admin` | 176 項注單／金流／權限／稽核 | 見下面後台那一節 |
 
 **兩個反直覺的根因**（都是實測逼出來的）
 
@@ -229,7 +237,47 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 
 **canvas 與 DOM 對齊**：百家樂的下注區在 canvas 裡、操作面板是 DOM，原本寫死「讓開 202px」——實測是 179.9，而且切成英文面板會再高 8px（牌寬跟著重排）。改成用 `ResizeObserver` 量實際面板高度寫進 store，玩法訂閱它重排。**這是 canvas / DOM 分兩層畫的必要代價**，不是額外的講究。
 
-### 6. RWD Showcase：站內建裝置模擬器 — `src/rwdShowcase/`
+### 6. 遊戲營運管理後台 — `src/admin/`
+
+![營運總覽：KPI 兩排（注單與金流）、逐日投注長條圖、星期 × 小時的時段熱區](docs/screenshots/admin.jpg)
+
+站內 [`/admin.html`](https://momowu910.github.io/demoMyself/admin.html)（也可從遊樂場頂列進入）。
+React + MUI 9 + MUI X（DataGrid、DatePickers，皆 MIT 版）+ Formik / yup。
+六個頁面：營運總覽、注單查詢、玩家管理、金流管理、遊戲設定、操作紀錄。
+
+**它管的是上面那四款玩法，不是一份假資料。**
+
+- 在後台把單注上限調到 100，回遊樂場押 500 會被擋下來，**中間不必重新整理**——營運設定走 BroadcastChannel 廣播，而限紅隨封包下發給 client 做預檢（`net/protocol.ts` 的 `limits`）。
+- 停用一個帳號，那個帳號的下一次下注會收到「帳號已停用」。
+- 展示資料是**用四款玩法真正的規則跑出來的**：老虎機走 `SlotServer.spin()`（同一支被 `check:slot` 拿去驗期望值的函式）、百家樂用真的牌靴與補牌規則、輪盤走同一支 `settleBets`，只有時間戳是補的。40 個帳號 × 30 天 ≈ 1.2 萬筆注單。
+
+**六張表，可變性各不相同**（都住在 `src/arcade/server/`，因為那是「伺服器」該做的事）
+
+| 表 | 可變性 | 為什麼 |
+|---|---|---|
+| `ledger` 注單 | append-only，只有 `status` 可推進 | 結算錯了開沖正單，不回頭改——原本那筆是證據 |
+| `txLedger` 金流 | 同上 | `amount` 帶正負號，換來 `balanceAfter === balanceBefore + amount` 這條可以驗全表的不變式 |
+| `players` 名冊 | 可改 | 玩家是**現在的狀態**（等級會升、帳號會凍結），跟「發生過的事實」不同類 |
+| `auditLog` 稽核 | 只增 | 記前後值；**清空展示資料不會清它**——資料被清掉之後「是誰清的」還在 |
+| `opsConfig` 營運設定 | 可改 | 後台寫、遊戲讀 |
+| `auth` 角色權限 | — | 客服／營運／財務／管理員四個角色 |
+
+**三條分層線**
+
+- **營運檢查放封包層（`handle()`），不放數學模型（`spin()`）**。`spin()` 要被 `check:slot` 拿去跑十萬把驗期望值，限紅寫進去的話，調一次限紅就會讓賠率驗證跟著壞掉。帳號停用檢查也在同一層。
+- **權限擋在資料層，不是只把按鈕變灰**。按鈕變灰是體驗——少寫一個 `disabled`、多一個沒防到的入口，權限就漏了，而且漏的時候畫面上完全正常。所以 `opsConfig.update()`、`players.update()`、`txLedger.review()`、`ledger.voidBet()` 都在寫入前檢查，測試也是呼叫資料層而不是點按鈕。
+- **稽核記在唯一入口裡**。交給呼叫端記的話，任何一個忘記的地方都是一個沒有留痕的後門，而那在審查程式碼時看不出來。
+
+**報表上兩個被資料逼出來的修正**
+
+1. **告警門檻不能所有玩法共用一個係數**。老虎機在展示樣本下派彩率會在 72% 到 100% 之間跳，理論值 94.21%，於是它幾乎永遠亮紅字。真因是它本來就抖得比別人厲害——單注報酬標準差 2.66，百家樂是 1.37。第一個念頭是調種子參數把數字弄好看，那是錯的方向；改成 `baseline:rtp` 連標準差一起量，門檻用每款自己的變異數算。
+2. **樣本量不能用注單筆數**。派彩率是**按金額加權**的平均，所以要用有效樣本數 `n_eff = (Σstake)² / Σstake²`。這裡大戶的單注是苦工的兩百倍，老虎機五千多筆注單的有效樣本只有六百上下——用筆數算會把誤差低估三倍，然後報表開始每天誤報。
+
+理論值本身由 `npm run baseline:rtp` 跑 124.7 萬筆算出，**與展示資料同源**：查表填一個「百家樂 98.9%」是錯的，那是「只押莊」的數字，而基準線同時取決於賠率表、下注結構與玩法比例。
+
+**`npm run check:admin`（176 項）** 驗的是畫面上看不出對錯的東西：注單查詢的篩選／排序／分頁、派彩分攤的餘數（攤完必須等於實際入帳）、金流的餘額不變式、四個角色的權限邊界、稽核的前後值，以及**前端預檢與後端規則對同一筆注要給出同一個錯誤代碼**。
+
+### 7. RWD Showcase：站內建裝置模擬器 — `src/rwdShowcase/`
 
 ![RWD Showcase：以 iframe 用實際 CSS 尺寸載入站內任一頁，斷點反應是真的](docs/screenshots/rwd.png)
 
@@ -251,6 +299,8 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 - **Shader**：手寫 GLSL（300 es）與 WGSL，Pixi v8 自訂 `Filter`（`GlProgram` / `GpuProgram` 雙寫）
 - **UI / 狀態**：React 19 + Zustand（Shader Lab 與產品配置器的控制面板；canvas 外歸 React、canvas 內歸引擎，兩邊只透過 store 溝通）
 - **模組生命週期 / 協定層**：頁內熱插拔的玩法模組與資源核對（`src/arcade/core/`）、仿 WebSocket 的封包層與模擬 server（`src/arcade/net/`、`src/arcade/server/`）
+- **後台 UI**：MUI 9 + MUI X（DataGrid 走 server 分頁／排序、DatePickers）、Formik + yup 表單驗證、亮暗與資訊密度雙軸主題（`src/admin/`）
+- **瀏覽器端持久層**：IndexedDB（注單、金流、玩家、稽核四張表；讀取同步走記憶體快取、寫入非同步落地），營運設定留在 localStorage——限紅檢查是在下注的同步流程裡跑的，不能等非同步讀取
 - **效能量測**：自製 benchmark runner（`src/bench/`）— CPU frame time 中位數 / p95、draw call 攔截、環境偵測，可匯出 Markdown / JSON
 - **3D / 材質**：PBR、IBL（`.env` prefiltered environment）、glTF（KHR_materials_variants）、程序生成法線／粗糙度貼圖（`ProceduralTexture` + 自寫 GLSL）
 - **物理**：cannon-es
@@ -281,6 +331,18 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 yarn install   # 或 npm install
 yarn start     # 啟動後開啟 http://localhost:8080
 ```
+
+驗證腳本（Node 直跑，不需要瀏覽器）：
+
+```bash
+yarn check:slot      # 老虎機 RTP 與賠付表（十萬把取樣）
+yarn check:baccarat  # 補牌表對公開真值（50 萬局）
+yarn check:roulette  # 輪盤賠率與角度換算
+yarn check:admin     # 後台：注單、金流、權限、稽核（176 項）
+yarn baseline:rtp    # 重算報表的理論派彩率基準線（124.7 萬筆）
+```
+
+⚠️ 改了任何一款玩法的賠率表或種子的下注分布，都要重跑 `baseline:rtp` 並把數字填回 `src/admin/baseline.ts`——**報表的基準線與展示資料必須同源**。
 
 ---
 
