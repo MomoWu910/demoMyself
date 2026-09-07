@@ -1,6 +1,7 @@
 import * as audit from './auditLog';
 import { can } from './auth';
 import { OPS_CHANNEL } from './opsChannel';
+import { drop, hydrate, persist } from './storage';
 
 /**
  * 資金流水：**錢進出帳號的每一筆，跟注單分開記。**
@@ -133,7 +134,7 @@ export function rebateFor(validStake: number, vipLevel: number): number {
     return Math.floor(validStake * rate);
 }
 
-const STORAGE_KEY = 'arcade:transactions';
+// 儲存位置在 storage.ts
 /**
  * 保留上限。交易的筆數比注單少一個量級（一天幾十筆 vs 幾百筆），
  * 所以這個數字比 ledger 的小，但足夠裝下 30 天
@@ -154,10 +155,17 @@ function getChannel(): BroadcastChannel | null {
             const msg = ev.data;
             // 只認自己的訊息。同一條頻道上還有 ledger 的 'bets' 與 opsConfig 的 'config'
             if (msg?.kind === 'tx') {
-                cache = null;
-                for (const fn of listeners) fn(msg.rows ?? []);
+                // **不能只把快取設成 null。** 讀取是同步的（見 storage.ts），
+                // 設成 null 之後 `load()` 只會回空陣列——症狀是別的分頁一寫入，
+                // 這一頁的金流就全部消失。
+                //
+                // 也不能像注單那樣直接 append：提領審核改的是**既有那一列**，
+                // 接在後面會變成同一筆交易出現兩次。所以只能重讀。
+                void init().then(() => {
+                    for (const fn of listeners) fn(msg.rows ?? []);
+                });
             } else if (msg?.kind === 'cleared') {
-                cache = null;
+                cache = [];
                 for (const fn of listeners) fn([]);
             }
         };
@@ -167,32 +175,22 @@ function getChannel(): BroadcastChannel | null {
     return channel;
 }
 
-function load(): Transaction[] {
-    if (cache) return cache;
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        cache = raw ? (JSON.parse(raw) as Transaction[]) : [];
-    } catch {
-        cache = [];
-    }
+/** 從持久層灌進記憶體。啟動時 await 一次 */
+export async function init(): Promise<void> {
+    cache = await hydrate<Transaction>('transactions');
     for (const r of cache) {
         if (r.seq >= seq) seq = r.seq + 1;
     }
-    return cache;
+}
+
+function load(): Transaction[] {
+    return (cache ??= []);
 }
 
 function save(rows: Transaction[]): void {
     // 記憶體先更新，持久化失敗不回頭砍它。理由與 ledger.save() 相同
     cache = rows;
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
-    } catch {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(rows.slice(-Math.floor(rows.length / 2))));
-        } catch {
-            /* 只留記憶體 */
-        }
-    }
+    persist('transactions', rows);
 }
 
 function nextId(now: number): string {
@@ -386,11 +384,6 @@ export function count(): number {
 }
 
 export function clear(): void {
-    cache = null;
-    try {
-        localStorage.removeItem(STORAGE_KEY);
-    } catch {
-        /* 同 ledger */
-    }
     cache = [];
+    drop('transactions');
 }

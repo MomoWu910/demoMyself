@@ -41,7 +41,7 @@ function load(entry) {
 // 三個模組要共用同一份 ledger 狀態，所以整包一起打進來，不能分開 load
 // （分開 load 會各自得到一份獨立的模組實例，record 寫進去的東西 query 讀不到）
 const bundle = load('src/admin/check-entry.ts');
-const { ledger, opsConfig, betSlip, SlotServer, Wallet, rouletteRules, players, txLedger, seed, baseline, i18n, auditLog, auth } = bundle;
+const { ledger, opsConfig, betSlip, SlotServer, Wallet, rouletteRules, players, txLedger, seed, baseline, i18n, auditLog, auth, storage, bootstrapServerData } = bundle;
 
 let pass = 0;
 let fail = 0;
@@ -655,6 +655,29 @@ auth.setRole('finance');
 txLedger.record([tx({ player: 'p-x', kind: 'withdraw', amount: -50, status: 'pending', createdAt: T0 })]);
 txLedger.review(txLedger.query({ status: 'pending' }).rows[0].id, 'rejected');
 check('換一個角色，稽核也跟著換', auditLog.query({ action: 'tx.review' }).rows[0].actor, '財務(finance)');
+
+/* ─────────────────────────── 持久層 ─────────────────────────── */
+
+console.log('\n== 持久層 ==');
+// Node 底下既沒有 indexedDB 也沒有 localStorage，四張表要能安靜地退回純記憶體。
+// **這一段驗的不是 IndexedDB 本身**（那要瀏覽器），
+// 是「儲存不可用的時候整套東西還跑不跑得動」——而那正是驗證腳本自己的處境
+check('沒有任何儲存時，hydrate 回空陣列', await storage.hydrate('ledger'), []);
+check('偵測得出目前沒有持久化', await storage.backendName(), '僅記憶體');
+
+ledger.clear();
+await bootstrapServerData();
+check('灌完之後注單表是空的', ledger.count(), 0);
+
+ledger.record([row({ stake: 111 })]);
+check('灌完之後寫得進去', ledger.count(), 1);
+
+// **這條守著一個換成非同步持久層之後才長出來的坑**：
+// init 之前 cache 是空的，此時 record 會拿空陣列接上新注單再整張寫回去——
+// 歷史注單就沒了。重複灌一次不該把剛寫的東西弄丟（它會從持久層重讀，
+// 而 Node 底下持久層是空的，所以這裡驗的是「重灌是冪等且不會炸」）
+await bootstrapServerData();
+ok('重複灌不會炸', typeof ledger.count() === 'number', String(ledger.count()));
 
 auth.reset();
 auditLog.clear();

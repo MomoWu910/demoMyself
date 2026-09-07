@@ -119,7 +119,23 @@ function merge(saved: Partial<OpsConfig> | null): OpsConfig {
     return { version: saved?.version ?? DEFAULTS.version, games };
 }
 
-/** 讀設定。遊戲那一端每次要用就呼叫，不要自己快取——快取了就收不到後台的變更 */
+/**
+ * 讀設定。遊戲那一端每次要用就呼叫，不要自己快取——快取了就收不到後台的變更。
+ *
+ * ---
+ *
+ * **這張表刻意留在 localStorage，沒有跟著搬去 IndexedDB。**
+ *
+ * 另外四張表搬家是因為它們會長大（注單一萬多筆、約 3MB）。
+ * 營運設定是四款遊戲各四個欄位，不到 1KB，**永遠不會長大**。
+ *
+ * 更關鍵的是：搬過去就得跟其他表一樣先 `await init()` 才讀得到，
+ * 而 `checkBet()` 是在**封包層的同步流程裡**被呼叫的——
+ * 玩家按下下注的那一刻，限紅檢查不能等一個非同步讀取。
+ *
+ * 一句話：**會長大的資料搬去 IndexedDB，要同步讀的小設定留在 localStorage。**
+ * 兩種儲存各有適合的東西，不必為了一致而統一。
+ */
 export function get(): OpsConfig {
     if (cache) return cache;
     try {

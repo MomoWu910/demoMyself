@@ -17,9 +17,28 @@
            color-scheme 在 CSS 這邊再宣告一次：meta 先生效、CSS 是權威來源 */
         html { color-scheme: dark; }
         html, body { margin: 0; background: #0e1015; color: #e6e8ee; }
+
+        /* 載入標記。資料層改成 IndexedDB 之後，開頁到畫面出現中間多了一段
+           非同步讀取——**那段時間不該是一片空白**，因為使用者分不出
+           「還在載入」跟「壞掉了」。
+           純 CSS 寫在這裡而不是做成 React 元件：它必須在 bundle 下載完之前就看得到。 */
+        .boot {
+            position: fixed; inset: 0;
+            display: flex; align-items: center; justify-content: center; gap: 12px;
+            font: 500 14px/1.5 system-ui, -apple-system, "Noto Sans TC", sans-serif;
+            color: #6b7280; letter-spacing: 0.04em;
+        }
+        .boot::before {
+            content: ''; width: 14px; height: 14px; border-radius: 50%;
+            border: 2px solid rgba(232, 184, 75, 0.25); border-top-color: #e8b84b;
+            animation: boot-spin 0.7s linear infinite;
+        }
+        @keyframes boot-spin { to { transform: rotate(360deg); } }
+        /* 會轉的東西對前庭敏感的人不友善，關掉動畫時只留靜態的圈 */
+        @media (prefers-reduced-motion: reduce) { .boot::before { animation: none; } }
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot">載入營運資料…</div></div>
 </body>
 </html>

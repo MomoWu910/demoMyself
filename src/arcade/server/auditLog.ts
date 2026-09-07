@@ -1,5 +1,6 @@
 import { actorName } from './auth';
 import { OPS_CHANNEL } from './opsChannel';
+import { drop, hydrate, persist } from './storage';
 
 /**
  * 操作稽核：**後台每一個會改到資料的動作，在這裡留下一筆說得出前後值的紀錄。**
@@ -79,7 +80,7 @@ export interface AuditEntry {
     note: string;
 }
 
-const STORAGE_KEY = 'arcade:audit';
+// 儲存位置在 storage.ts
 /**
  * 保留上限。
  *
@@ -110,8 +111,12 @@ function getChannel(): BroadcastChannel | null {
         channel = new BroadcastChannel(OPS_CHANNEL);
         channel.onmessage = (ev: MessageEvent<{ kind?: string }>) => {
             if (ev.data?.kind !== 'audit') return;
-            cache = null;
-            for (const fn of listeners) fn();
+            // **重讀，不是設成 null。** 讀取是同步的（見 storage.ts），
+            // 把快取設成 null 之後 `load()` 只會回空陣列，
+            // 於是別的分頁一改動，這一頁的資料就整個不見了
+            void init().then(() => {
+                for (const fn of listeners) fn();
+            });
         };
     } catch {
         channel = null;
@@ -119,30 +124,25 @@ function getChannel(): BroadcastChannel | null {
     return channel;
 }
 
-function load(): AuditEntry[] {
-    if (cache) return cache;
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        cache = raw ? (JSON.parse(raw) as AuditEntry[]) : [];
-    } catch {
-        cache = [];
-    }
+/** 從持久層灌進記憶體。啟動時 await 一次 */
+export async function init(): Promise<void> {
+    cache = await hydrate<AuditEntry>('audit');
     // 序號接續既有紀錄，不是從 0 重來——重新整理之後寫的紀錄，
     // 序號不能比重整前的還小
     for (const r of cache) {
         if (r.seq >= seq) seq = r.seq + 1;
     }
-    return cache;
 }
 
-function persist(rows: AuditEntry[]): void {
+function load(): AuditEntry[] {
+    return (cache ??= []);
+}
+
+function save(rows: AuditEntry[]): void {
     cache = rows;
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
-    } catch {
-        /* 寫不進去也不能影響操作本身——稽核失敗不該讓營運動作跟著失敗。
-           真實系統這裡要往監控送一個警報，因為「稽核寫不進去」本身是重大事件 */
-    }
+    // 寫不進去也不能影響操作本身——稽核失敗不該讓營運動作跟著失敗。
+    // 真實系統這裡要往監控送一個警報，因為「稽核寫不進去」本身是重大事件
+    persist('audit', rows);
 }
 
 /**
@@ -169,7 +169,7 @@ export function record(entry: Omit<AuditEntry, 'id' | 'at' | 'seq' | 'actor'> & 
     };
 
     const all = load().concat(row);
-    persist(all.length > MAX_ROWS ? all.slice(all.length - MAX_ROWS) : all);
+    save(all.length > MAX_ROWS ? all.slice(all.length - MAX_ROWS) : all);
 
     getChannel()?.postMessage({ kind: 'audit' });
     for (const fn of listeners) fn();
@@ -224,13 +224,8 @@ export function count(): number {
  * 資料被清掉之後，「是誰清的」還在。
  */
 export function clear(): void {
-    cache = null;
-    try {
-        localStorage.removeItem(STORAGE_KEY);
-    } catch {
-        /* 同上 */
-    }
     cache = [];
+    drop('audit');
 }
 
 /**

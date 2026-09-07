@@ -62,8 +62,9 @@ export interface Player {
 import * as audit from './auditLog';
 import { can } from './auth';
 import { OPS_CHANNEL } from './opsChannel';
+import { drop, hydrate, persist } from './storage';
 
-const STORAGE_KEY = 'arcade:players';
+// 儲存位置在 storage.ts
 
 /**
  * 遊戲那一端正在玩的那個帳號。
@@ -96,10 +97,12 @@ function getChannel(): BroadcastChannel | null {
         channel = new BroadcastChannel(OPS_CHANNEL);
         channel.onmessage = (ev: MessageEvent<{ kind?: string }>) => {
             if (ev.data?.kind !== 'players') return;
-            // 作廢快取而不是把新資料併進來：localStorage 才是真相來源，
-            // 記憶體只是它的快取（同 ledger 的處理）
-            cache = null;
-            for (const fn of listeners) fn();
+            // **重讀，不是設成 null。** 讀取是同步的（見 storage.ts），
+            // 把快取設成 null 之後 `load()` 只會回空陣列，
+            // 於是別的分頁一改動，這一頁的資料就整個不見了
+            void init().then(() => {
+                for (const fn of listeners) fn();
+            });
         };
     } catch {
         channel = null;
@@ -114,26 +117,19 @@ export function subscribe(fn: () => void): () => void {
     return () => listeners.delete(fn);
 }
 
+/** 從持久層灌進記憶體。啟動時 await 一次 */
+export async function init(): Promise<void> {
+    cache = await hydrate<Player>('players');
+}
+
 function load(): Player[] {
-    if (cache) return cache;
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        cache = raw ? (JSON.parse(raw) as Player[]) : [];
-    } catch {
-        cache = [];
-    }
-    return cache;
+    return (cache ??= []);
 }
 
 function save(rows: Player[]): void {
-    // 記憶體先更新、持久化失敗也不回頭改它——理由同 ledger.save()：
-    // localStorage 不可用（Node 驗證腳本、無痕視窗）不該讓這次工作階段的資料消失
+    // 記憶體先更新、持久化失敗也不回頭改它——理由同 ledger.save()
     cache = rows;
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
-    } catch {
-        /* 玩家名冊比注單小得多，寫不進去通常代表整個 storage 都不能用 */
-    }
+    persist('players', rows);
 }
 
 /** 全部玩家。名冊只有幾十列，不需要分頁——真實系統上百萬列時這支要換成分頁查詢 */
@@ -213,13 +209,8 @@ export function update(id: string, patch: Partial<Pick<Player, 'vipLevel' | 'sta
 }
 
 export function clear(): void {
-    cache = null;
-    try {
-        localStorage.removeItem(STORAGE_KEY);
-    } catch {
-        /* 同上 */
-    }
     cache = [];
+    drop('players');
 }
 
 /**

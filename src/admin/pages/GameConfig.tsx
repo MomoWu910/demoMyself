@@ -8,6 +8,7 @@ import * as Yup from 'yup';
 import type { GameId } from '../../arcade/net/protocol';
 import { clear as clearLedger, count as ledgerCount } from '../../arcade/server/ledger';
 import { count as playerCount } from '../../arcade/server/players';
+import { backendName } from '../../arcade/server/storage';
 import { count as txCount } from '../../arcade/server/txLedger';
 import { forGame, reset as resetOps, subscribe as subscribeOps, update, type GameOps } from '../../arcade/server/opsConfig';
 import { GAME_IDS, GAME_LABEL, money } from '../format';
@@ -176,6 +177,13 @@ export function GameConfigPage(): React.ReactElement {
     const role = useRole();
     const manageable = can('data.manage');
     const opsWritable = can('ops.write');
+
+    // 資料存在哪裡要讓人看得到。**「我的資料放在哪」是使用者會問的問題**，
+    // 尤其在一個把資料庫放在瀏覽器裡的 demo
+    const [backend, setBackend] = React.useState('偵測中…');
+    React.useEffect(() => {
+        void backendName().then(setBackend);
+    }, []);
     const [toast, setToast] = React.useState('');
 
     return (
@@ -199,6 +207,10 @@ export function GameConfigPage(): React.ReactElement {
             <Paper sx={{ p: 2.5 }}>
                 <Typography sx={{ fontWeight: 600, mb: 0.5 }}>資料工具</Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.8 }}>
+                    注單、金流、玩家與稽核四張表存在 <strong>{backend}</strong>；
+                    營運設定（上面那四張卡）留在 localStorage——
+                    它不到 1KB，而且限紅檢查是在下注的同步流程裡跑的，不能等非同步讀取。
+                    <br />
                     種子資料是用四款玩法真正的規則跑出來的，亂數有固定種子，
                     所以重新產生會得到同一份資料。
                     <br />

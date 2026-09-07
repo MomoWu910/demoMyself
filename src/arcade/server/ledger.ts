@@ -2,6 +2,7 @@ import type { GameId } from '../net/protocol';
 import * as audit from './auditLog';
 import { can } from './auth';
 import { AUDIT_GAME_LABEL, OPS_CHANNEL, type OpsMessage } from './opsChannel';
+import { drop, hydrate, persist } from './storage';
 import { record as recordTx } from './txLedger';
 
 /**
@@ -167,7 +168,7 @@ export interface LedgerStats {
     }>;
 }
 
-const STORAGE_KEY = 'arcade:ledger';
+// 儲存位置與遷移都搬到 storage.ts 了（見那支檔案的 LEGACY_KEY）
 /**
  * 保留上限。localStorage 通常只有 5MB，一筆注單 JSON 大約 250 bytes。
  *
@@ -224,19 +225,36 @@ function getChannel(): BroadcastChannel | null {
         channel.onmessage = (ev: MessageEvent<OpsMessage>) => {
             const msg = ev.data;
             if (msg?.kind === 'bets') {
-                // 別的分頁寫進來的注單：把快取作廢，下次查詢重讀 localStorage。
-                // 不直接把 msg.rows 併進快取，是因為那樣兩邊的順序可能不一致——
-                // localStorage 才是唯一的真相來源，記憶體只是它的快取。
-                cache = null;
-                // opsChannel 不認識 BetRecord（它是相依圖的葉節點，不該知道任何一張表的內容），
-                // 所以型別在這裡收斂。**斷言只出現在邊界上**是刻意的：
-                // 跨分頁傳來的資料本來就只能靠約定，而約定寫在 OpsMessage 那個聯合型別裡
-                for (const fn of listeners) fn(msg.rows as BetRecord[]);
+                /**
+                 * 別的分頁寫進來的注單，直接**接在快取後面**。
+                 *
+                 * localStorage 時代這裡是把快取設成 null、下次查詢再重讀——
+                 * 因為那時候重讀是同步的，什麼時候讀都拿得到完整資料。
+                 * **換成 IndexedDB 之後那個寫法會變成災難**：快取一旦設成 null，
+                 * 同步的 `load()` 就只能回空陣列，於是後台側欄的注單總數
+                 * 在遊戲那端下第一注的瞬間變成 0。
+                 * （這個 bug 真的發生了，而且畫面上看起來像「資料被清掉了」。）
+                 *
+                 * 改成 append 是對的，不只是比較快：注單表是 append-only，
+                 * 而廣播帶的正好是剛寫進去的那幾筆，順序就是寫入順序。
+                 *
+                 * opsChannel 不認識 BetRecord（它是相依圖的葉節點，不該知道任何一張表的內容），
+                 * 所以型別在這裡收斂。**斷言只出現在邊界上**是刻意的。
+                 */
+                const rows = msg.rows as BetRecord[];
+                cache = load().concat(rows);
+                for (const r of rows) {
+                    if (r.seq >= seq) seq = r.seq + 1;
+                }
+                for (const fn of listeners) fn(rows);
             } else if (msg?.kind === 'bets.void') {
-                cache = null;
-                for (const fn of listeners) fn([]);
+                // 作廢改的是既有那一列的狀態，不是新增——併不進來，只能重讀。
+                // 重讀是非同步的，所以通知訂閱者要等它完成，否則畫面會先用舊資料重繪一次
+                void init().then(() => {
+                    for (const fn of listeners) fn([]);
+                });
             } else if (msg?.kind === 'cleared') {
-                cache = null;
+                cache = [];
                 for (const fn of listeners) fn([]);
             }
         };
@@ -246,44 +264,41 @@ function getChannel(): BroadcastChannel | null {
     return channel;
 }
 
-function load(): BetRecord[] {
-    if (cache) return cache;
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        cache = raw ? (JSON.parse(raw) as BetRecord[]) : [];
-    } catch {
-        cache = [];
-    }
+/**
+ * 從持久層灌進記憶體。**啟動時 await 一次**（見 admin/index.tsx 的 bootstrap）。
+ *
+ * 沒呼叫的話 `load()` 會回空陣列——那正是驗證腳本要的行為：
+ * Node 底下沒有 IndexedDB 也沒有 localStorage，本來就從空的開始。
+ */
+export async function init(): Promise<void> {
+    cache = await hydrate<BetRecord>('ledger');
     // 序號接續既有資料。重新整理之後寫的注單，序號不能比重整前的還小，
     // 否則新注單會排到舊注單前面去
     for (const r of cache) {
         if (r.seq >= seq) seq = r.seq + 1;
     }
-    return cache;
+}
+
+function load(): BetRecord[] {
+    // **讀取永遠是同步的。** 持久層是非同步的，但它只在啟動時被等一次，
+    // 之後這裡讀的都是記憶體（理由見 server/storage.ts 的檔頭）
+    return (cache ??= []);
 }
 
 function save(rows: BetRecord[]): void {
-    // **記憶體永遠是完整的那一份。** 這行在 try 外面是刻意的：
+    // **記憶體永遠是完整的那一份，而且先更新。**
     // 持久化失敗是儲存層的問題，不該讓這次工作階段的資料跟著消失。
     //
-    // 原本的寫法把砍半後的結果也寫回 cache，結果是——只要 localStorage 不可用
-    // （Node 底下的驗證腳本、瀏覽器停用了網站資料、無痕視窗的某些設定），
+    // 原本的寫法把「配額爆了就砍一半」的結果也寫回 cache，結果是——
+    // 只要 localStorage 不可用（Node 驗證腳本、無痕視窗、停用網站資料），
     // **每寫一次注單就把記憶體裡的資料砍掉一半**。
-    // 這個 bug 在正常瀏覽器裡完全看不出來，是 `yarn check:admin` 抓出來的：
+    // 那個 bug 在正常瀏覽器裡完全看不出來，是 `yarn check:admin` 抓出來的：
     // 寫入 5 筆卻只查得到 2 筆。
+    //
+    // 換成 IndexedDB 之後連「砍一半重試」都不需要了：容量大了兩個量級，
+    // 而降級邏輯集中在 storage.ts 一個地方。
     cache = rows;
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
-    } catch {
-        // 可能是配額爆了。丟掉最舊的一半再試一次**持久化**——
-        // 注單這種資料新的比舊的有價值，而且舊的在真實系統裡本來就會被搬去冷儲存。
-        // 記憶體中的 cache 不動。
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(rows.slice(-Math.floor(rows.length / 2))));
-        } catch {
-            /* 真的寫不進去就只留記憶體，不讓它影響遊戲進行 */
-        }
-    }
+    persist('ledger', rows);
 }
 
 /** 產生注單號。時間戳 + 序號，同一毫秒內連開多筆也不會撞號 */
@@ -499,7 +514,8 @@ export function subscribe(fn: (rows: BetRecord[]) => void): () => void {
 
 /** 清空。後台的「清除資料」用，會廣播讓遊戲那一頁也知道 */
 export function clear(): void {
-    save([]);
+    cache = [];
+    drop('ledger');
     getChannel()?.postMessage({ kind: 'cleared' } satisfies OpsMessage);
 }
 
