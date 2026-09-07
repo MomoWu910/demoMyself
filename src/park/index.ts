@@ -2,7 +2,7 @@ import * as T from 'three';
 import { createPark } from './scene';
 import { createControls } from './input';
 import { createMaps } from './map';
-import { movePlayer, nearby, place, PLACES, STARS, type PlaceId, type Point } from './world';
+import { movePlayer, nearby, nearbySeat, stepJump, JUMP_SPEED, place, PLACES, STARS, type PlaceId, type Point, type Seat, type JumpMotion } from './world';
 import { mountReveal } from '../shell/reveal';
 import './style.css';
 
@@ -27,7 +27,9 @@ function boot(view: T.WebGLRenderer): void {
     view.outputColorSpace = T.SRGBColorSpace; view.toneMapping = T.ACESFilmicToneMapping; view.toneMappingExposure = 1.15;
     const park = createPark(), camera = new T.PerspectiveCamera(52, 1, .1, 240);
     let position: Point = { x: 0, z: 29 }, yaw = 0, pitch = .18;
-    let started = false, travelling = false, ride: { id: 'wheel' | 'carousel'; start: number } | null = null;
+    let started = false, travelling = false, ride: { id: 'wheel' | 'carousel' } | null = null;
+    let seated: Seat | null = null;
+    let jumpMotion: JumpMotion = { height: 0, velocity: 0 };
     let worldTime = 0, last = performance.now(), toastTimer = 0, cameraReady = false;
     const collected = new Set<number>();
     // Only the park's return point is saved. Browser storage restrictions never prevent entry.
@@ -37,8 +39,8 @@ function boot(view: T.WebGLRenderer): void {
     const active = (): boolean => started && !welcome.open && !mapDialog.open && !travelling && !document.hidden;
     const controls = createControls(canvas, {
         active, rotated: () => rotated, touch: isTouch,
-        look(dx, dy) { if (!ride) { yaw -= dx * .0035; pitch = T.MathUtils.clamp(pitch + dy * .0027, -.12, 1.05); } },
-        interact, map: toggleMap,
+        look(dx, dy) { const sensitivity = isTouch() ? .002 : .0012; yaw -= dx * sensitivity; pitch = T.MathUtils.clamp(pitch + dy * sensitivity * .75, -.12, 1.05); },
+        interact, map: toggleMap, jump,
     });
     function toast(message: string): void {
         clearTimeout(toastTimer); el('toast').textContent = message; el('toast').classList.add('visible');
@@ -65,6 +67,7 @@ function boot(view: T.WebGLRenderer): void {
     el('start').addEventListener('click', () => { started = true; welcome.close(); canvas.focus({ preventScroll: true }); controls.capture(); });
     el('resume').addEventListener('click', () => { canvas.focus(); controls.capture(); });
     el('interact').addEventListener('click', interact); el('touch-action').addEventListener('click', interact);
+    el('touch-jump').addEventListener('click', jump);
     el('fullscreen').addEventListener('click', async () => {
         try {
             if (document.fullscreenElement) { await document.exitFullscreen(); return; }
@@ -79,12 +82,31 @@ function boot(view: T.WebGLRenderer): void {
     welcome.addEventListener('cancel', (e) => { if (!started) e.preventDefault(); controls.clear(); });
     function leaveRide(): void {
         if (!ride) return;
-        position = { ...place(ride.id).arrival }; ride = null; park.avatar.root.visible = true; cameraReady = false;
+        position = { ...place(ride.id).arrival }; ride = null;
+        park.avatar.root.scale.setScalar(1); park.avatar.root.position.set(position.x, 0, position.z); cameraReady = false;
         toast('旅程結束，繼續探索吧！');
+    }
+    function stand(): void {
+        if (!seated) return;
+        position = { ...seated.arrival }; seated = null; controls.clear();
+        park.avatar.root.position.set(position.x, 0, position.z);
+    }
+    function jump(): void {
+        if (!active() || ride || jumpMotion.height > 0 || jumpMotion.velocity > 0) return;
+        if (seated) stand();
+        jumpMotion = { height: 0, velocity: JUMP_SPEED };
     }
     function interact(): void {
         if (!active()) return;
         if (ride) { leaveRide(); return; }
+        if (seated) { stand(); return; }
+        if (jumpMotion.height > 0 || jumpMotion.velocity > 0) return;
+        const seat = nearbySeat(position);
+        if (seat) {
+            controls.clear(); seated = seat; position = { ...seat.position };
+            park.avatar.root.position.set(position.x + Math.sin(seat.yaw) * .1, .32, position.z + Math.cos(seat.yaw) * .1); park.avatar.root.rotation.y = seat.yaw;
+            toast('坐下休息一下。F 起身，空白鍵跳起。'); return;
+        }
         const p = nearby(position); if (!p) return;
         switch (p.id) {
             case 'casino':
@@ -92,7 +114,7 @@ function boot(view: T.WebGLRenderer): void {
                 try { sessionStorage.setItem('park:return', 'casino'); } catch { /* private browsing */ }
                 location.href = './arcade.html'; break;
             case 'wheel': case 'carousel':
-                controls.clear(); ride = { id: p.id, start: worldTime }; park.avatar.root.visible = false; cameraReady = false;
+                controls.clear(); ride = { id: p.id }; park.avatar.root.visible = true; park.avatar.root.scale.setScalar(.55); cameraReady = false;
                 toast(`${p.name}出發！隨時按 F 或互動鍵下車。`); break;
             case 'fountain': park.wish(); toast('✦ 願望已送達。今天也會有好事發生！'); break;
             case 'tea': park.avatar.balloon.visible = !park.avatar.balloon.visible; toast(park.avatar.balloon.visible ? '送你一顆棉花糖氣球，帶著它去散步吧！' : '氣球先寄放在茶屋，隨時可以回來拿。'); break;
@@ -104,6 +126,8 @@ function boot(view: T.WebGLRenderer): void {
         release(); travelling = true; el('travel-fade').classList.add('active');
         window.setTimeout(() => {
             if (ride) leaveRide();
+            if (seated) stand();
+            jumpMotion = { height: 0, velocity: 0 };
             position = { ...place(id).arrival }; yaw = id === 'gate' ? Math.PI : 0; pitch = .18;
             park.avatar.root.position.set(position.x, 0, position.z); park.avatar.root.rotation.y = yaw + Math.PI;
             cameraReady = false; if (mapDialog.open) closeMap(); maps.update(position, yaw, collected);
@@ -113,15 +137,17 @@ function boot(view: T.WebGLRenderer): void {
     const cameraRay = new T.Raycaster(), target = new T.Vector3(), desired = new T.Vector3(), direction = new T.Vector3();
     function updateCamera(dt: number): void {
         if (ride) {
-            if (ride.id === 'wheel') {
-                desired.copy(park.wheelSeat(worldTime)); target.set(0, 2, 0);
-            } else {
-                const a = worldTime * .22; desired.set(28 + Math.cos(a) * 5.5, 3.5, -14 - Math.sin(a) * 5.5); target.set(28 + Math.cos(a + .9) * 14, 3, -14 - Math.sin(a + .9) * 14);
-            }
+            const seat = park.rideSeat(ride.id, worldTime), distance = isTouch() ? 6.2 : 5.6;
+            park.avatar.root.position.copy(seat.position); park.avatar.root.rotation.y = seat.yaw;
+            target.copy(seat.position); target.y += .8;
+            desired.set(target.x + Math.sin(yaw) * Math.cos(pitch) * distance,
+                target.y + Math.sin(pitch) * distance,
+                target.z + Math.cos(yaw) * Math.cos(pitch) * distance);
         } else {
-            target.set(position.x, 1.7, position.z);
+            const followY = 1.7 + jumpMotion.height * .55;
+            target.set(position.x, followY, position.z);
             const distance = isTouch() ? 8.7 : 8;
-            desired.set(position.x + Math.sin(yaw) * Math.cos(pitch) * distance, 1.7 + Math.sin(pitch) * distance, position.z + Math.cos(yaw) * Math.cos(pitch) * distance);
+            desired.set(position.x + Math.sin(yaw) * Math.cos(pitch) * distance, followY + Math.sin(pitch) * distance, position.z + Math.cos(yaw) * Math.cos(pitch) * distance);
             // Raycast the opaque building shells, then keep the camera above the ground.
             direction.copy(desired).sub(target); const length = direction.length();
             cameraRay.set(target, direction.normalize()); cameraRay.far = length;
@@ -139,12 +165,13 @@ function boot(view: T.WebGLRenderer): void {
         if (document.hidden) return;
         worldTime += dt;
         let moving = 0;
-        if (active() && !ride) {
+        if (active() && !ride && !seated) {
             const input = controls.movement(); moving = Math.hypot(input.x, input.y);
             const dx = (Math.cos(yaw) * input.x - Math.sin(yaw) * input.y) * 7 * dt;
             const dz = (-Math.sin(yaw) * input.x - Math.cos(yaw) * input.y) * 7 * dt;
             position = movePlayer(position, dx, dz);
-            park.avatar.root.position.set(position.x, 0, position.z);
+            jumpMotion = stepJump(jumpMotion, dt);
+            park.avatar.root.position.set(position.x, jumpMotion.height, position.z);
             if (moving > .05) {
                 const angle = Math.atan2(dx, dz), old = park.avatar.root.rotation.y;
                 park.avatar.root.rotation.y += Math.atan2(Math.sin(angle - old), Math.cos(angle - old)) * Math.min(dt * 12, 1);
@@ -157,14 +184,17 @@ function boot(view: T.WebGLRenderer): void {
                 }
             });
         }
-        if (ride && worldTime - ride.start > 25) leaveRide();
-        park.update(worldTime, moving); updateCamera(dt);
-        const current = nearby(position), prompt = ride ? '結束搭乘' : current?.action ?? '';
+        park.update(worldTime, moving, !!seated || !!ride, jumpMotion.height); updateCamera(dt);
+        const airborne = jumpMotion.height > 0 || jumpMotion.velocity > 0;
+        const current = nearby(position), prompt = ride ? '結束搭乘' : seated ? '起身，繼續散步' : airborne ? '' : nearbySeat(position) ? '坐下休息' : current?.action ?? '';
         if (prompt !== previousPrompt) {
             el('interact').hidden = !prompt; el('interaction-label').textContent = prompt;
             el<HTMLButtonElement>('touch-action').disabled = !prompt; previousPrompt = prompt;
         }
         el('resume').hidden = !active() || !!document.pointerLockElement || isTouch() || !!ride;
+        el('cursor-hint').hidden = !controls.cursorVisible();
+        el<HTMLButtonElement>('touch-jump').disabled = !!ride || airborne;
+        el('motion-label').textContent = ride ? '搭乘中 · 自由環視' : seated ? '休息中 · F 起身' : airborne ? '跳躍中' : '自由探索';
         mapTick += dt;
         if (mapTick > .1) {
             mapTick = 0; maps.update(position, yaw, collected);

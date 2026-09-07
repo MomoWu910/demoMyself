@@ -1,8 +1,9 @@
-import { PLACES, STARS, type Point, type PlaceId } from './world';
+import { PLACES, STARS, PATHS, SEATS, type Point, type PlaceId } from './world';
 
 const base = `<rect x="-50" y="-50" width="100" height="100" rx="12" fill="#dbead2"/>
 <path d="M-45-39Q0-54 45-39V40Q0 54-45 40Z" fill="#c3dcba"/>
-<g fill="none" stroke="#fff4dc" stroke-width="7" stroke-linejoin="round"><path d="M0 43V-24M-38 0H38M-28-10V29H28V-10ZM-28-10H28"/></g>
+<g fill="#fff4dc">${PATHS.map(p => `<rect x="${p.x-p.w/2}" y="${p.z-p.d/2}" width="${p.w}" height="${p.d}"/>`).join('')}</g>
+<g fill="#67968f">${SEATS.map(s => `<rect x="-1.55" y="-.6" width="3.1" height="1.2" rx=".3" transform="translate(${s.position.x} ${s.position.z}) rotate(${-s.yaw*180/Math.PI})"/>`).join('')}</g>
 <circle r="9.5" fill="#f5e7ca"/><circle r="4.5" fill="#8acbd0" stroke="#fff9ed" stroke-width="1.2"/>
 <rect x="-10" y="-39" width="20" height="16" rx="3" fill="#b5a0d0" stroke="#fffaf1" stroke-width="1"/>
 <circle cx="-28" cy="-17" r="8" fill="#e7b2c4" stroke="#fffaf1" stroke-width="1"/><path d="M-34-17h12m-6-6v12m-4-10l8 8m-8 0l8-8" stroke="#fff4e9" stroke-width=".8"/>
