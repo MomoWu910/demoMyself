@@ -140,6 +140,19 @@ function rangeStart(r: Range): number {
     return d.getTime() - (rangeDays(r) - 1) * DAY;
 }
 
+/** 熱區圖固定看幾天。四週＝每個星期幾各四筆樣本，剛好夠看出形狀又不會拖太久 */
+const HEAT_DAYS = 28;
+
+/**
+ * 「還沒到」的斜線底紋。
+ *
+ * 用底紋而不是換顏色，是因為**顏色這個維度已經被用掉了**——
+ * 深淺代表投注量。再拿顏色去表達第二件事，兩個訊息就會互相干擾：
+ * 一個淺色的格子到底是「量少」還是「還沒到」？
+ * 圖案是另一個維度，疊上去不會搶走色階的意思。
+ */
+const HATCH = 'repeating-linear-gradient(45deg, transparent 0 3px, rgba(255,255,255,0.14) 3px 6px)';
+
 /**
  * 時段熱區：星期 × 小時。
  *
@@ -150,21 +163,44 @@ function rangeStart(r: Range): number {
  * 逐日長條圖看得到「哪一天量大」，但排班、推播時間、維護視窗要看的是
  * 「禮拜幾的幾點量大」——而那兩件事在同一份資料裡，只是分桶方式不同。
  *
- * 一樣不裝圖表套件：這是 7×24 個格子加一個色階，
- * CSS grid 就做得完，而且**格子圖最麻煩的部分本來就不是繪製，是色階**——
+ * ---
+ *
+ * **它刻意不跟著上方的時間範圍走，固定看近 28 天。**
+ *
+ * 第一版讓它跟著範圍，結果在「近 7 日」下會出現一列幾乎全空的格子，
+ * 而那看起來完全像壞掉了。真因有兩層：
+ * 1. 七天的區間裡**每個星期幾只有一天**，所以「週一」那一列就只有那一天
+ * 2. 而那一天如果剛好是今天，它還沒過完——種子只灌到「當下」為止
+ *    （見 admin/seed.ts 的 `elapsed`：一天才剛開始就灌滿全天的量，
+ *    「今日投注」會比昨天還高，那是假的）
+ *
+ * 加提示文字只是把症狀說出來，沒有解決它。真正的問題是**問錯了問題**：
+ * 這張圖問的是「通常什麼時候人多」，那跟使用者現在篩的是哪七天無關。
+ * 所以它自己決定要看多久——四週，每個星期幾各四筆樣本。
+ *
+ * 一樣不裝圖表套件：7×24 個格子加一個色階，CSS grid 就做得完。
+ * 而格子圖最麻煩的部分本來就不是繪製，是色階——
  * 線性色階會讓少數幾個尖峰把其他格子全部壓成同一個顏色。
  */
-function HourHeatmap(props: { cells: number[][]; max: number; spanDays: number }): React.ReactElement {
-    const { cells, max, spanDays } = props;
+function HourHeatmap(props: { cells: number[][]; max: number }): React.ReactElement {
+    const { cells, max } = props;
     const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
+
     /**
-     * 區間太短的時候要說出來。
+     * 今天還沒過完的那些格子要標出來。
      *
-     * **七天資料的「星期 × 小時」圖，每個星期幾只有一天的資料**——
-     * 那張圖畫得出來，但它顯示的是「上週三下午」而不是「週三下午通常如何」，
-     * 而看的人會把它當成後者。要看出週期性至少要兩三輪，也就是十四天以上。
+     * **不是整列標，是只標「還沒到的那幾個小時」。**
+     *
+     * 因為在 28 天的視窗裡，今天那一列還疊著前三週同一個星期幾的資料——
+     * 「週一 15 點」這一格有 8/17、8/24、8/31 三筆，只是少了今天那一筆。
+     * 把整列標成「進行中」會誤導成「這一列都不能看」，而它其實只是少四分之一的樣本。
+     *
+     * 這是資料視覺化的一條通則：**未完成的區間要看得出來是未完成，
+     * 而它跟「這裡是零」是兩件完全不同的事。**
      */
-    const thin = spanDays < 14;
+    const now = new Date();
+    const todayDow = now.getDay();
+    const nowHour = now.getHours();
 
     /**
      * 色階用平方根，不是線性。
@@ -179,13 +215,25 @@ function HourHeatmap(props: { cells: number[][]; max: number; spanDays: number }
     return (
         <Paper sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, flexWrap: 'wrap' }}>
-                <Typography variant="caption" color="text.secondary">投注時段分布（星期 × 小時）</Typography>
-                {thin && (
-                    <Typography variant="caption" color="warning.main">
-                        這個區間只涵蓋 {spanDays} 天，每個星期幾最多只有一天的資料——
-                        看得到「上週三下午」，但看不出「週三下午通常如何」。要看週期性請拉到 14 天以上。
-                    </Typography>
-                )}
+                <Typography variant="caption" color="text.secondary">
+                    投注時段分布（星期 × 小時）
+                </Typography>
+                <Typography variant="caption" color="text.disabled">
+                    固定看近 {HEAT_DAYS} 天，不跟著上面的時間範圍——
+                    「週三下午通常如何」這個問題，跟你現在篩的是哪幾天無關
+                </Typography>
+                <Box sx={{ flex: 1 }} />
+                {/* 圖例。斜線是什麼意思要說出來，不然它只是一個看不懂的花紋 */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Box
+                        sx={{
+                            width: 14, height: 14, borderRadius: '2px',
+                            background: (t) => alpha(t.palette.text.primary, 0.05),
+                            backgroundImage: HATCH,
+                        }}
+                    />
+                    <Typography variant="caption" color="text.disabled">今天還沒到的時段</Typography>
+                </Box>
             </Box>
             <Box sx={{ display: 'flex', gap: 0.5, mt: 1.5 }}>
                 <Box sx={{ display: 'grid', gridTemplateRows: 'repeat(7, 18px)', gap: '2px', mr: 0.5 }}>
@@ -198,18 +246,28 @@ function HourHeatmap(props: { cells: number[][]; max: number; spanDays: number }
                 <Box sx={{ flex: 1 }}>
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gridTemplateRows: 'repeat(7, 18px)', gap: '2px' }}>
                         {cells.map((rowCells, day) =>
-                            rowCells.map((v, hour) => (
-                                <Tooltip key={`${day}-${hour}`} title={`週${WEEK[day]} ${hour}:00 — 投注 ${money(v)}`}>
-                                    <Box
-                                        sx={{
-                                            borderRadius: '2px',
-                                            background: (t) => (v > 0
-                                                ? alpha(t.palette.primary.main, 0.08 + intensity(v) * 0.92)
-                                                : alpha(t.palette.text.primary, 0.05)),
-                                        }}
-                                    />
-                                </Tooltip>
-                            )),
+                            rowCells.map((v, hour) => {
+                                // 今天、而且這個小時還沒到 → 這一格少了今天那一份樣本
+                                const pending = day === todayDow && hour > nowHour;
+                                return (
+                                    <Tooltip
+                                        key={`${day}-${hour}`}
+                                        title={pending
+                                            ? `週${WEEK[day]} ${hour}:00 — 投注 ${money(v)}（今天這個時段還沒到，只有前 ${Math.floor(HEAT_DAYS / 7) - 1} 週的資料）`
+                                            : `週${WEEK[day]} ${hour}:00 — 投注 ${money(v)}`}
+                                    >
+                                        <Box
+                                            sx={{
+                                                borderRadius: '2px',
+                                                background: (t) => (v > 0
+                                                    ? alpha(t.palette.primary.main, 0.08 + intensity(v) * 0.92)
+                                                    : alpha(t.palette.text.primary, 0.05)),
+                                                backgroundImage: pending ? HATCH : undefined,
+                                            }}
+                                        />
+                                    </Tooltip>
+                                );
+                            }),
                         )}
                     </Box>
                     <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: '2px', mt: 0.5 }}>
@@ -261,13 +319,13 @@ export function DashboardPage(): React.ReactElement {
     // 分桶邏輯放在這裡是因為它是**顯示**的需求（時區、一天從幾點算起），
     // 不是資料層該決定的事
     /**
-     * 逐日分桶與時段熱區。**一次查詢餵兩張圖。**
+     * 逐日分桶。跟著上方選的時間範圍走。
      *
-     * 兩張圖看的是同一批注單，只是分桶方式不同（一個按自然日、一個按星期×小時）。
-     * 各查一次的話，中間如果有新注單進來，兩張圖會對不起來——
-     * 而那種不一致沒有人會懷疑是查了兩次造成的。
+     * （這裡原本跟熱區圖共用一次查詢，理由是「兩張圖看同一批注單，
+     * 各查一次會對不起來」。熱區圖改成固定 28 天之後那個理由就不成立了——
+     * **它們本來就在看不同的區間**，共用查詢反而是錯的。）
      */
-    const { days, heat, heatMax } = React.useMemo(() => {
+    const days = React.useMemo(() => {
         const startDay = new Date(from);
         startDay.setHours(0, 0, 0, 0);
         const spanDays = custom
@@ -279,24 +337,37 @@ export function DashboardPage(): React.ReactElement {
             stake: 0,
             payout: 0,
         }));
+
+        for (const r of query({ from, to, page: 0, pageSize: Number.MAX_SAFE_INTEGER }).rows) {
+            const b = buckets[Math.floor((r.settledAt - buckets[0].at) / DAY)];
+            if (!b) continue;
+            b.stake += r.stake;
+            b.payout += r.payout;
+        }
+        return buckets;
+    }, [from, to, custom, range, revision]);
+
+    /**
+     * 時段熱區。**固定近 28 天，不看上方的時間範圍**（理由見 `HourHeatmap`）。
+     *
+     * 所以它的相依只有 `revision`——切換今日／近 7 日／自訂區間都不會讓它重算，
+     * 而那正是它該有的行為：「週三下午通常如何」跟你現在篩哪幾天無關。
+     */
+    const { heat, heatMax } = React.useMemo(() => {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const heatFrom = start.getTime() - (HEAT_DAYS - 1) * DAY;
+
         const cells: number[][] = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
         let max = 0;
-
-        const rows = query({ from, to, page: 0, pageSize: Number.MAX_SAFE_INTEGER }).rows;
-        for (const r of rows) {
-            const idx = Math.floor((r.settledAt - buckets[0].at) / DAY);
-            const b = buckets[idx];
-            if (b) {
-                b.stake += r.stake;
-                b.payout += r.payout;
-            }
+        for (const r of query({ from: heatFrom, page: 0, pageSize: Number.MAX_SAFE_INTEGER }).rows) {
             const d = new Date(r.settledAt);
             const cell = cells[d.getDay()];
             cell[d.getHours()] += r.stake;
             if (cell[d.getHours()] > max) max = cell[d.getHours()];
         }
-        return { days: buckets, heat: cells, heatMax: max };
-    }, [from, to, custom, range, revision]);
+        return { heat: cells, heatMax: max };
+    }, [revision]);
 
     return (
         <Stack spacing={2}>
@@ -396,7 +467,7 @@ export function DashboardPage(): React.ReactElement {
 
             <DailyBars days={days} label={rangeLabel} />
 
-            <HourHeatmap cells={heat} max={heatMax} spanDays={days.length} />
+            <HourHeatmap cells={heat} max={heatMax} />
 
             <Paper>
                 <Box sx={{ px: 2, pt: 2 }}>
