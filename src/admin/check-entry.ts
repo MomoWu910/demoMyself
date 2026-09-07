@@ -14,6 +14,8 @@ export * as auditLog from '../arcade/server/auditLog';
 export * as auth from '../arcade/server/auth';
 export * as storage from '../arcade/server/storage';
 export { bootstrapServerData } from '../arcade/server/bootstrap';
+export { checkLocalBet } from '../arcade/common/betGuard';
+export { arcadeState } from '../arcade/store';
 export * as players from '../arcade/server/players';
 export * as txLedger from '../arcade/server/txLedger';
 export * as seed from './seed';

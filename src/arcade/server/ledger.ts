@@ -280,6 +280,10 @@ export async function init(): Promise<void> {
 }
 
 function load(): BetRecord[] {
+    // 讀取要先確保廣播頻道已建立（理由同 opsConfig.get()）。
+    // 注單這一張比較不容易踩到，因為遊戲端會 `record()` 而那裡本來就會建立頻道——
+    // 但**「碰巧有別的路徑會建立」不是一個能靠的保證**，只讀的頁面就漏了
+    getChannel();
     // **讀取永遠是同步的。** 持久層是非同步的，但它只在啟動時被等一次，
     // 之後這裡讀的都是記憶體（理由見 server/storage.ts 的檔頭）
     return (cache ??= []);

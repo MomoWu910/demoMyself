@@ -27,6 +27,19 @@ export interface ArcadeState {
     error: string | null;
 
     /**
+     * 目前這款玩法的可押區間。**唯一的寫入來源是 server 的 `limits` 封包。**
+     *
+     * 放在外殼 store 而不是各玩法自己的 store，理由跟餘額一樣：
+     * 它是**營運設定**，四款玩法的意義完全相同，而且切換玩法時會被下一則
+     * `limits` 覆蓋掉——各玩法各存一份的話，就有四個地方可以忘記更新。
+     *
+     * 初始值給一個寬的區間而不是 0：連線還沒完成時如果先擋住所有下注，
+     * 玩家會在那半秒裡以為遊戲壞了。**寧可讓 server 擋掉那半秒內的注**，
+     * 也不要在還不知道規則的時候先假設最嚴格的規則。
+     */
+    limits: { minBet: number; maxBet: number };
+
+    /**
      * 提示訊息的 i18n 鍵。跟 `error` 分開是因為**語氣不一樣**。
      *
      * 「餘額不足」是操作失敗，該用紅色攔住視線；「這款還在規劃中」只是回答了一個問題，
@@ -114,6 +127,7 @@ export interface ArcadeState {
 
     setConnection: (s: SocketState) => void;
     setBalance: (n: number) => void;
+    setLimits: (limits: { minBet: number; maxBet: number }) => void;
     setError: (msg: string | null) => void;
     setNotice: (key: string | null) => void;
     setScene: (s: ModuleId | null) => void;
@@ -191,6 +205,9 @@ function loadChipSet(): ChipValue[] {
 export const useArcadeStore = create<ArcadeState>((set) => ({
     connection: 'connecting',
     balance: 0,
+    // 連線完成前給一個寬區間：還不知道規則的時候，先假設最嚴格的規則
+    // 會讓玩家在那半秒裡以為遊戲壞了（見 ArcadeState.limits）
+    limits: { minBet: 0, maxBet: Number.MAX_SAFE_INTEGER },
     error: null,
     notice: null,
     player: loadPlayer(),
@@ -206,6 +223,7 @@ export const useArcadeStore = create<ArcadeState>((set) => ({
 
     setConnection: (connection) => set({ connection }),
     setBalance: (balance) => set({ balance }),
+    setLimits: (limits) => set({ limits }),
     // 兩種提示互斥：後來的那個蓋掉前一個，不要讓兩張卡片同時浮在畫面中間
     setError: (error) => set({ error, notice: null }),
     setNotice: (notice) => set({ notice, error: null }),

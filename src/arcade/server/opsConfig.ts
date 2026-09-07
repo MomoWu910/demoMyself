@@ -137,6 +137,25 @@ function merge(saved: Partial<OpsConfig> | null): OpsConfig {
  * 兩種儲存各有適合的東西，不必為了一致而統一。
  */
 export function get(): OpsConfig {
+    /**
+     * **讀取要先確保廣播頻道已經建立。**
+     *
+     * 這一行是一個真實 bug 的修正，症狀是：後台把限紅從 1000 改成 100，
+     * 遊戲端擋得住；**再改回 1000，遊戲端卻繼續擋**，除非重新整理。
+     *
+     * 真因是 `getChannel()` 是惰性的——只有 `subscribe()`、`update()`、`reset()`
+     * 會呼叫它。而遊戲端只讀設定、既不訂閱也不寫入，
+     * **所以那個分頁的 BroadcastChannel 從來沒有被建立過**，
+     * 於是它收不到任何 `config` 廣播，`cache` 一旦被填充就永遠是那一份。
+     *
+     * 為什麼「改小」那次看起來是生效的：那是第一次讀，cache 還是空的，
+     * 直接從 localStorage 讀到了新值。**一個只在第一次正確的快取，
+     * 比完全不快取更難查**——因為它會讓人以為機制是通的。
+     *
+     * 修法是讓讀取本身也建立頻道：**「我讀了這份資料」隱含「我要它是最新的」**。
+     * `getChannel()` 有 early return，重複呼叫的成本可以忽略。
+     */
+    getChannel();
     if (cache) return cache;
     try {
         const raw = localStorage.getItem(STORAGE_KEY);

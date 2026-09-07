@@ -123,6 +123,10 @@ export async function init(): Promise<void> {
 }
 
 function load(): Player[] {
+    // 讀取要先確保廣播頻道已建立，理由同 opsConfig.get()：
+    // 遊戲端只讀名冊、不訂閱也不寫入，少了這一行它就收不到「帳號被停用」的廣播，
+    // 而症狀是「後台按了停用，遊戲那邊照樣下得了注」
+    getChannel();
     return (cache ??= []);
 }
 

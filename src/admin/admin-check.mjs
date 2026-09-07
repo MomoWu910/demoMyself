@@ -41,7 +41,7 @@ function load(entry) {
 // 三個模組要共用同一份 ledger 狀態，所以整包一起打進來，不能分開 load
 // （分開 load 會各自得到一份獨立的模組實例，record 寫進去的東西 query 讀不到）
 const bundle = load('src/admin/check-entry.ts');
-const { ledger, opsConfig, betSlip, SlotServer, Wallet, rouletteRules, players, txLedger, seed, baseline, i18n, auditLog, auth, storage, bootstrapServerData } = bundle;
+const { ledger, opsConfig, betSlip, SlotServer, Wallet, rouletteRules, players, txLedger, seed, baseline, i18n, auditLog, auth, storage, bootstrapServerData, checkLocalBet, arcadeState } = bundle;
 
 let pass = 0;
 let fail = 0;
@@ -655,6 +655,53 @@ auth.setRole('finance');
 txLedger.record([tx({ player: 'p-x', kind: 'withdraw', amount: -50, status: 'pending', createdAt: T0 })]);
 txLedger.review(txLedger.query({ status: 'pending' }).rows[0].id, 'rejected');
 check('換一個角色，稽核也跟著換', auditLog.query({ action: 'tx.review' }).rows[0].actor, '財務(finance)');
+
+// 這一節改過全域的角色，離開前還原——不還原的話下一節的寫入會被權限擋掉，
+// 而失敗訊息會指向一個完全無關的地方
+auth.reset();
+
+/* ─────────────────────────── 下注的兩層檢查 ─────────────────────────── */
+
+console.log('\n== 前端預檢與後端規則 ==');
+/**
+ * ⚠️ **先把角色重設回來。**
+ *
+ * 上一節的權限測試把角色留在「財務」，而財務沒有 `ops.write`——
+ * 於是這一節的 `opsConfig.update()` 會被自己的權限系統擋掉，設定根本沒改，
+ * 然後測試失敗的訊息會說「前後端判斷不一致」，指向一個完全無關的地方。
+ *
+ * 這是測試之間的狀態洩漏，而它比產品的 bug 更難查：**失敗的症狀
+ * 出現在正確的程式碼上**。每一節開頭把共用狀態重設，是唯一可靠的做法。
+ */
+auth.reset();
+opsConfig.reset();
+opsConfig.update('slot', { minBet: 10, maxBet: 500 });
+
+// 前端拿到的限紅來自 server 推的 limits 封包（見 net/fakeSocket.ts），
+// 這裡直接把 store 設成同一組值來測判斷本身
+arcadeState().setBalance(10000);
+arcadeState().setLimits({ minBet: 10, maxBet: 500 });
+
+check('區間內放行', checkLocalBet(100), null);
+check('低於下限擋下', checkLocalBet(5), 'below_min_bet');
+check('高於上限擋下', checkLocalBet(600), 'above_max_bet');
+// 錢不夠的時候告訴他「超過限紅」是答非所問
+arcadeState().setBalance(50);
+check('餘額不足優先於限紅', checkLocalBet(600), 'insufficient_balance');
+arcadeState().setBalance(10000);
+
+/**
+ * **這一條是重點：兩層檢查對同一筆注要給出同一個答案。**
+ *
+ * 前端擋是體驗、後端擋才是規則，但兩者的判準必須一致——
+ * 不一致的話會出現「前端放行、後端打回」（玩家看到莫名其妙的失敗）
+ * 或「前端擋掉、後端其實允許」（玩家被擋在一條不存在的規則外面）。
+ */
+for (const amount of [5, 10, 100, 500, 501, 600]) {
+    check(`前後端對 ${amount} 的判斷一致`, checkLocalBet(amount), opsConfig.checkBet('slot', amount));
+}
+
+opsConfig.reset();
 
 /* ─────────────────────────── 持久層 ─────────────────────────── */
 

@@ -18,6 +18,7 @@ import { TableButton } from '../../common/ui/TableButton';
 import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import { ONLINE_SEAT, type BaccaratS2C, type OtherBet, type Phase, type SeatInfo } from '../../net/games/baccarat';
+import { checkLocalBet } from '../../common/betGuard';
 import { arcadeState, useArcadeStore } from '../../store';
 import { getLang, onLangChange, setLang, t, type Lang } from '../../../i18n';
 import { buildBigRoad } from './roadmap';
@@ -592,8 +593,12 @@ export class BaccaratModule implements GameModule {
         const st = baccaratState();
         const shell = arcadeState();
         if (st.phase !== 'betting' || shell.connection !== 'open') return;
-        if (amount > shell.balance) {
-            shell.setError('insufficient_balance');
+
+        // 本地先擋一次（餘額、限紅）。**擋在飛籌碼之前**——
+        // 這一行的位置就是修好「籌碼飛出去才說超過限紅」的關鍵
+        const denied = checkLocalBet(amount);
+        if (denied) {
+            shell.setError(denied);
             return;
         }
 

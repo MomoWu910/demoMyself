@@ -37,5 +37,26 @@ export type CommonS2C =
      * 通知管道，而不是只能靠玩家再玩一把才知道自己有多少錢。
      */
     | { type: 'balance'; balance: number }
+    /**
+     * 目前這款玩法的營運限制。**握手後推一次，之後每次後台改設定就再推一次。**
+     *
+     * ---
+     *
+     * **為什麼限紅要透過封包告訴 client，而不是讓前端自己去讀設定？**
+     *
+     * 因為前端不該碰 server 的模組——這一頁整個資料流的前提就是
+     * 「client 只知道 server 告訴它的事」。前端直接 `import` 營運設定的話，
+     * 那條線就斷了，而它是這個 demo 最想證明的東西。
+     *
+     * **那為什麼 client 需要知道限紅？server 不是已經會擋了嗎？**
+     *
+     * 因為擋下來的時機太晚。下注的動畫是**樂觀播放**的（籌碼先飛、數字等 server，
+     * 見 games/baccarat/index.ts 的 sendBet），所以 server 打回來的時候，
+     * 籌碼已經飛出去了——玩家看到的是「籌碼飛過去，然後跳一個紅字說超過限紅」。
+     *
+     * 前端知道限紅之後，超過的那一注根本不會送出，也就不會有那顆多餘的籌碼。
+     * server 端的 `checkBet()` 一行都不會拿掉：**前端擋是體驗，後端擋才是規則**。
+     */
+    | { type: 'limits'; minBet: number; maxBet: number }
     /** 錯誤代碼（不是給人看的句子——翻譯在 UI 那側才發生，見 ui/Hud.tsx） */
     | { type: 'error'; reason: string };

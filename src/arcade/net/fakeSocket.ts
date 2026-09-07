@@ -4,6 +4,8 @@ import type { BaccaratC2S, BaccaratS2C } from './games/baccarat';
 import type { BaccaratLiveC2S, BaccaratLiveS2C } from './games/baccaratLive';
 import type { RouletteC2S, RouletteS2C } from './games/roulette';
 import type { GameServer } from '../server/gameServer';
+import { forGame, subscribe as subscribeOps } from '../server/opsConfig';
+import { arcadeState } from '../store';
 import { SlotServer } from '../server/slotServer';
 import { baccaratTable } from '../server/baccaratServer';
 import { liveTable } from '../server/baccaratLiveServer';
@@ -67,6 +69,15 @@ export type S2COf<G extends GameId> = GameProtocols[G]['s2c'];
  */
 function welcome<G extends GameId>(): S2COf<G> {
     return { type: 'welcome', balance: sessionWallet.get() } as S2COf<G>;
+}
+
+/**
+ * 目前這款玩法的可押區間。理由同 `welcome()`：對每一款都成立，
+ * 但 TS 沒辦法從泛型參數推導出來。
+ */
+function limitsPacket<G extends GameId>(game: GameId): S2COf<G> {
+    const ops = forGame(game);
+    return { type: 'limits', minBet: ops.minBet, maxBet: ops.maxBet } as S2COf<G>;
 }
 
 /**
@@ -146,6 +157,9 @@ export class FakeSocket<G extends GameId> {
      */
     private lastDeliverAt = 0;
 
+    /** 退訂營運設定的變更。close() 要呼叫，否則換一款玩法就多留一個訂閱 */
+    private unsubscribeOps: (() => void) | null = null;
+
     constructor(game: G, handlers: FakeSocketHandlers<S2COf<G>>) {
         this.server = createServer(game);
         this.handlers = handlers;
@@ -153,9 +167,21 @@ export class FakeSocket<G extends GameId> {
             this.setState('open');
             this.handlers.onOpen?.();
             this.emit(welcome());
+            // 限紅緊接在 welcome 之後。**要在任何下注之前到達**，
+            // 否則前端會用初始的寬區間放行第一注
+            this.emit(limitsPacket(game));
             // 握手完成才訂閱推播。提早訂的話，桌台的階段封包會比 welcome 先到，
             // client 那側就得處理「還不知道自己是誰卻收到桌況」的狀態
             this.server.attach?.(this.push);
+            /**
+             * 後台改了營運設定就重推一次限紅。
+             *
+             * 這是「後台跟遊戲之間那條線」在連線層的部分：
+             * 沒有它，前端手上的限紅會停在進場那一刻的值，
+             * 而 server 端已經換成新的——於是玩家送出一注、被打回來，
+             * 卻不知道規則什麼時候變的。
+             */
+            this.unsubscribeOps = subscribeOps(() => this.deliver(limitsPacket(game), 0));
         }, CONNECT_MS);
     }
 
@@ -173,6 +199,8 @@ export class FakeSocket<G extends GameId> {
 
     public close(): void {
         this.setState('closed');
+        this.unsubscribeOps?.();
+        this.unsubscribeOps = null;
         // 先退訂再清 timer。反過來的話，退訂之前 server 還可能再推一則進來排新的 timer，
         // 那一則就會活過這次 close
         this.server.detach?.(this.push);
@@ -210,6 +238,24 @@ export class FakeSocket<G extends GameId> {
 
     private emit(packet: S2COf<G>): void {
         if (this.state !== 'open') return;
+
+        /**
+         * `limits` 在這一層就地收下，不往下傳。
+         *
+         * **它是四款玩法唯一一則「處理方式完全相同」的封包。**
+         * 餘額不是——有的玩法要等演出結束才更新數字；桌況更不是。
+         * 但限紅對每一款都只有一件事要做：寫進外殼 store。
+         *
+         * 讓四個玩法各寫一次 `case 'limits'`，就是四個地方可以忘記寫，
+         * 而忘記的那一款不會有任何錯誤——它只是繼續用舊的限紅，
+         * 然後在某個人改了設定之後開始送出必然被打回的注。
+         */
+        if ((packet as { type: string }).type === 'limits') {
+            const p = packet as unknown as { minBet: number; maxBet: number };
+            arcadeState().setLimits({ minBet: p.minBet, maxBet: p.maxBet });
+            return;
+        }
+
         this.handlers.onMessage(packet);
     }
 

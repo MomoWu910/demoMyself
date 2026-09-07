@@ -4,6 +4,7 @@ import { topBarH, uiScale } from '../../core/layout';
 import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import type { SlotS2C, WinLine } from '../../net/games/slot';
+import { checkLocalBet } from '../../common/betGuard';
 import { arcadeState, useArcadeStore } from '../../store';
 import { Reel, TEMPO } from './reel';
 import { autoGapSec, WIN_TEXT_FADE, WIN_TEXT_POP } from './autoGap';
@@ -165,10 +166,13 @@ export class SlotModule implements GameModule {
         const shell = arcadeState();
         const slot = slotState();
         if (slot.spinning || shell.connection !== 'open') return;
-        // 本地先擋一次餘額不足，省掉一趟 RTT。**這不是在替代 server 的檢查**——
-        // server 那邊仍會擋（見 slotServer.spin），這裡只是讓回饋即時。
-        if (slot.bet > shell.balance) {
-            shell.setError('insufficient_balance');
+        // 本地先擋一次（餘額、限紅），省掉一趟 RTT。**這不是在替代 server 的檢查**——
+        // server 那邊仍會擋（見 slotServer.handle），這裡只是讓回饋即時。
+        // 老虎機沒有飛籌碼，但道理一樣：送出一注、等一趟 RTT、再被打回來，
+        // 那段時間裡轉軸已經開始蓄力了
+        const denied = checkLocalBet(slot.bet);
+        if (denied) {
+            shell.setError(denied);
             // 自動轉一定要在這裡停掉。不停的話 autoRemaining 還掛著，但沒有任何一把會
             // 真的送出去——面板顯示「自動 37」而畫面一動也不動，看起來像當掉
             slot.setAuto(0);

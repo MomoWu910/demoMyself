@@ -184,6 +184,8 @@ export async function init(): Promise<void> {
 }
 
 function load(): Transaction[] {
+    // 讀取要先確保廣播頻道已建立，理由同 opsConfig.get()
+    getChannel();
     return (cache ??= []);
 }
 

@@ -12,6 +12,7 @@ import { TableButton } from '../../common/ui/TableButton';
 import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import { ONLINE_SEAT, type RouletteBet, type RouletteS2C } from '../../net/games/roulette';
+import { checkLocalBet } from '../../common/betGuard';
 import { arcadeState, useArcadeStore } from '../../store';
 import { OnlineBadge } from '../baccarat/seatView';
 import { computeRouletteLayout, type RouletteLayout } from './layout';
@@ -283,8 +284,11 @@ export class RouletteModule implements GameModule {
             return;
         }
         if (shell.connection !== 'open') return;
-        if (amount > shell.balance) {
-            shell.setError('insufficient_balance');
+
+        // 本地先擋一次（餘額、限紅），擋在飛籌碼之前
+        const denied = checkLocalBet(amount);
+        if (denied) {
+            shell.setError(denied);
             return;
         }
 

@@ -19,6 +19,7 @@ import type { GameModule, ModuleContext } from '../../core/module';
 import { FakeSocket } from '../../net/fakeSocket';
 import { ONLINE_SEAT, type OtherBet, type SeatInfo } from '../../net/games/baccarat';
 import type { BaccaratLiveS2C, LiveDealt } from '../../net/games/baccaratLive';
+import { checkLocalBet } from '../../common/betGuard';
 import { arcadeState, useArcadeStore } from '../../store';
 import { BANKER, IVORY, PLAYER, TIE } from '../../theme';
 import { getLang, onLangChange, setLang, t, type Lang } from '../../../i18n';
@@ -738,8 +739,11 @@ export class BaccaratLiveModule implements GameModule {
             return;
         }
         if (shell.connection !== 'open') return;
-        if (amount > shell.balance) {
-            shell.setError('insufficient_balance');
+
+        // 本地先擋一次（餘額、限紅），擋在飛籌碼之前
+        const denied = checkLocalBet(amount);
+        if (denied) {
+            shell.setError(denied);
             return;
         }
 
