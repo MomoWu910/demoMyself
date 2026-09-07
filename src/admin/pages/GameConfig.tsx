@@ -12,6 +12,7 @@ import { backendName } from '../../arcade/server/storage';
 import { count as txCount } from '../../arcade/server/txLedger';
 import { forGame, reset as resetOps, subscribe as subscribeOps, update, type GameOps } from '../../arcade/server/opsConfig';
 import { GAME_IDS, GAME_LABEL, money } from '../format';
+import { ConfirmDialog, type ConfirmChange } from '../ConfirmDialog';
 import { clearAll, seed } from '../seed';
 import { denyReason, useCan, useRole } from '../useAuth';
 
@@ -66,6 +67,48 @@ function GameCard(props: { id: GameId; onSaved: (msg: string) => void }): React.
     React.useEffect(() => subscribeOps(() => setRevision((n) => n + 1)), []);
     const current = React.useMemo(() => forGame(id), [id, revision]);
 
+    /** 等待二次確認的那一份表單值。null 代表沒有待確認的變更 */
+    const [pending, setPending] = React.useState<GameOps | null>(null);
+
+    const apply = React.useCallback((values: GameOps) => {
+        update(id, {
+            ...values,
+            minBet: Number(values.minBet),
+            maxBet: Number(values.maxBet),
+        });
+        setPending(null);
+        onSaved(`${GAME_LABEL[id]} 已更新，遊戲端立即生效`);
+    }, [id, onSaved]);
+
+    /**
+     * 這次的變更會不會把玩家擋在門外。
+     *
+     * **只有這兩件事要問，改限紅的數字不問**——那是營運的日常工作，
+     * 而且改回去就好。每個按鈕都問的後台，使用者會在兩天內學會
+     * 不看內容直接按確定（見 ConfirmDialog 的檔頭）。
+     */
+    const locksPlayersOut = (next: GameOps): boolean =>
+        (current.enabled && !next.enabled) || (!current.maintenance && next.maintenance);
+
+    /** 變更清單。跟操作紀錄同一個形式：舊值 → 新值 */
+    const changesOf = (next: GameOps): ConfirmChange[] => {
+        const out: ConfirmChange[] = [];
+        const yn = (v: boolean): string => (v ? '是' : '否');
+        if (current.enabled !== next.enabled) out.push({ label: '上架', before: yn(current.enabled), after: yn(next.enabled) });
+        if (current.maintenance !== next.maintenance) out.push({ label: '維護中', before: yn(current.maintenance), after: yn(next.maintenance) });
+        if (Number(current.minBet) !== Number(next.minBet)) out.push({ label: '單注下限', before: String(current.minBet), after: String(next.minBet) });
+        if (Number(current.maxBet) !== Number(next.maxBet)) out.push({ label: '單注上限', before: String(current.maxBet), after: String(next.maxBet) });
+        return out;
+    };
+
+    const consequence = (next: GameOps): string => {
+        const off = current.enabled && !next.enabled;
+        const maint = !current.maintenance && next.maintenance;
+        if (off && maint) return `${GAME_LABEL[id]} 會從大廳消失，而且標記為維護中。已經在桌上的玩家，下一次下注會被擋下來。`;
+        if (off) return `${GAME_LABEL[id]} 會從大廳消失。已經在桌上的玩家看得到畫面，但下一次下注會被擋下來。`;
+        return `${GAME_LABEL[id]} 在大廳仍然看得到，但玩家進不去。已經在桌上的，下一次下注會被擋下來。`;
+    };
+
     return (
         <Paper sx={{ p: 2.5 }}>
             <Formik<GameOps>
@@ -73,13 +116,10 @@ function GameCard(props: { id: GameId; onSaved: (msg: string) => void }): React.
                 initialValues={current}
                 validationSchema={schema}
                 onSubmit={(values, helpers) => {
-                    update(id, {
-                        ...values,
-                        minBet: Number(values.minBet),
-                        maxBet: Number(values.maxBet),
-                    });
                     helpers.setSubmitting(false);
-                    onSaved(`${GAME_LABEL[id]} 已更新，遊戲端立即生效`);
+                    // 會把玩家擋在門外的變更先問一次，其餘直接存
+                    if (locksPlayersOut(values)) setPending(values);
+                    else apply(values);
                 }}
             >
                 {({ values, dirty, isValid, resetForm }) => (
@@ -168,6 +208,16 @@ function GameCard(props: { id: GameId; onSaved: (msg: string) => void }): React.
                     </Form>
                 )}
             </Formik>
+
+            <ConfirmDialog
+                open={Boolean(pending)}
+                title={`${GAME_LABEL[id]}：確認變更`}
+                consequence={pending ? consequence(pending) : ''}
+                changes={pending ? changesOf(pending) : []}
+                confirmLabel="套用變更"
+                onConfirm={() => pending && apply(pending)}
+                onCancel={() => setPending(null)}
+            />
         </Paper>
     );
 }
@@ -180,6 +230,8 @@ export function GameConfigPage(): React.ReactElement {
 
     // 資料存在哪裡要讓人看得到。**「我的資料放在哪」是使用者會問的問題**，
     // 尤其在一個把資料庫放在瀏覽器裡的 demo
+    /** 資料工具裡待確認的那一個動作。三個都會蓋掉或刪掉東西，所以三個都要問 */
+    const [confirm, setConfirm] = React.useState<'reset' | 'seed' | 'clear' | null>(null);
     const [backend, setBackend] = React.useState('偵測中…');
     React.useEffect(() => {
         void backendName().then(setBackend);
@@ -225,10 +277,7 @@ export function GameConfigPage(): React.ReactElement {
                                 size="small"
                                 variant="outlined"
                                 disabled={!opsWritable}
-                                onClick={() => {
-                                    resetOps();
-                                    setToast('營運設定已還原為預設值');
-                                }}
+                                onClick={() => setConfirm('reset')}
                             >
                                 還原預設設定
                             </Button>
@@ -240,14 +289,7 @@ export function GameConfigPage(): React.ReactElement {
                                 size="small"
                                 variant="outlined"
                                 disabled={!manageable}
-                                onClick={() => {
-                                    // 三張表一起清。seed() 內部也會清玩家與交易，
-                                    // 但注單得在這裡清——**留著舊注單的話 seedIfEmpty 的語意會不一致**，
-                                    // 而且新舊兩批資料的玩家 id 對不上
-                                    clearLedger();
-                                    const n = seed();
-                                    setToast(`已重新產生 ${money(n)} 筆注單、${money(playerCount())} 個帳號、${money(txCount())} 筆交易`);
-                                }}
+                                onClick={() => setConfirm('seed')}
                             >
                                 重新產生種子資料
                             </Button>
@@ -260,13 +302,7 @@ export function GameConfigPage(): React.ReactElement {
                                 color="error"
                                 variant="outlined"
                                 disabled={!manageable}
-                                onClick={() => {
-                                    // 清空走資料層的 clearAll()，不是在這裡呼叫三個 clear——
-                                    // 因為它要在稽核表裡留下一筆「誰清的、清掉了多少」，
-                                    // 而那筆紀錄**不會**被這個按鈕清掉
-                                    clearAll();
-                                    setToast('注單、玩家與金流已清空（稽核紀錄保留）');
-                                }}
+                                onClick={() => setConfirm('clear')}
                             >
                                 清空全部（注單 {money(ledgerCount())} 筆 · 交易 {money(txCount())} 筆）
                             </Button>
@@ -274,6 +310,56 @@ export function GameConfigPage(): React.ReactElement {
                     </Tooltip>
                 </Box>
             </Paper>
+
+            {/* 三個資料工具的確認。**每一個講的都是「會發生什麼」，不是「你正在做什麼」**——
+                使用者按下按鈕的時候就已經知道自己按了什麼了 */}
+            <ConfirmDialog
+                open={confirm === 'reset'}
+                title="還原營運設定"
+                consequence="四款遊戲的上下架、維護狀態與限紅會全部回到預設值，而且立刻送到遊戲端。目前的設定沒有備份，但操作紀錄會記下原本的值。"
+                confirmLabel="還原設定"
+                onCancel={() => setConfirm(null)}
+                onConfirm={() => {
+                    resetOps();
+                    setConfirm(null);
+                    setToast('營運設定已還原為預設值');
+                }}
+            />
+
+            <ConfirmDialog
+                open={confirm === 'seed'}
+                title="重新產生展示資料"
+                // 這句是這個對話框存在的理由：**「標記與備註會不見」是使用者最可能沒想到的後果**
+                consequence={`現有的 ${money(ledgerCount())} 筆注單、${money(playerCount())} 個帳號與 ${money(txCount())} 筆交易會被整批換掉，包括你在玩家管理裡加上的風控標記與備註。操作紀錄不受影響。`}
+                confirmLabel="重新產生"
+                onCancel={() => setConfirm(null)}
+                onConfirm={() => {
+                    // 三張表一起清。seed() 內部也會清玩家與交易，
+                    // 但注單得在這裡清——**留著舊注單的話 seedIfEmpty 的語意會不一致**，
+                    // 而且新舊兩批資料的玩家 id 對不上
+                    clearLedger();
+                    const n = seed();
+                    setConfirm(null);
+                    setToast(`已重新產生 ${money(n)} 筆注單、${money(playerCount())} 個帳號、${money(txCount())} 筆交易`);
+                }}
+            />
+
+            <ConfirmDialog
+                open={confirm === 'clear'}
+                title="清空全部資料"
+                danger
+                consequence={`${money(ledgerCount())} 筆注單、${money(playerCount())} 個帳號與 ${money(txCount())} 筆交易會被刪除，這個動作沒有復原。操作紀錄會保留下來，並記下是誰清的、清掉了多少。`}
+                confirmLabel="清空資料"
+                onCancel={() => setConfirm(null)}
+                onConfirm={() => {
+                    // 清空走資料層的 clearAll()，不是在這裡呼叫三個 clear——
+                    // 因為它要在稽核表裡留下一筆「誰清的、清掉了多少」，
+                    // 而那筆紀錄**不會**被這個按鈕清掉
+                    clearAll();
+                    setConfirm(null);
+                    setToast('注單、玩家與金流已清空（稽核紀錄保留）');
+                }}
+            />
 
             <Snackbar
                 open={Boolean(toast)}
