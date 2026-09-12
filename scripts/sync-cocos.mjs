@@ -36,6 +36,46 @@ if (!existsSync(path.join(SRC, 'index.html'))) {
     process.exit(1);
 }
 
+/**
+ * **產物比場景檔舊的話直接擋下來。**
+ *
+ * 踩過一次：場景修好了、`yarn sync:cocos` 也跑了、畫面還是全黑——
+ * 因為中間少了「回 Cocos 重新建置」那一步，這支腳本只是安靜地把一份過期的產物
+ * 複製過去。沒有任何一個環節會報錯，所以那是最難查的一種。
+ */
+const COCOS_PROJECT = path.dirname(path.dirname(SRC));
+const sceneDir = path.join(COCOS_PROJECT, 'assets');
+const buildStamp = (await stat(path.join(SRC, 'index.html'))).mtimeMs;
+
+async function newestScene(dir) {
+    let newest = { time: 0, file: '' };
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            const sub = await newestScene(full);
+            if (sub.time > newest.time) newest = sub;
+        } else if (entry.name.endsWith('.scene') || entry.name.endsWith('.ts')) {
+            const t = (await stat(full)).mtimeMs;
+            if (t > newest.time) newest = { time: t, file: path.relative(COCOS_PROJECT, full) };
+        }
+    }
+    return newest;
+}
+
+if (existsSync(sceneDir)) {
+    const newest = await newestScene(sceneDir);
+    if (newest.time > buildStamp) {
+        const mins = Math.round((newest.time - buildStamp) / 60000);
+        console.error('✗ 建置產物比原始檔還舊，同步過去也是白搭\n');
+        console.error(`  最後建置   ${new Date(buildStamp).toTimeString().slice(0, 8)}`);
+        console.error(`  最後修改   ${new Date(newest.time).toTimeString().slice(0, 8)}  ${newest.file}`);
+        console.error(`  差了 ${mins} 分鐘\n`);
+        console.error('  → 回 Cocos Creator 的「建置發佈」面板重新建置一次（不是只按「編譯」）');
+        console.error('    起始場景要選對，建置完再跑一次這支腳本');
+        process.exit(1);
+    }
+}
+
 /** 算一個目錄有幾個檔、多大 */
 async function measure(dir) {
     let files = 0;
