@@ -297,6 +297,16 @@ module.exports = {
                      * 發佈端也要對應（gh-pages 預設同樣跳過 dotfiles，見 package.json 的 deploy）。
                      */
                     globOptions: { dot: true },
+                    /*
+                     * 告訴 webpack「這些已經壓過了，不要再動」。
+                     *
+                     * 沒有這行的話，production 模式的 Terser 會把 CopyPlugin 複製進來的
+                     * **所有 .js 再壓一次**——實測 Cocos 的 assets/main/index.js
+                     * 從 82305 被壓成 81750 bytes。目前沒壞，但那是二次壓縮
+                     * 一份已經最小化過的 System.register 模組，純粹是多餘的風險，
+                     * 而且會讓「dist 跟 static 一致」這個驗證永遠對不起來。
+                     */
+                    info: { minimized: true },
                 },
             ],
         }),
