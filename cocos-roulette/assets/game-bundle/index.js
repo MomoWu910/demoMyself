@@ -1,1 +1,20 @@
-System.register("chunks:///_virtual/game-bundle",[],function(){return{execute:function(){}}}),System.register("virtual:///prerequisite-imports/game-bundle",["chunks:///_virtual/game-bundle"],function(e,t){return{setters:[function(t){var u={};for(var n in t)"default"!==n&&"__esModule"!==n&&(u[n]=t[n]);e(u)}],execute:function(){}}});
+System.register("chunks:///_virtual/game-bundle",[],(function(){return{execute:function(){}}}));
+
+(function(r) {
+  r('virtual:///prerequisite-imports/game-bundle', 'chunks:///_virtual/game-bundle'); 
+})(function(mid, cid) {
+    System.register(mid, [cid], function (_export, _context) {
+    return {
+        setters: [function(_m) {
+            var _exportObj = {};
+
+            for (var _key in _m) {
+              if (_key !== "default" && _key !== "__esModule") _exportObj[_key] = _m[_key];
+            }
+      
+            _export(_exportObj);
+        }],
+        execute: function () { }
+    };
+    });
+});

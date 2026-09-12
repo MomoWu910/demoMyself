@@ -1,1 +1,61 @@
-System.register([],function(t,e){"use strict";var n;function o(t){return o="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(t){return typeof t}:function(t){return t&&"function"==typeof Symbol&&t.constructor===Symbol&&t!==Symbol.prototype?"symbol":typeof t},o(t)}function i(t,e){for(var n=0;n<e.length;n++){var o=e[n];o.enumerable=o.enumerable||!1,o.configurable=!0,"value"in o&&(o.writable=!0),Object.defineProperty(t,r(o.key),o)}}function r(t){var e=function(t){if("object"!==o(t)||null===t)return t;var e=t[Symbol.toPrimitive];if(void 0!==e){var n=e.call(t,"string");if("object"!==o(n))return n;throw new TypeError("@@toPrimitive must return a primitive value.")}return String(t)}(t);return"symbol"==typeof e?e:String(e)}return{setters:[],execute:function(){t("Application",function(){function t(){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,t),this.settingsPath="src/settings.json",this.showFPS=!1}var e,o;return e=t,(o=[{key:"init",value:function(t){(n=t).game.onPostBaseInitDelegate.add(this.onPostInitBase.bind(this)),n.game.onPostSubsystemInitDelegate.add(this.onPostSystemInit.bind(this))}},{key:"onPostInitBase",value:function(){}},{key:"onPostSystemInit",value:function(){}},{key:"start",value:function(){return n.game.init({debugMode:n.DebugMode.ERROR,settingsPath:this.settingsPath,overrideSettings:{profiling:{showFPS:this.showFPS}}}).then(function(){return n.game.run()})}}])&&i(e.prototype,o),Object.defineProperty(e,"prototype",{writable:!1}),t}())}}});
+System.register([], function (_export, _context) {
+  "use strict";
+
+  var cc, Application;
+  function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
+  function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+  function _defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, _toPropertyKey(descriptor.key), descriptor); } }
+  function _createClass(Constructor, protoProps, staticProps) { if (protoProps) _defineProperties(Constructor.prototype, protoProps); if (staticProps) _defineProperties(Constructor, staticProps); Object.defineProperty(Constructor, "prototype", { writable: false }); return Constructor; }
+  function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return typeof key === "symbol" ? key : String(key); }
+  function _toPrimitive(input, hint) { if (_typeof(input) !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (_typeof(res) !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
+  return {
+    setters: [],
+    execute: function () {
+      _export("Application", Application = /*#__PURE__*/function () {
+        function Application() {
+          _classCallCheck(this, Application);
+          this.settingsPath = 'src/settings.json';
+          this.showFPS = false;
+        }
+        _createClass(Application, [{
+          key: "init",
+          value: function init(engine) {
+            cc = engine;
+            cc.game.onPostBaseInitDelegate.add(this.onPostInitBase.bind(this));
+            cc.game.onPostSubsystemInitDelegate.add(this.onPostSystemInit.bind(this));
+          }
+        }, {
+          key: "onPostInitBase",
+          value: function onPostInitBase() {
+            // cc.settings.overrideSettings('assets', 'server', '');
+            // do custom logic
+          }
+        }, {
+          key: "onPostSystemInit",
+          value: function onPostSystemInit() {
+            // do custom logic
+          }
+        }, {
+          key: "start",
+          value: function start() {
+            return cc.game.init({
+              debugMode: false ? cc.DebugMode.INFO : cc.DebugMode.ERROR,
+              settingsPath: this.settingsPath,
+              overrideSettings: {
+                // assets: {
+                //      preloadBundles: [{ bundle: 'main', version: 'xxx' }],
+                // }
+                profiling: {
+                  showFPS: this.showFPS
+                }
+              }
+            }).then(function () {
+              return cc.game.run();
+            });
+          }
+        }]);
+        return Application;
+      }());
+    }
+  };
+});
