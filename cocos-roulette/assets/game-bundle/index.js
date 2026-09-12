@@ -1,0 +1,1 @@
+System.register("chunks:///_virtual/game-bundle",[],function(){return{execute:function(){}}}),System.register("virtual:///prerequisite-imports/game-bundle",["chunks:///_virtual/game-bundle"],function(e,t){return{setters:[function(t){var u={};for(var n in t)"default"!==n&&"__esModule"!==n&&(u[n]=t[n]);e(u)}],execute:function(){}}});
