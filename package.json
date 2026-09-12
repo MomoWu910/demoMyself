@@ -8,6 +8,7 @@
     "check:park": "node src/park/check.mjs",
     "build": "webpack --mode production",
     "deploy": "npm run build && gh-pages -d dist",
+    "sync:cocos": "node scripts/sync-cocos.mjs",
     "check:slot": "node src/arcade/server/rtp-check.mjs",
     "check:reel": "node src/arcade/games/slot/reel-check.mjs",
     "check:baccarat": "node src/arcade/server/baccarat-check.mjs",

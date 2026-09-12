@@ -270,7 +270,17 @@ module.exports = {
         }),
         new CopyWebpackPlugin({
             patterns: [
-                { from: 'public', to: 'public' }
+                { from: 'public', to: 'public' },
+                /*
+                 * `static/` 是**別的專案 build 出來、原樣搬進 dist** 的靜態產物。
+                 *
+                 * 目前放的是 Cocos 輪盤（另一個 repo：cocos-lab），它有自己的引擎與
+                 * 建置流程，不可能也不該併進這裡的 webpack——所以走「編譯好的成品進版控」
+                 * 這條路。複製到 dist 根層，發佈後的網址就是 /demoMyself/cocos-roulette/。
+                 *
+                 * noErrorOnMissing：還沒放東西進去時不要讓整個 build 失敗。
+                 */
+                { from: 'static', to: '.', noErrorOnMissing: true },
             ],
         }),
         // 每個 entry 抽出自己的 CSS，HtmlWebpackPlugin 會依 chunks 對應注入 <link>
