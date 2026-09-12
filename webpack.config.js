@@ -280,7 +280,24 @@ module.exports = {
                  *
                  * noErrorOnMissing：還沒放東西進去時不要讓整個 build 失敗。
                  */
-                { from: 'static', to: '.', noErrorOnMissing: true },
+                {
+                    from: 'static',
+                    to: '.',
+                    noErrorOnMissing: true,
+                    /*
+                     * `dot: true` 是為了 `.nojekyll`。
+                     *
+                     * GitHub Pages 預設會跑 Jekyll，而 **Jekyll 會忽略底線開頭的檔案**。
+                     * Cocos 的引擎主體叫 `cocos-js/_virtual_cc-<hash>.js`（2.5 MB），
+                     * 整包就這麼一個底線開頭的檔案，偏偏是最關鍵的那個——
+                     * 它在 dist 裡好好的，線上卻 404，而其他資源全部正常。
+                     *
+                     * 放一個空的 `.nojekyll` 在發佈根目錄就會關掉 Jekyll。
+                     * CopyPlugin 的 glob 預設不匹配隱藏檔，所以要開 dot。
+                     * 發佈端也要對應（gh-pages 預設同樣跳過 dotfiles，見 package.json 的 deploy）。
+                     */
+                    globOptions: { dot: true },
+                },
             ],
         }),
         // 每個 entry 抽出自己的 CSS，HtmlWebpackPlugin 會依 chunks 對應注入 <link>
