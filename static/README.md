@@ -8,7 +8,16 @@
 
 | 子資料夾 | 來源 | 怎麼更新 |
 |---|---|---|
-| `cocos-roulette/` | `~/cocos-lab`（Cocos Creator 3.8.8） | 在 Cocos 編輯器建置 web-mobile，然後跑 `yarn sync:cocos` |
+| `cocos-roulette/` | `~/cocos-lab` 的 `03-roulette` | `cd ~/cocos-lab && yarn build:roulette` → `yarn sync:cocos roulette` |
+| `cocos-slot/` | `~/cocos-lab` 的 `04-slot` | `cd ~/cocos-lab && yarn build:slot` → `yarn sync:cocos slot` |
+
+> ⚠️ **`yarn sync:cocos` 一定要帶作品名。** 舊版是「掃描所有 `web-mobile*`，
+> 挑最新的那個」——那是為了應付 Cocos 建置面板的亂編號（`web-mobile-001`…）。
+> 但現在 cocos-lab 走 CLI 建置、`outputName` 由設定檔寫死，而且同時存在
+> 多個作品的產物，「挑最新」會把剛建好的 slot 同步到輪盤的網址去，
+> **而且那種錯誤會安靜地成功**。
+>
+> 另外 Cocos 那邊建置時**編輯器必須完全關閉**（⌘Q），兩個實例會搶 asset-db 的鎖。
 
 ## 為什麼編譯產物進版控
 
