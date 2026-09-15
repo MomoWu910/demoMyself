@@ -290,6 +290,14 @@ React + MUI 9 + MUI X（DataGrid、DatePickers，皆 MIT 版）+ Formik / yup。
 
 > RWD 驗證方式：Playwright 以 6 種視窗尺寸（375×667 → 1920×1080，含橫向）× 全部 10 頁跑截圖矩陣，自動檢查橫向溢出（`scrollWidth > clientWidth`）與 console error。
 
+### 8. Cocos Creator：輪盤與老虎機 — 另一個 repo
+
+用 **Cocos Creator 3.8** 做的兩款遊戲。它們有自己的引擎與建置流程，沒辦法併進這裡的 webpack，
+所以原始碼在獨立的 `cocos-lab`（private），成品 build 出來放在本站：
+
+- **[輪盤](https://momowu910.github.io/demoMyself/cocos-roulette/)** — 把上面遊樂場那款 PixiJS 輪盤**換引擎重做渲染層**。規則、桌布幾何、球的軌跡三支檔案零修改沿用，驗證方式是同時載入兩個 repo 的同名模組做逐筆比對。
+- **[老虎機](https://momowu910.github.io/demoMyself/cocos-slot/)** — **同一份核心切換兩套皮**：符號、配色、賠付表、免費遊戲參數全部來自 config，畫面右上角的控制台可以當場切換並看理論 RTP 重算。
+
 ---
 
 ## 技術堆疊
