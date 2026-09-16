@@ -47,6 +47,26 @@ const TARGETS = {
         assets: 'assets/04-slot',
         url: 'https://momowu910.github.io/demoMyself/cocos-slot/',
     },
+    /**
+     * 賭場大廳：一個產物含四個場景與四個 Asset Bundle。
+     *
+     * `assets` 這欄是**陣列**——它涵蓋大廳、三款玩法、共用腳本與共用資源，
+     * 改動其中任何一個都該讓「產物比原始檔舊」那道檢查生效。
+     * （上面兩個單一作品維持字串，兩種都吃。）
+     */
+    casino: {
+        build: 'web-mobile-casino',
+        dest: 'static/cocos-casino',
+        assets: [
+            'assets/06-lobby',
+            'assets/05-baccarat',
+            'assets/04-slot',
+            'assets/03-roulette',
+            'assets/shared',
+            'assets/casino-common',
+        ],
+        url: 'https://momowu910.github.io/demoMyself/cocos-casino/',
+    },
 };
 
 const targetName = process.argv[2];
@@ -92,7 +112,10 @@ if (!existsSync(path.join(SRC, 'index.html'))) {
  */
 // SRC 是 <專案>/build/web-mobile*，往上兩層就是專案根
 const COCOS_PROJECT = path.dirname(path.dirname(SRC));
-const sceneDir = path.join(COCOS_PROJECT, target.assets);
+/** 要看的原始碼目錄。單一作品是一個，賭場大廳是一整組 */
+const sceneDirs = (Array.isArray(target.assets) ? target.assets : [target.assets]).map((d) =>
+    path.join(COCOS_PROJECT, d)
+);
 const buildStamp = (await stat(path.join(SRC, 'index.html'))).mtimeMs;
 
 async function newestScene(dir) {
@@ -110,8 +133,14 @@ async function newestScene(dir) {
     return newest;
 }
 
-if (existsSync(sceneDir)) {
-    const newest = await newestScene(sceneDir);
+const existingDirs = sceneDirs.filter((d) => existsSync(d));
+if (existingDirs.length > 0) {
+    // 所有相關目錄裡最新的那一支檔案
+    let newest = { time: 0, file: '' };
+    for (const dir of existingDirs) {
+        const found = await newestScene(dir);
+        if (found.time > newest.time) newest = found;
+    }
     const staleMs = newest.time - buildStamp;
 
     /*

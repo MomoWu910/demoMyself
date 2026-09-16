@@ -290,13 +290,30 @@ React + MUI 9 + MUI X（DataGrid、DatePickers，皆 MIT 版）+ Formik / yup。
 
 > RWD 驗證方式：Playwright 以 6 種視窗尺寸（375×667 → 1920×1080，含橫向）× 全部 10 頁跑截圖矩陣，自動檢查橫向溢出（`scrollWidth > clientWidth`）與 console error。
 
-### 8. Cocos Creator：輪盤與老虎機 — 另一個 repo
+### 8. Cocos Creator：賭場大廳 — 另一個 repo
 
-用 **Cocos Creator 3.8** 做的兩款遊戲。它們有自己的引擎與建置流程，沒辦法併進這裡的 webpack，
-所以原始碼在獨立的 `cocos-lab`（private），成品 build 出來放在本站：
+用 **Cocos Creator 3.8** 做的一個大廳加三款遊戲。它們有自己的引擎與建置流程，沒辦法併進這裡的
+webpack，所以原始碼在獨立的 `cocos-lab`（private），成品 build 出來放在本站：
 
-- **[輪盤](https://momowu910.github.io/demoMyself/cocos-roulette/)** — 把上面遊樂場那款 PixiJS 輪盤**換引擎重做渲染層**。規則、桌布幾何、球的軌跡三支檔案零修改沿用，驗證方式是同時載入兩個 repo 的同名模組做逐筆比對。
-- **[老虎機](https://momowu910.github.io/demoMyself/cocos-slot/)** — **同一份核心切換兩套皮**：符號、配色、賠付表、免費遊戲參數全部來自 config，畫面右上角的控制台可以當場切換並看理論 RTP 重算。
+**[→ 賭場大廳](https://momowu910.github.io/demoMyself/cocos-casino/)**（百家樂 · 輪盤 · 老虎機）
+
+- **百家樂** — 規則層（補牌表、五張路圖的推算）從上面遊樂場那款 **PixiJS 版整支搬過來，逐字節相同**，渲染層全部重寫。驗證含補牌表 8×10 整張攤開比對、50 萬局的莊家優勢對照公開數字，以及**與 PixiJS 版一萬局逐筆比對**（27,225 顆路圖標記全部相同）。
+- **輪盤** — 把 PixiJS 版**換引擎重做渲染層**。規則、桌布幾何、球的軌跡三支檔案零修改沿用，驗證方式是同時載入兩個 repo 的同名模組做逐筆比對。
+- **老虎機** — **同一份核心切換兩套皮**：符號、配色、賠付表、免費遊戲參數全部來自 config，畫面右上角的控制台可以當場切換並看理論 RTP 重算。
+
+做大廳不是為了多一個選單，是為了讓兩件事真的發生——**場景切換**與**共用資源**。
+在此之前三款是三個獨立網頁，那些資源釋放的程式碼一行都沒有被執行過。
+
+**三組量出來的數字**（驗證腳本都在 repo 裡，可重跑）：
+
+| | 結果 |
+|---|---|
+| **DrawCall**（路圖 212 顆標記） | 每顆一個 `Graphics` **232** → Sprite 共用圖集加染色 **28**。對照組留在程式裡，網址加 `?roads=graphics` 可當場切回去比 |
+| **首載**（Asset Bundle 分包） | 全部塞主包約 10.5 MB → **4.37 MB**。點進一款遊戲才多載 766 KB，再進第二款時共用資源**一個 byte 都沒有重載** |
+| **資源釋放** | 大廳↔三款進出三輪，`assets` 119 / `Texture2D` 27 / `SpriteFrame` 27 — 三輪完全沒有成長 |
+
+> 兩款遊戲的獨立版本仍然保留：[輪盤](https://momowu910.github.io/demoMyself/cocos-roulette/) ·
+> [老虎機](https://momowu910.github.io/demoMyself/cocos-slot/)
 
 ---
 
