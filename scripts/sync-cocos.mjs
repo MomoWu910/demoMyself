@@ -34,6 +34,18 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * `assets` 那欄是給「產物比原始檔舊」那道檢查用的：**只看自己的目錄**。
  * 看整個 `assets/` 的話，改了輪盤就會擋下 slot 的同步，反過來也一樣。
  */
+/**
+ * ⚠️ **`roulette` 與 `slot` 已經沒有對應的建置目標了。**
+ *
+ * cocos-lab 分包之後三款玩法的場景住在各自的 Asset Bundle 裡，而 Bundle 裡的場景
+ * 不能當主包的起始場景——獨立 build 出來的產物打開是一個空的練習場景。
+ * `build-configs/` 現在只剩 `casino.json`。
+ *
+ * 這兩個 target 留著是為了**已經發出去的網址**：`static/cocos-roulette` 與
+ * `static/cocos-slot` 裡是分包前建的產物，自包含、照樣跑得動。
+ * 要重新同步它們的話得先把那兩個 config 加回去，而那等於把分包退掉——
+ * **正確的做法是改連結指向大廳**。
+ */
 const TARGETS = {
     roulette: {
         build: 'web-mobile-roulette',
