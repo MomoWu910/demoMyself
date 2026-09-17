@@ -329,7 +329,8 @@ webpack，所以原始碼在獨立的 `cocos-lab`（private），成品 build �
 | | 結果 |
 |---|---|
 | **DrawCall**（路圖 212 顆標記） | 每顆一個 `Graphics` **232** → Sprite 共用圖集加染色 **28**。對照組留在程式裡，網址加 `?roads=graphics` 可當場切回去比 |
-| **首載**（Asset Bundle 分包） | 四包加總約 10 MB → 主包 **4.31 MB**。點進百家樂才多載 704 KB（bundle 428 KB ＋ 共用貼圖 276 KB），再進輪盤時共用資源**一個 byte 都沒有重載** |
+| **首載**（Asset Bundle 分包） | 四包加總約 8 MB → 主包 **2.33 MB**。點進百家樂才多載 704 KB（bundle 428 KB ＋ 共用貼圖 276 KB），再進輪盤時共用資源**一個 byte 都沒有重載** |
+| **進場等待**（載入剖析） | 實際傳輸 2.23 MB → **0.95 MB**；同一條模擬的 700 kbps 線路上，到大廳畫面可見從 **31.5 秒降到 15.0 秒**。三刀：裁掉專案沒用到的引擎模組（Spine 的 asm.js 就 354 KB）、照「畫面上實際用得到多大」重壓大廳美術（1417→453 KB）、`preload` 讓引擎不必排在那串小檔案後面（開始下載的時間點 2697 ms → 463 ms） |
 | **資源釋放** | 大廳↔三款進出三輪，`assets` 113 / `Texture2D` 25 / `SpriteFrame` 25 — 三輪完全沒有成長 |
 
 > 兩款遊戲的獨立版本仍然保留：[輪盤](https://momowu910.github.io/demoMyself/cocos-roulette/) ·
