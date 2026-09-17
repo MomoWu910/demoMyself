@@ -53,6 +53,11 @@ export class LobbyModule implements GameModule {
     }
 
     public mount(ctx: ModuleContext): void {
+        // The lobby uses the DOM background image on #stage. The Pixi backdrop is
+        // opaque, so it must be disabled here or the image can never show through.
+        // ModuleHost restores it before mounting the next game.
+        ctx.setBackdrop(false);
+
         const banner = new BannerCarousel();
         const rail = new GameRail((entry) => this.pick(entry));
         this.banner = banner;

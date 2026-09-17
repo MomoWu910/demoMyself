@@ -182,6 +182,9 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
         // 而不是掛在即將進場的那個（見 store 的 textureBaselines）
         const leaving = host.getCurrent()?.id ?? null;
 
+        // Only the lobby may expose its generated DOM background. Toggle before
+        // mounting so scene changes never flash the previous surface for a frame.
+        container.classList.toggle('stage--lobby', id === 'lobby');
         await host.switchTo(create(id));
 
         const store = useArcadeStore.getState();
@@ -206,6 +209,7 @@ export async function mountArcade(container: HTMLElement): Promise<ArcadeStage> 
         enter,
         destroy: () => {
             ro.disconnect();
+            container.classList.remove('stage--lobby');
             document.documentElement.style.removeProperty('--ui-scale');
             document.removeEventListener('visibilitychange', onVisibility);
             host.disposeCurrent();
