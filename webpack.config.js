@@ -165,7 +165,7 @@ module.exports = {
                 exclude: /node_modules/,
             },
             {
-                test: /\.(png|jpe?g|gif|glb|gltf|env|hdr|dds)$/i,
+                test: /\.(png|jpe?g|webp|gif|glb|gltf|env|hdr|dds)$/i,
                 type: 'asset/resource',
                 generator: {
                     filename: 'res/[path][name][ext]', // 保留原始路徑和文件名

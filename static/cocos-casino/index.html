@@ -3,62 +3,164 @@
 <head>
   <meta charset="utf-8">
 
-  <title>Cocos Creator | cocos-lab</title>
+  <title>Golden Hall · Cocos Creator 賭場大廳</title>
 
-  <!--http://www.html5rocks.com/en/mobile/mobifying/-->
   <meta name="viewport"
         content="width=device-width,user-scalable=no,initial-scale=1,minimum-scale=1,maximum-scale=1,minimal-ui=true"/>
 
-  <!--https://developer.apple.com/library/safari/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html-->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
-
-  <!-- force webkit on 360 -->
   <meta name="renderer" content="webkit"/>
   <meta name="force-rendering" content="webkit"/>
-  <!-- force edge on IE -->
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
   <meta name="msapplication-tap-highlight" content="no">
-
-  <!-- force full screen on some browser -->
   <meta name="full-screen" content="yes"/>
   <meta name="x5-fullscreen" content="true"/>
   <meta name="360-fullscreen" content="true"/>
-
-  <!--fix fireball/issues/3568 -->
-  <!--<meta name="browsermode" content="application">-->
   <meta name="x5-page-mode" content="app">
 
-  <!--<link rel="apple-touch-icon" href=".png" />-->
-  <!--<link rel="apple-touch-icon-precomposed" href=".png" />-->
+  <!--
+    ★ 引擎先排隊，不要等前面那串小檔案跑完。
+
+    預設的載入鏈是串行的：index.html → style.css → polyfills → system.bundle
+    → import-map.json → index.js → application.js → **才輪到 cc.js**。
+    每一段都是一個來回，實測在 GitHub Pages 上前置那串就吃掉 2.7 秒，
+    而引擎（最大的那一個）在那之前一個 byte 都還沒開始下載。
+
+    preload 讓瀏覽器在解析到 <head> 的當下就去拿引擎，跟前面那串並行。
+    ⚠️ 路徑寫死是可行的，因為建置設定 md5Cache 是關的（檔名不帶 hash）；
+    改成帶 hash 的話這一行要跟著改，不然會變成多下載一份沒用的檔案。
+  -->
+  <link rel="preload" as="script" href="cocos-js/cc.js">
+  <link rel="preload" as="script" href="src/index.js">
+  <link rel="preload" as="fetch" href="src/import-map.json" crossorigin>
 
   <link rel="stylesheet" type="text/css" href="style.css"/>
 
+  <!--
+    載入畫面直接寫在這裡，**不走任何額外請求**：它要在第一個位元組之後就看得到，
+    而那正是引擎還沒到、畫面一片空白的那十幾秒。字體只用系統字，不載 webfont。
+  -->
+  <style>
+    #boot {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 22px; background: #0a0908; color: #f2ece1;
+      font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+      transition: opacity .45s ease;
+    }
+    #boot.done { opacity: 0; pointer-events: none; }
+    #boot .mark {
+      font-size: clamp(22px, 5vw, 34px); letter-spacing: .26em; font-weight: 600;
+      color: #d9b871; text-indent: .26em;
+    }
+    #boot .sub { font-size: 12px; letter-spacing: .22em; color: #8a6a33; text-indent: .22em; }
+    #boot .bar {
+      width: min(280px, 62vw); height: 3px; border-radius: 2px;
+      background: rgba(217, 184, 113, .16); overflow: hidden;
+    }
+    #boot .bar i {
+      display: block; height: 100%; width: 6%; border-radius: 2px;
+      background: linear-gradient(90deg, #8a6a33, #f0dcac);
+      transition: width .5s cubic-bezier(.22, .61, .36, 1);
+    }
+    #boot .note { font-size: 13px; color: #9a9083; min-height: 1.2em; }
+  </style>
 </head>
 <body>
   <div id="GameDiv" cc_exact_fit_screen="true">
       <div id="Cocos3dGameContainer">
         <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="99"></canvas>
       </div>
-    </div>
-  
+  </div>
 
-<!-- Polyfills bundle. -->
+  <div id="boot">
+    <div class="mark">GOLDEN HALL</div>
+    <div class="sub">COCOS CREATOR</div>
+    <div class="bar"><i></i></div>
+    <div class="note">載入引擎…</div>
+  </div>
 
-<script src="src/polyfills.bundle.js" charset="utf-8"> </script>
+  <script>
+    /*
+     * 進度是**照真的發生的事**推進的，不是計時器假裝的。
+     *
+     * 引擎本身沒有下載進度可讀（SystemJS 用 <script> 載，拿不到 stream），
+     * 但「哪一個檔案到了」是知道的 —— PerformanceObserver 會在每個資源完成時通知。
+     * 所以進度分段：引擎到了、設定讀完了、大廳的包到了、美術畫好了。
+     *
+     * 最後那一段等的是 `window.__casinoReady`（大廳在美術載完後自己掛上去，
+     * 見 06-lobby/scripts/LobbyGame.ts）。只等 `cc.director.getScene()` 的話，
+     * 場景是有了但圖還沒貼上，淡出之後玩家會看到一瞬間的空卡片。
+     */
+    (function () {
+      var boot = document.getElementById('boot');
+      if (!boot) return;
+      var bar = boot.querySelector('.bar i');
+      var note = boot.querySelector('.note');
+      var pct = 6;
 
+      function step(next, text) {
+        if (next <= pct) return;
+        pct = next;
+        bar.style.width = pct + '%';
+        if (text) note.textContent = text;
+      }
 
-<!-- SystemJS support. -->
-<script src="src/system.bundle.js" charset="utf-8"> </script>
+      var STAGES = [
+        { re: /cocos-js\/cc\.js/, pct: 58, text: '讀取設定…' },
+        { re: /settings\.json/, pct: 72, text: '載入大廳…' },
+        { re: /assets\/main\//, pct: 86, text: '準備牌桌…' }
+      ];
 
-<!-- Import map -->
-<script src="src/import-map.json" type="systemjs-importmap" charset="utf-8"> </script>
+      try {
+        var po = new PerformanceObserver(function (list) {
+          list.getEntries().forEach(function (e) {
+            STAGES.forEach(function (s) { if (s.re.test(e.name)) step(s.pct, s.text); });
+          });
+        });
+        po.observe({ type: 'resource', buffered: true });
+      } catch (err) { /* 不支援就只靠下面的輪詢 */ }
 
-<script>
-    System.import('./index.js').catch(function(err) { console.error(err); })
-</script>
+      function dismiss() {
+        step(100, '');
+        boot.classList.add('done');
+        setTimeout(function () { boot.remove(); }, 500);
+      }
 
+      var t = setInterval(function () {
+        /*
+         * 兩個退場條件，不是一個。
+         *
+         * 正常路徑是 `__casinoReady`（大廳把美術貼上去了）。但**大廳不是唯一的入口**：
+         * 直接切到某一款玩法的話，`LobbyGame.loadArt` 永遠不會跑，旗標也就永遠不會掛上，
+         * 遮罩會蓋在一個其實已經好了的畫面上——這是 `baccarat-render-check` 抓到的：
+         * 它截到的不是牌桌，是這張載入畫面。
+         *
+         * 所以再看一個條件：**跑起來的場景已經不是大廳**。那代表引擎活著、場景也換過了，
+         * 沒有理由再擋著。
+         */
+        var scene = window.cc && cc.director && cc.director.getScene();
+        if (!window.__casinoReady && !(scene && scene.name && scene.name !== 'Lobby')) return;
+        clearInterval(t);
+        dismiss();
+      }, 120);
+
+      // 保險：萬一某一步沒掛上旗標，也不要把玩家永遠關在載入畫面後面
+      setTimeout(function () {
+        if (document.body.contains(boot)) dismiss();
+      }, 45000);
+    })();
+  </script>
+
+  <script src="src/polyfills.bundle.js" charset="utf-8"> </script>
+  <script src="src/system.bundle.js" charset="utf-8"> </script>
+  <script src="src/import-map.json" type="systemjs-importmap" charset="utf-8"> </script>
+
+  <script>
+    System.import('./index.js').catch(function (err) { console.error(err); })
+  </script>
 </body>
 </html>
