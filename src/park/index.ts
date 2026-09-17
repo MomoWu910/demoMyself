@@ -110,8 +110,8 @@ function boot(view: T.WebGLRenderer): void {
         const portal = nearbyArcadePortal(position);
         if (portal) {
             release();
-            // Pixi already reads this key on the way back. Cocos return navigation is owned by its source project.
-            if (portal.id === 'pixi') try { sessionStorage.setItem('park:return', 'casino'); } catch { /* private browsing */ }
+            // Both cabinets read this key on the way back, so the walk resumes at the arcade plaza.
+            try { sessionStorage.setItem('park:return', 'casino'); } catch { /* private browsing */ }
             location.href = portal.href; return;
         }
         const p = nearby(position); if (!p) return;
