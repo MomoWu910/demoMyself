@@ -64,6 +64,19 @@ canvas { display: block; touch-action: none; }
    視訊桌台的 <video> 就沉在它底下。背景屬於元素自己，繪製順序在所有子元素之前，
    所以擋不到那塊視訊 */
 .stage { position: fixed; inset: 0; background: var(--bg); }
+/*
+ * The lobby owns a photographic environment, while every game keeps the
+ * deterministic Pixi gradient above. The dark veil is intentionally part of
+ * the background stack: cards remain the highest-contrast objects and the
+ * artwork can crop freely on narrow screens without creating a bright hotspot.
+ */
+.stage--lobby {
+    background:
+        linear-gradient(180deg, rgba(7, 6, 5, 0.68), rgba(7, 6, 5, 0.82)),
+        radial-gradient(circle at 62% 42%, rgba(10, 9, 7, 0.12), rgba(8, 7, 6, 0.58) 78%),
+        url(/demoMyself/res/src/arcade/res/lobby-background.png) center center / cover no-repeat,
+        var(--bg);
+}
 
 /* z-index 要比語言鈕（#lang-slot 的 5）高，資源核對展開的說明才蓋得過它。
    這一層自己是 pointer-events: none，所以疊在上面不會擋住底下任何東西的點擊 */
