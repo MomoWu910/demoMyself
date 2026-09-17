@@ -34,13 +34,16 @@
 ├─ Cross-Engine Rendering（PixiJS × Three.js）
 ├─ 3D Product Configurator（Babylon.js）
 ├─ Shader Lab（GLSL + WGSL）
-├─ Arcade 遊樂場（假 socket + 玩法模組熱插拔）
-│     ├─ 頁內切換的四款玩法：
-│     │  ├─ 老虎機（五軸三列）
-│     │  ├─ 百家樂（四張路圖 / 八副牌靴）
-│     │  ├─ 視訊百家樂（影片是節奏的主人 / 追趕對時）
-│     │  └─ 輪盤（歐式單零 / 兩個反向座標系相減）
-│     └─ 營運管理後台（頂列進入，管的是上面那四款）
+├─ 雲朵樂園 Cloud Park（Three.js 第三人稱）
+│     └─ 星光電玩廣場：兩台街機，各自通往一個賭場
+│        ├─ PixiJS 機台 → Arcade 遊樂場（假 socket + 玩法模組熱插拔）
+│        │     ├─ 頁內切換的四款玩法：
+│        │     │  ├─ 老虎機（五軸三列）
+│        │     │  ├─ 百家樂（四張路圖 / 八副牌靴）
+│        │     │  ├─ 視訊百家樂（影片是節奏的主人 / 追趕對時）
+│        │     │  └─ 輪盤（歐式單零 / 兩個反向座標系相減）
+│        │     └─ 營運管理後台（頂列進入，管的是上面那四款）
+│        └─ Cocos 機台 → Cocos Creator 賭場大廳（百家樂 / 輪盤 / 老虎機）
 ├─ RWD Showcase（裝置模擬器）
 └─ Rendering Findings（實驗結論）
       └─ 底下的三個壓測實驗：
@@ -200,11 +203,24 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 
 控制面板是 **React 19 + Zustand**，Pixi 跑自己的 render loop，兩邊唯一的接點是一個 store——面板寫參數，舞台每幀讀。React 完全不參與 render loop（60fps 的東西不該經過 virtual DOM）。這是這類產品的真實架構，而不是把引擎硬塞進 component 生命週期。加一個新 shader = 新增一個 `EffectDef` 檔案並註冊，頁面、參數控制項、原始碼檢視都會自動長出來。
 
-### 5. 遊樂場：頁內熱插拔的玩法模組 — `src/arcade/`
+### 5. 雲朵樂園：走進去的入口 — `src/park/`
+
+![星光電玩廣場：左邊那台進 PixiJS 版遊樂場，右邊那台進 Cocos Creator 版賭場大廳](docs/screenshots/park.png)
+
+站內 [`/park.html`](https://momowu910.github.io/demoMyself/park.html)。Three.js 第三人稱遊樂園，也是**兩個賭場共用的入口**：園區中央的星光電玩廣場擺著兩台街機，左邊那台進 PixiJS 版遊樂場，右邊那台進 Cocos Creator 版賭場大廳。兩邊都走得回來——進場前記下返回點，回來時直接站在廣場前面。
+
+- **場景造型全部以程式幾何建立**，沒有外部模型或貼圖下載；招牌用 CanvasTexture。細節按材質合併成靜態網格，樹木走 instancing，靜態陰影只生成一次、動態設施不更新投影。
+- **走得動的園區**：WASD／方向鍵、滑鼠或拖曳轉向、F 互動、空白鍵跳躍；手機是左搖桿＋右拖曳視角。移動分步且逐軸滑牆，碰撞用圓形與定向矩形兩種原型，花朵與高架雨棚刻意不擋路。
+- **可以做的事**：摩天輪與旋轉木馬有 25 秒搭乘視角、長椅坐得下、噴泉換水色、茶屋領氣球，園內散著 5 顆星星。左上小地圖可展開全圖並快速旅行。
+- **走得到才算數**：`npm run check:park` 用可達性掃描驗證所有旅行點、兩台街機與五顆星星都能從出生點走到，並檢查兩個入口分別連到 PixiJS 與 Cocos、碰撞防穿牆、邊界與滑牆。
+
+細節見 [`src/park/README.md`](src/park/README.md)。
+
+### 6. 遊樂場：頁內熱插拔的玩法模組 — `src/arcade/`
 
 ![遊樂場的老虎機：符號是程序生成的，右上角那排 tracked / leaked / tex 是切換玩法後的資源核對](docs/screenshots/arcade.png)
 
-站內 [`/arcade.html`](https://momowu910.github.io/demoMyself/arcade.html)。大廳與四款玩法（老虎機、百家樂、視訊百家樂、輪盤）跑在**同一個 `Application`、同一個 ticker、同一份 GPU 記憶體**上。細節見 [`src/arcade/README.md`](src/arcade/README.md)。
+站內 [`/arcade.html`](https://momowu910.github.io/demoMyself/arcade.html)，也可以從[雲朵樂園](https://momowu910.github.io/demoMyself/park.html)左邊那台街機走進去。大廳與四款玩法（老虎機、百家樂、視訊百家樂、輪盤）跑在**同一個 `Application`、同一個 ticker、同一份 GPU 記憶體**上。細節見 [`src/arcade/README.md`](src/arcade/README.md)。
 
 **這一頁在架構上要證明的事**：站內跨頁切換是整頁導覽，瀏覽器會把 document、JS heap、WebGL context 一起丟掉，隔離是免費的；**頁內切換沒有這道保險**。所以資源不是靠「記得在 unmount 清掉」來管——玩法模組拿不到裸的 `app`，要每幀邏輯得走 `ctx.frame()`、要長期持有物件得走 `ctx.track()`，全部登記在案，卸載時由 host 統一收回並核對，數字直接顯示在 HUD 上。
 
@@ -237,7 +253,7 @@ finish preset 原本只調 metallic / roughness / clearCoat 三個數字，所�
 
 **canvas 與 DOM 對齊**：百家樂的下注區在 canvas 裡、操作面板是 DOM，原本寫死「讓開 202px」——實測是 179.9，而且切成英文面板會再高 8px（牌寬跟著重排）。改成用 `ResizeObserver` 量實際面板高度寫進 store，玩法訂閱它重排。**這是 canvas / DOM 分兩層畫的必要代價**，不是額外的講究。
 
-### 6. 遊戲營運管理後台 — `src/admin/`
+### 7. 遊戲營運管理後台 — `src/admin/`
 
 ![營運總覽：KPI 兩排（注單與金流）、逐日投注長條圖、星期 × 小時的時段熱區](docs/screenshots/admin.jpg)
 
@@ -277,7 +293,7 @@ React + MUI 9 + MUI X（DataGrid、DatePickers，皆 MIT 版）+ Formik / yup。
 
 **`npm run check:admin`（176 項）** 驗的是畫面上看不出對錯的東西：注單查詢的篩選／排序／分頁、派彩分攤的餘數（攤完必須等於實際入帳）、金流的餘額不變式、四個角色的權限邊界、稽核的前後值，以及**前端預檢與後端規則對同一筆注要給出同一個錯誤代碼**。
 
-### 7. RWD Showcase：站內建裝置模擬器 — `src/rwdShowcase/`
+### 8. RWD Showcase：站內建裝置模擬器 — `src/rwdShowcase/`
 
 ![RWD Showcase：以 iframe 用實際 CSS 尺寸載入站內任一頁，斷點反應是真的](docs/screenshots/rwd.png)
 
@@ -290,12 +306,16 @@ React + MUI 9 + MUI X（DataGrid、DatePickers，皆 MIT 版）+ Formik / yup。
 
 > RWD 驗證方式：Playwright 以 6 種視窗尺寸（375×667 → 1920×1080，含橫向）× 全部 10 頁跑截圖矩陣，自動檢查橫向溢出（`scrollWidth > clientWidth`）與 console error。
 
-### 8. Cocos Creator：賭場大廳 — 另一個 repo
+### 9. Cocos Creator：賭場大廳 — 另一個 repo
+
+![Cocos 賭場大廳：五張卡片，三款能玩、兩張佔位；左上角走得回雲朵樂園](docs/screenshots/cocos-casino.jpg)
 
 用 **Cocos Creator 3.8** 做的一個大廳加三款遊戲。它們有自己的引擎與建置流程，沒辦法併進這裡的
 webpack，所以原始碼在獨立的 `cocos-lab`（private），成品 build 出來放在本站：
 
-**[→ 賭場大廳](https://momowu910.github.io/demoMyself/cocos-casino/)**（百家樂 · 輪盤 · 老虎機）
+**[→ 賭場大廳](https://momowu910.github.io/demoMyself/cocos-casino/)**（百家樂 · 輪盤 · 老虎機）——
+也可以從[雲朵樂園](https://momowu910.github.io/demoMyself/park.html)走進去：星光電玩廣場右邊那台街機。
+大廳左上角走得回園區，玩法裡那顆則是退回大廳（退一層才看得到往外的門，跟 PixiJS 版的頂列同一個規則）。
 
 - **百家樂** — 規則層（補牌表、五張路圖的推算）從上面遊樂場那款 **PixiJS 版整支搬過來，逐字節相同**，渲染層全部重寫。驗證含補牌表 8×10 整張攤開比對、50 萬局的莊家優勢對照公開數字，以及**與 PixiJS 版一萬局逐筆比對**（27,225 顆路圖標記全部相同）。
 - **輪盤** — 把 PixiJS 版**換引擎重做渲染層**。規則、桌布幾何、球的軌跡三支檔案零修改沿用，驗證方式是同時載入兩個 repo 的同名模組做逐筆比對。
@@ -309,8 +329,8 @@ webpack，所以原始碼在獨立的 `cocos-lab`（private），成品 build �
 | | 結果 |
 |---|---|
 | **DrawCall**（路圖 212 顆標記） | 每顆一個 `Graphics` **232** → Sprite 共用圖集加染色 **28**。對照組留在程式裡，網址加 `?roads=graphics` 可當場切回去比 |
-| **首載**（Asset Bundle 分包） | 全部塞主包約 10.5 MB → **4.37 MB**。點進一款遊戲才多載 766 KB，再進第二款時共用資源**一個 byte 都沒有重載** |
-| **資源釋放** | 大廳↔三款進出三輪，`assets` 119 / `Texture2D` 27 / `SpriteFrame` 27 — 三輪完全沒有成長 |
+| **首載**（Asset Bundle 分包） | 四包加總約 10 MB → 主包 **4.31 MB**。點進百家樂才多載 704 KB（bundle 428 KB ＋ 共用貼圖 276 KB），再進輪盤時共用資源**一個 byte 都沒有重載** |
+| **資源釋放** | 大廳↔三款進出三輪，`assets` 113 / `Texture2D` 25 / `SpriteFrame` 25 — 三輪完全沒有成長 |
 
 > 兩款遊戲的獨立版本仍然保留：[輪盤](https://momowu910.github.io/demoMyself/cocos-roulette/) ·
 > [老虎機](https://momowu910.github.io/demoMyself/cocos-slot/)
@@ -328,6 +348,7 @@ webpack，所以原始碼在獨立的 `cocos-lab`（private），成品 build �
 - **瀏覽器端持久層**：IndexedDB（注單、金流、玩家、稽核四張表；讀取同步走記憶體快取、寫入非同步落地），營運設定留在 localStorage——限紅檢查是在下注的同步流程裡跑的，不能等非同步讀取
 - **效能量測**：自製 benchmark runner（`src/bench/`）— CPU frame time 中位數 / p95、draw call 攔截、環境偵測，可匯出 Markdown / JSON
 - **3D / 材質**：PBR、IBL（`.env` prefiltered environment）、glTF（KHR_materials_variants）、程序生成法線／粗糙度貼圖（`ProceduralTexture` + 自寫 GLSL）
+- **3D 場景與角色控制**：第三人稱鏡頭、Pointer Lock 與虛擬搖桿雙軌輸入、逐軸滑牆碰撞（圓形與定向矩形兩種原型）、依材質合併靜態網格與樹木 instancing（`src/park/`）
 - **物理**：cannon-es
 - **動畫**：GSAP
 - **i18n**：自製輕量中英雙語切換（`src/i18n`，localStorage 持久化）
@@ -363,6 +384,7 @@ yarn start     # 啟動後開啟 http://localhost:8080
 yarn check:slot      # 老虎機 RTP 與賠付表（十萬把取樣）
 yarn check:baccarat  # 補牌表對公開真值（50 萬局）
 yarn check:roulette  # 輪盤賠率與角度換算
+yarn check:park      # 雲朵樂園：旅行點／兩台街機／星星的可達性、碰撞與滑牆
 yarn check:admin     # 後台：注單、金流、權限、稽核（176 項）
 yarn baseline:rtp    # 重算報表的理論派彩率基準線（124.7 萬筆）
 ```
