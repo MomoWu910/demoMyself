@@ -1,6 +1,6 @@
 # 遊樂場 — `src/arcade/`
 
-站內 [`/arcade.html`](https://momowu910.github.io/demoMyself/arcade.html)。一個大廳、四款玩法（老虎機、百家樂、視訊百家樂、輪盤），**跑在同一個 Pixi `Application`、同一個 ticker、同一份 GPU 記憶體上**。
+站內 [`/arcade.html`](https://momowu910.github.io/demoMyself/arcade.html)，也可以從[雲朵樂園](https://momowu910.github.io/demoMyself/park.html)星光電玩廣場左邊那台街機走進去（右邊那台是 Cocos 版賭場）。一個大廳、四款玩法（老虎機、百家樂、視訊百家樂、輪盤），**跑在同一個 Pixi `Application`、同一個 ticker、同一份 GPU 記憶體上**。
 
 這一頁的視覺刻意跟站台其他頁不同調——其他頁是冷色極簡加一面水，這裡是黑金。共用的仍然是字體與版面節奏。
 

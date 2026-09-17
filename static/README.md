@@ -8,8 +8,18 @@
 
 | 子資料夾 | 來源 | 怎麼更新 |
 |---|---|---|
-| `cocos-roulette/` | `~/cocos-lab` 的 `03-roulette` | `cd ~/cocos-lab && yarn build:roulette` → `yarn sync:cocos roulette` |
-| `cocos-slot/` | `~/cocos-lab` 的 `04-slot` | `cd ~/cocos-lab && yarn build:slot` → `yarn sync:cocos slot` |
+| `cocos-casino/` | `~/cocos-lab` 的 `06-lobby` 大廳 ＋ 三款玩法（分包） | `cd ~/cocos-lab && yarn build:casino` → `cd ~/demoMyself && yarn sync:cocos casino` |
+| `cocos-roulette/` | `~/cocos-lab` 的 `03-roulette` | ⚠️ **沒有建置目標了**，見下 |
+| `cocos-slot/` | `~/cocos-lab` 的 `04-slot` | ⚠️ **沒有建置目標了**，見下 |
+
+> ⚠️ **分包之後只剩 `casino` 一個建置目標。**
+>
+> Bundle 裡的場景不能當主包的起始場景（指定了也沒用，Cocos 會安靜地退回第一個找得到的
+> 場景），所以三款玩法不再有各自的建置設定——`build-configs/` 現在只剩 `casino.json`。
+>
+> `cocos-roulette/` 與 `cocos-slot/` 留著是為了**已經發出去的網址**：裡面是分包前建的
+> 產物，自包含、照樣跑得動，但**不會再跟著 cocos-lab 的改動更新**。
+> 要看最新的輪盤與老虎機，走 `cocos-casino/` 的大廳進去。
 
 > ⚠️ **`yarn sync:cocos` 一定要帶作品名。** 舊版是「掃描所有 `web-mobile*`，
 > 挑最新的那個」——那是為了應付 Cocos 建置面板的亂編號（`web-mobile-001`…）。
