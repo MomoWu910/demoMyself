@@ -69,12 +69,18 @@ canvas { display: block; touch-action: none; }
  * deterministic Pixi gradient above. The dark veil is intentionally part of
  * the background stack: cards remain the highest-contrast objects and the
  * artwork can crop freely on narrow screens without creating a bright hotspot.
+ *
+ * The artwork ships as WebP at 1600px. It was a 1.6 MB PNG: photographic
+ * content in a lossless format, so gzip could not touch it and it alone
+ * outweighed every script on the page. Two things make the trade-off free
+ * here: the veil above already crushes the artwork to 18-32% brightness, and
+ * the image is decorative, never read for detail.
  */
 .stage--lobby {
     background:
         linear-gradient(180deg, rgba(7, 6, 5, 0.68), rgba(7, 6, 5, 0.82)),
         radial-gradient(circle at 62% 42%, rgba(10, 9, 7, 0.12), rgba(8, 7, 6, 0.58) 78%),
-        url(/demoMyself/res/src/arcade/res/lobby-background.png) center center / cover no-repeat,
+        url(/demoMyself/res/src/arcade/res/lobby-background.webp) center center / cover no-repeat,
         var(--bg);
 }
 
