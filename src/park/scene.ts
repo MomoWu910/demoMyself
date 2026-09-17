@@ -156,57 +156,36 @@ export function createPark(): ParkScene {
     const drops: T.Mesh[] = [];
     for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; drops.push(ball(scene, '#c3f1ee', Math.cos(a) * 1.7, 1.5, Math.sin(a) * 1.7, .075, .2, .075)); }
 
-    // Casino: a toy castle with an unmistakable central entrance, marquee and twin towers.
-    const casino = new T.Group(); casino.position.set(0, 0, -31); scene.add(casino);
-    cameraBlockers.push(box(casino, '#c2b4df', 0, 3.8, 0, 18, 7.6, 13));
-    box(casino, C.cream, 0, .55, 0, 20, 1.1, 15);
-    box(casino, '#edb4c4', 0, 7.4, 0, 19.5, .6, 14);
-    box(casino, '#aa8dbe', 0, 8, -.5, 17, 1, 11);
-    for (const x of [-7.7, 7.7]) {
-        cylinder(casino, '#fff0db', x, 5, 4, 2.4, 10);
-        turnedRoof(casino, x, 9.75, 4, 2.85, 3.65, '#cc86a6');
-        ball(casino, C.gold, x, 13.5, 4, .23);
-        archWindow(casino, x, 4.05, 6.39, 1.3, 2.5);
-        for (const y of [1.05, 3.25, 7.6, 9.25]) { const band = ring(casino, y === 7.6 ? '#f0d19a' : '#ead6b8', x, y, 4, 2.43, .09); band.rotation.x = Math.PI / 2; }
-        for (let j = 0; j < 9; j++) {
-            const a = j / 8 * Math.PI;
-            block(casino, '#e8d9c6', x + Math.cos(a) * 2.37, 2 + j % 2 * .38, 4 + Math.sin(a) * 2.37, .33, .2, .13).rotation.y = Math.PI / 2 - a;
+    // Arcade plaza: two oversized toy cabinets replace the old casino building.
+    function arcadeCabinet(x: number, accent: string, dark: string, title: string, screen: string): void {
+        const cabinet = new T.Group(); cabinet.position.set(x, 0, -31); scene.add(cabinet);
+        cameraBlockers.push(box(cabinet, accent, 0, 3.15, 0, 4.8, 6.3, 4.4));
+        box(cabinet, C.cream, 0, .45, .05, 5.15, .9, 4.75);
+        box(cabinet, accent, 0, 3.15, 0, 4.75, 5.9, 4.2);
+        box(cabinet, dark, 0, 4.05, 2.13, 3.85, 2.35, .18);
+        label(cabinet, screen, 0, 4.05, 2.24, 3.35, 1.72, dark, '#fff4cf');
+        const deck = box(cabinet, C.cream, 0, 2.32, 2.35, 4.5, .52, 1.2); deck.rotation.x = -.12;
+        cylinder(cabinet, dark, -.75, 2.78, 2.45, .12, .7, .12); ball(cabinet, accent, -.75, 3.16, 2.45, .25);
+        for (const [bx, color] of [[.35, C.gold], [.92, C.pink], [1.45, C.mint]] as const) {
+            const button = cylinder(cabinet, color, bx, 2.72, 2.55, .19, .12, .19, 18); button.rotation.x = Math.PI / 2;
         }
+        box(cabinet, C.cream, 0, 6.25, .25, 5.2, 1.15, 3.8);
+        label(cabinet, title, 0, 6.28, 2.2, 4.45, .8, C.cream, dark);
+        for (const side of [-1, 1]) {
+            block(cabinet, C.gold, side * 2.25, 6.25, 2.18, .18, .72, .22, .08);
+            ball(cabinet, '#fff0ad', side * 2.18, 5.72, 2.2, .11);
+            ball(cabinet, '#fff0ad', side * 2.18, 6.8, 2.2, .11);
+            // Keep the coin-return trim fully in front of the cabinet face; intersecting
+            // the shell here flickers on shallow camera angles because the depths tie.
+            block(cabinet, dark, side * 1.75, 1.22, 2.22, .72, .22, .12, .07);
+        }
+        star(cabinet, C.gold, 0, 7.2, .3, .55);
     }
-    box(casino, C.cream, 0, 4.2, 6.65, 7.6, 7, .8);
-    box(casino, '#4e647d', 0, 2.45, 7.14, 3.9, 4.4, .2);
-    for (const x of [-1, 1]) { box(casino, '#7594b3', x, 2.45, 7.27, 1.7, 3.9, .08); box(casino, C.gold, x * .23, 2.3, 7.4, .08, .6, .1); }
-    box(casino, C.gold, 0, 4.85, 7.25, 4.6, .25, .35);
-    // Recessed door panels, transom arch, sculpted cornices and wall pilasters.
-    archWindow(casino, 0, .55, 7.4, 3.6, 4.65, '#f4d795');
-    for (const x of [-.9, .9]) {
-        block(casino, '#3f647a', x, 1.65, 7.55, 1.45, 1.9, .04);
-        for (const y of [.78, 2.56]) block(casino, '#d3b47f', x, y, 7.6, 1.55, .06, .06);
-        ball(casino, '#edce8b', x * .25, 2.55, 7.68, .09);
-    }
-    for (const x of [-3.65, 3.65]) {
-        for (const y of [.5, .8, 5.8, 6.1]) block(casino, '#f1dfc1', x, y, 7.05, .9, .19, .8);
-        block(casino, '#ffeed2', x, 3.3, 6.98, .48, 5.2, .48);
-        for (const offset of [-.13, 0, .13]) block(casino, '#e8d3b3', x + offset, 3.3, 7.24, .045, 4.6, .035);
-    }
-    for (const y of [1.0, 5.75, 7.6, 7.95]) block(casino, y > 7 ? '#f6d5af' : '#d7c2bb', 0, y, 6.62, 17.5, .12, .18);
-    // A layered art-deco crown silhouettes the facade from the entrance promenade.
-    const pediment = new T.Shape(); pediment.moveTo(-5, 0); pediment.lineTo(-5, .4); pediment.quadraticCurveTo(-2, .3, 0, 3.2); pediment.quadraticCurveTo(2, .3, 5, .4); pediment.lineTo(5, 0); pediment.closePath();
-    mesh(casino, new T.ExtrudeGeometry(pediment, { depth: .45, bevelEnabled: true, bevelSize: .1, bevelThickness: .08, bevelSegments: 3, steps: 1 }), '#efd1bb', 0, 8.0, 5.7);
-    const clockRim = ring(casino, C.gold, 0, 8.85, 6.3, .68, .1); clockRim.material = finish(C.gold, true);
-    const crest = cylinder(casino, '#fff2d2', 0, 8.85, 6.3, .65, .05); crest.rotation.x = Math.PI / 2;
-    star(casino, C.gold, 0, 8.85, 6.39, .4);
-    label(casino, 'STARLIGHT CASINO', 0, 6.75, 7.13, 11.5, 1.65, '#77658c', '#fff1ca');
-    star(casino, C.gold, 0, 9.85, 5.8, 1.4);
-    for (let i = -7; i <= 7; i++) ball(casino, '#fff0ad', i * .75, 5.8, 7.15, .1);
-    for (const x of [-4.9, 4.9]) for (const y of [1.1, 3.7]) archWindow(casino, x, y, 6.72, 1.35, 2.0);
-    for (const side of [-1, 1]) for (const z of [-3, 1]) { const window = archWindow(casino, side * 9.05, 2.3, z, 2.1, 3.2); window.rotation.y = side * Math.PI / 2; }
-    box(scene, '#d99aaa', 0, .22, -20.5, 4, .08, 5);
-    for (const x of [-3.3, 3.3]) { cylinder(scene, C.gold, x, .75, -19.5, .1, 1.5); ball(scene, C.gold, x, 1.55, -19.5, .17); }
-    for (const x of [-3.3, 3.3]) {
-        cylinder(scene, C.gold, x, .75, -22, .1, 1.5); ball(scene, C.gold, x, 1.55, -22, .17);
-        sweep(scene, '#b36f88', [[x, 1.45, -22], [x, 1.06, -20.7], [x, 1.45, -19.5]], .055);
-    }
+    cylinder(scene, '#e9c7ac', 0, .2, -30.6, 8.1, .18, 8.1, 48);
+    cylinder(scene, '#f7e5c4', 0, .31, -30.6, 7.7, .1, 7.7, 48);
+    arcadeCabinet(-4, '#e58fa8', '#735b86', 'PIXIJS', 'PIXEL PLAY');
+    arcadeCabinet(4, '#72bdbe', '#416f82', 'COCOS', 'CREATOR CLUB');
+    label(scene, 'STARLIGHT ARCADE', 0, .72, -25.75, 6.5, .65, '#fff4db', '#76638b');
 
     // Ferris wheel. Cabin pivots counter-rotate so passengers stay upright.
     const wheelBase = new T.Group(); wheelBase.position.set(-28, 0, -17); scene.add(wheelBase);

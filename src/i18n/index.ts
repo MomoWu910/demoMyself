@@ -85,8 +85,8 @@ export const DICT: Record<string, Entry> = {
     'home.shader.foot': { en: 'GLSL + WGSL, both written by hand', zh: 'GLSL + WGSL，兩份都自己寫' },
     'home.arcade.title': { en: 'Arcade', zh: '遊樂場' },
     'home.arcade.desc': {
-        en: 'Explore a pastel Three.js theme park with a third-person character, rides, a live map and fast travel. Walk into the casino to discover the PixiJS arcade: slots, baccarat, video baccarat and roulette.',
-        zh: '在 Three.js 製作的可愛 3D 遊樂園自由散步、搭乘設施、收集星星，用小地圖快速旅行。走進賭場，再進入 PixiJS 遊戲大廳，體驗老虎機、百家樂、視訊百家樂與輪盤。',
+        en: 'Explore a pastel Three.js theme park with a third-person character, rides, a live map and fast travel. At the arcade plaza, choose between two playable cabinets leading to the PixiJS and Cocos Creator game halls.',
+        zh: '在 Three.js 製作的可愛 3D 遊樂園自由散步、搭乘設施、收集星星，用小地圖快速旅行。前往星光電玩廣場，從兩台大型街機選擇 PixiJS 或 Cocos Creator 遊戲大廳。',
     },
 
     // ---- RWD Showcase ----

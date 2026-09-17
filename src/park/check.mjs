@@ -8,13 +8,18 @@ function load(entry) {
     const out = buildSync({ entryPoints: [new URL(entry, import.meta.url).pathname.replace(/^\/([A-Z]:)/i, '$1')], bundle: true, write: false, platform: 'node', format: 'cjs' });
     const mod = { exports: {} }; new Function('module', 'exports', 'require', out.outputFiles[0].text)(mod, mod.exports, require); return mod.exports;
 }
-const { PLACES, STARS, SEATS, OBSTACLES, isWalkable, movePlayer, nearby, nearbySeat, stepJump, JUMP_SPEED, overlaps, PLAYER_RADIUS, PATHS, pathCells } = load('./world.ts');
+const { PLACES, ARCADE_PORTALS, STARS, SEATS, OBSTACLES, isWalkable, movePlayer, nearby, nearbyArcadePortal, nearbySeat, stepJump, JUMP_SPEED, overlaps, PLAYER_RADIUS, PATHS, pathCells } = load('./world.ts');
 const { landscapeDelta, createControls } = load('./input.ts');
 
 // Every travel point must be collision-free and in its own interaction zone.
 for (const p of PLACES) {
     assert.ok(isWalkable(p.arrival), `${p.id} arrival is obstructed`);
     assert.equal(nearby(p.arrival)?.id, p.id, `${p.id} fast travel cannot interact`);
+}
+assert.deepEqual(ARCADE_PORTALS.map((p) => p.href), ['./arcade.html', './cocos-casino/']);
+for (const portal of ARCADE_PORTALS) {
+    assert.ok(isWalkable(portal.arrival), `${portal.id} cabinet arrival is obstructed`);
+    assert.equal(nearbyArcadePortal(portal.arrival)?.id, portal.id, `${portal.id} cabinet cannot interact`);
 }
 // Explore the actual walkable grid, so an isolated but valid arrival doesn't pass.
 const key = (p) => `${p.x},${p.z}`;
@@ -25,7 +30,7 @@ for (let i = 0; i < queue.length; i++) {
         if (isWalkable(p) && !visited.has(key(p))) { visited.add(key(p)); queue.push(p); }
     }
 }
-for (const p of [...PLACES.map((p) => p.arrival), ...STARS]) assert.ok(visited.has(key(p)), `Unreachable destination ${key(p)}`);
+for (const p of [...PLACES.map((p) => p.arrival), ...ARCADE_PORTALS.map((p) => p.arrival), ...STARS]) assert.ok(visited.has(key(p)), `Unreachable destination ${key(p)}`);
 for (const s of SEATS) {
     assert.ok(isWalkable(s.arrival), `${s.id}: standing up must not put the player inside furniture`);
     assert.equal(nearbySeat(s.arrival)?.id, s.id);
@@ -137,4 +142,4 @@ scene.updateMatrixWorld(true); const after = new THREE.Box3().setFromObject(cabi
 assert.equal(cabin.children.length, 2, 'Different indexing must produce two valid batches');
 assert.ok(before.min.distanceTo(after.min) < 1e-5 && before.max.distanceTo(after.max) < 1e-5, 'Batching changed the ride cabin geometry placement');
 retire();
-console.log(`Cloud Park checks passed: ${PLACES.length} travel points, ${SEATS.length} seats, ${STARS.length} stars, ${visited.size} reachable cells, collision, rotated input, 4 jump frame rates and Alt/focus lifecycle.`);
+console.log(`Cloud Park checks passed: ${PLACES.length} travel points, ${ARCADE_PORTALS.length} arcade cabinets, ${SEATS.length} seats, ${STARS.length} stars, ${visited.size} reachable cells, collision, rotated input, 4 jump frame rates and Alt/focus lifecycle.`);

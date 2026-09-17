@@ -7,13 +7,26 @@ export interface Place {
 }
 export const PLACES: Place[] = [
     { id: 'gate', name: '迎賓花園', en: 'WELCOME GARDEN', icon: '✿', color: '#63bca6', position: { x: 0, z: 36 }, arrival: { x: 0, z: 29 }, action: '和小雲打招呼', detail: '你的樂園旅程，從這裡開始。' },
-    { id: 'casino', name: '星光賭場', en: 'STARLIGHT CASINO', icon: '♠', color: '#9574d1', position: { x: 0, z: -31 }, arrival: { x: 0, z: -19 }, action: '進入星光賭場', detail: '通往老虎機、百家樂與輪盤的遊戲大廳。' },
+    { id: 'casino', name: '星光電玩廣場', en: 'STARLIGHT ARCADE', icon: '◈', color: '#9574d1', position: { x: 0, z: -31 }, arrival: { x: 0, z: -23 }, action: '選擇一台街機', detail: '挑選 PixiJS 或 Cocos Creator 機台，進入不同的遊戲大廳。' },
     { id: 'wheel', name: '晴空摩天輪', en: 'SKY WHEEL', icon: '☀', color: '#e893a9', position: { x: -28, z: -17 }, arrival: { x: -28, z: -8 }, action: '搭乘摩天輪', detail: '坐上雲朵車廂，從高處收藏整座樂園。' },
     { id: 'carousel', name: '夢幻旋轉木馬', en: 'DREAM CAROUSEL', icon: '★', color: '#c39a55', position: { x: 28, z: -14 }, arrival: { x: 28, z: -4 }, action: '搭乘旋轉木馬', detail: '跟著音樂盒般的節奏，轉一圈小小的夢。' },
     { id: 'tea', name: '棉花糖茶屋', en: 'CLOUD CAFÉ', icon: '☕', color: '#66aeca', position: { x: 28, z: 22 }, arrival: { x: 28, z: 28 }, action: '領取氣球', detail: '今天的限定禮物：一顆陪你散步的氣球。' },
     { id: 'fountain', name: '許願噴泉', en: 'WISHING PLAZA', icon: '✦', color: '#53b7bc', position: { x: 0, z: 0 }, arrival: { x: 0, z: 7 }, action: '許一個願望', detail: '讓噴泉換上新的顏色，替今天加一點魔法。' },
 ];
 export const place = (id: PlaceId): Place => PLACES.find((p) => p.id === id)!;
+export type ArcadePortalId = 'pixi' | 'cocos';
+export interface ArcadePortal {
+    id: ArcadePortalId; name: string; href: string; position: Point; arrival: Point; action: string;
+}
+export const ARCADE_PORTALS: ArcadePortal[] = [
+    { id: 'pixi', name: 'PixiJS', href: './arcade.html', position: { x: -4, z: -31 }, arrival: { x: -4, z: -26 }, action: '開啟 PixiJS 街機' },
+    { id: 'cocos', name: 'Cocos Creator', href: './cocos-casino/', position: { x: 4, z: -31 }, arrival: { x: 4, z: -26 }, action: '開啟 Cocos 街機' },
+];
+/** Pick the closest cabinet so adjacent interaction zones never depend on array order. */
+export function nearbyArcadePortal(p: Point): ArcadePortal | undefined {
+    return ARCADE_PORTALS.map((portal) => ({ portal, distance: Math.hypot(p.x - portal.arrival.x, p.z - portal.arrival.z) }))
+        .filter(({ distance }) => distance < 2.5).sort((a, b) => a.distance - b.distance)[0]?.portal;
+}
 export const LIMIT = 45;
 export interface Seat { id: string; position: Point; arrival: Point; yaw: number }
 /** Rest pockets sit outside the promenade; local +Z always faces the approach. */
@@ -68,7 +81,7 @@ const rect = (x: number,z: number,halfX: number,halfZ: number,yaw=0): Obstacle =
 export const PLAYER_RADIUS = .4;
 /** Solid silhouettes at walking height; overhead canopies and flowers stay passable. */
 export const OBSTACLES: Obstacle[] = [
-    rect(0,-31,10,7.5), ...[-7.7,7.7].map(x => circle(x,-27,2.52)),
+    ...ARCADE_PORTALS.map(({ position }) => rect(position.x, position.z, 2.5, 2.35)),
     circle(-28,-17,8.6), circle(28,-14,8.2), circle(0,0,4.5),
     rect(28,22,5.5,3.5), rect(28,25.9,4.5,.5),
     ...[-5.2,5.2].map(x => circle(28+x,26.65,.085)),

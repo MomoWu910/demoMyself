@@ -174,7 +174,7 @@ export const NODES: ProjectNode[] = [
         leafAngle: -45,
         // 「Simulated socket」不寫成 WebSocket：這裡是仿 WebSocket 介面的同行程實作
         // （net/fakeSocket.ts），沒有真的連線——標籤要對得上 source 才禁得起追問
-        tags: ['Three.js Park', 'PixiJS Arcade', 'WASD / Touch'],
+        tags: ['Three.js Park', 'PixiJS / Cocos', 'WASD / Touch'],
         // 玩法全畫在 Pixi 裡，HUD／面板是 React——跟 Shader Lab 同一套分工。
         // 假 WebSocket 那層沒有對應的顏色：色彩語彙只給引擎與著色器（見 Tone），
         // 多開一色會讓外框的讀法從「用什麼畫的」變成「用了哪些技術」。

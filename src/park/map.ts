@@ -5,7 +5,7 @@ const base = `<rect x="-50" y="-50" width="100" height="100" rx="12" fill="#dbea
 <g fill="#fff4dc">${PATHS.map(p => `<rect x="${p.x-p.w/2}" y="${p.z-p.d/2}" width="${p.w}" height="${p.d}"/>`).join('')}</g>
 <g fill="#67968f">${SEATS.map(s => `<rect x="-1.55" y="-.6" width="3.1" height="1.2" rx=".3" transform="translate(${s.position.x} ${s.position.z}) rotate(${-s.yaw*180/Math.PI})"/>`).join('')}</g>
 <circle r="9.5" fill="#f5e7ca"/><circle r="4.5" fill="#8acbd0" stroke="#fff9ed" stroke-width="1.2"/>
-<rect x="-10" y="-39" width="20" height="16" rx="3" fill="#b5a0d0" stroke="#fffaf1" stroke-width="1"/>
+<rect x="-7" y="-35" width="6" height="8" rx="1.2" fill="#e89aae" stroke="#fffaf1" stroke-width="1"/><rect x="1" y="-35" width="6" height="8" rx="1.2" fill="#77bfc2" stroke="#fffaf1" stroke-width="1"/>
 <circle cx="-28" cy="-17" r="8" fill="#e7b2c4" stroke="#fffaf1" stroke-width="1"/><path d="M-34-17h12m-6-6v12m-4-10l8 8m-8 0l8-8" stroke="#fff4e9" stroke-width=".8"/>
 <circle cx="28" cy="-14" r="8" fill="#e9c98e" stroke="#fffaf1" stroke-width="1"/><circle cx="28" cy="-14" r="4" fill="#eab0b9"/>
 <rect x="22" y="18" width="12" height="8" rx="2" fill="#8dc7be" stroke="#fffaf1"/>

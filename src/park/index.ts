@@ -2,7 +2,7 @@ import * as T from 'three';
 import { createPark } from './scene';
 import { createControls } from './input';
 import { createMaps } from './map';
-import { movePlayer, nearby, nearbySeat, stepJump, JUMP_SPEED, place, PLACES, STARS, type PlaceId, type Point, type Seat, type JumpMotion } from './world';
+import { movePlayer, nearby, nearbyArcadePortal, nearbySeat, stepJump, JUMP_SPEED, place, PLACES, STARS, type PlaceId, type Point, type Seat, type JumpMotion } from './world';
 import { mountReveal } from '../shell/reveal';
 import './style.css';
 
@@ -17,7 +17,7 @@ try {
     renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     boot(renderer);
 } catch (error) {
-    console.error('Cloud Park could not start', error); el('error').hidden = false;
+    console.error('Cloud Park could not start', error); document.body.classList.remove('park-booting'); el('error').hidden = false;
 }
 
 function boot(view: T.WebGLRenderer): void {
@@ -30,7 +30,7 @@ function boot(view: T.WebGLRenderer): void {
     let started = false, travelling = false, ride: { id: 'wheel' | 'carousel' } | null = null;
     let seated: Seat | null = null;
     let jumpMotion: JumpMotion = { height: 0, velocity: 0 };
-    let worldTime = 0, last = performance.now(), toastTimer = 0, cameraReady = false;
+    let worldTime = 0, last = performance.now(), toastTimer = 0, cameraReady = false, revealed = false;
     const collected = new Set<number>();
     // Only the park's return point is saved. Browser storage restrictions never prevent entry.
     try {
@@ -107,18 +107,23 @@ function boot(view: T.WebGLRenderer): void {
             park.avatar.root.position.set(position.x + Math.sin(seat.yaw) * .1, .32, position.z + Math.cos(seat.yaw) * .1); park.avatar.root.rotation.y = seat.yaw;
             toast('坐下休息一下。F 起身，空白鍵跳起。'); return;
         }
+        const portal = nearbyArcadePortal(position);
+        if (portal) {
+            release();
+            // Pixi already reads this key on the way back. Cocos return navigation is owned by its source project.
+            if (portal.id === 'pixi') try { sessionStorage.setItem('park:return', 'casino'); } catch { /* private browsing */ }
+            location.href = portal.href; return;
+        }
         const p = nearby(position); if (!p) return;
         switch (p.id) {
             case 'casino':
-                release();
-                try { sessionStorage.setItem('park:return', 'casino'); } catch { /* private browsing */ }
-                location.href = './arcade.html'; break;
+                toast('左邊是 PixiJS，右邊是 Cocos Creator。靠近想玩的街機吧！'); break;
             case 'wheel': case 'carousel':
                 controls.clear(); ride = { id: p.id }; park.avatar.root.visible = true; park.avatar.root.scale.setScalar(.55); cameraReady = false;
                 toast(`${p.name}出發！隨時按 F 或互動鍵下車。`); break;
             case 'fountain': park.wish(); toast('✦ 願望已送達。今天也會有好事發生！'); break;
             case 'tea': park.avatar.balloon.visible = !park.avatar.balloon.visible; toast(park.avatar.balloon.visible ? '送你一顆棉花糖氣球，帶著它去散步吧！' : '氣球先寄放在茶屋，隨時可以回來拿。'); break;
-            case 'gate': toast('小雲：歡迎！找找散落的 5 顆星星，或打開地圖去星光賭場。'); break;
+            case 'gate': toast('小雲：歡迎！找找散落的 5 顆星星，或打開地圖去星光電玩廣場。'); break;
         }
     }
     function travel(id: PlaceId): void {
@@ -186,7 +191,8 @@ function boot(view: T.WebGLRenderer): void {
         }
         park.update(worldTime, moving, !!seated || !!ride, jumpMotion.height); updateCamera(dt);
         const airborne = jumpMotion.height > 0 || jumpMotion.velocity > 0;
-        const current = nearby(position), prompt = ride ? '結束搭乘' : seated ? '起身，繼續散步' : airborne ? '' : nearbySeat(position) ? '坐下休息' : current?.action ?? '';
+        const current = nearby(position), portal = nearbyArcadePortal(position);
+        const prompt = ride ? '結束搭乘' : seated ? '起身，繼續散步' : airborne ? '' : nearbySeat(position) ? '坐下休息' : portal?.action ?? current?.action ?? '';
         if (prompt !== previousPrompt) {
             el('interact').hidden = !prompt; el('interaction-label').textContent = prompt;
             el<HTMLButtonElement>('touch-action').disabled = !prompt; previousPrompt = prompt;
@@ -202,6 +208,8 @@ function boot(view: T.WebGLRenderer): void {
             el('location').textContent = ride ? `${place(ride.id).name} · 搭乘中` : nearest.name;
         }
         view.render(park.scene, camera);
+        // Do not reveal raw HTML while CSS, the scene graph and the first WebGL frame are loading.
+        if (!revealed) { revealed = true; document.body.classList.remove('park-booting'); }
     }
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); release(); el('error').hidden = false; view.setAnimationLoop(null); });
     canvas.addEventListener('webglcontextrestored', () => location.reload());
