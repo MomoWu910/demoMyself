@@ -216,14 +216,36 @@ console.log('\n== 軌跡反解（窮舉 37 個號碼 × 12 組起始角）==');
             const landed = pocketAtAngle(end.ballAngle - end.wheelAngle);
             if (landed !== n) missed.push(`${n} → 落在 ${landed}`);
 
-            // 2. 球從頭到尾只往一個方向跑（反向），中途不能倒退回去
-            let last = plan.ballStart;
+            /**
+             * 2. 球的方向與落定。
+             *
+             * ⚠️ **不能再斷言「全程只能反向」**：球落到轉子上之後會被隔板擋回來，
+             * 相對速度反號是物理的一部分（見 spin.ts 的第五階段）。
+             * 但那條斷言原本防的東西還在——它防的是球**整趟**倒著跑，
+             * 那是起始角或掃掠方向寫反才會有的症狀，而畫面上很難一眼認出來。
+             *
+             * 所以界線改成「**還在球道上的時候**（radius 貼著 1）一步都不准倒退」，
+             * 再加一條：球停了就不能再動。
+             */
+            let last = null;
             let radiusMax = 0;
-            for (let i = 1; i <= 240; i++) {
-                const s = sampleSpin(plan, (i / 240) * duration);
-                if (s.ballAngle > last + 1e-9) backwards.push(`${n}/${k}`);
+            for (let i = 1; i <= 360; i++) {
+                const s = sampleSpin(plan, (i / 360) * duration);
+                if (s.radius01 > 0.999 && last !== null && s.ballAngle > last + 1e-9) {
+                    backwards.push(`${n}/${k} 在球道上倒退`);
+                }
                 last = s.ballAngle;
                 radiusMax = Math.max(radiusMax, s.radius01);
+            }
+
+            // 停了就不動：落定之後相對轉子的角度必須是常數
+            const rest = sampleSpin(plan, plan.settleAt);
+            const restRel = rest.ballAngle - rest.wheelAngle;
+            for (const extra of [0.3, 0.9, 2.0]) {
+                const later = sampleSpin(plan, plan.settleAt + extra);
+                if (Math.abs(later.ballAngle - later.wheelAngle - restRel) > 1e-9) {
+                    backwards.push(`${n}/${k} 停穩後又動了`);
+                }
             }
 
             // 3. 落袋時球必須真的貼在袋位環上（radius01 = 0），不能浮著
@@ -233,7 +255,7 @@ console.log('\n== 軌跡反解（窮舉 37 個號碼 × 12 組起始角）==');
     }
 
     ok('444 趟全部停在 server 指定的號碼', missed.length === 0, missed.slice(0, 4).join('、'));
-    ok('球全程反向、不倒退', backwards.length === 0, backwards.slice(0, 4).join('、'));
+    ok('球道上全程反向、停穩後不再移動', backwards.length === 0, backwards.slice(0, 4).join('、'));
     ok('球最後貼在袋位環上', floating.length === 0, floating.slice(0, 4).join('、'));
 
     // 落袋之後球跟著轉子走：相對角度不再變化
