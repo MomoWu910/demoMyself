@@ -94,6 +94,52 @@
       #boot, #boot .bar i { transition-duration: .01ms; }
       #boot.busy .bar i { animation: none; width: 70%; opacity: .72; }
     }
+
+    /*
+     * 直向提示。
+     *
+     * 四個場景的版面都是照 1280×720 排的，直向手機的可視範圍是 1280×2277——
+     * 內容擠成中間一條，上下全是空的。網頁沒有辦法真的鎖定螢幕方向
+     * （`screen.orientation.lock()` 要先進全螢幕，iOS Safari 根本沒有這支 API），
+     * 所以照業界做法擋一層提示，等使用者自己轉過來。
+     *
+     * `pointer: coarse` 是關鍵：只對觸控裝置生效。少了它，桌機把視窗拉窄成直的
+     * 也會被蓋住——而桌機那個情境是 RWD 該處理的，不是叫人轉螢幕。
+     */
+    #rotate { display: none; }
+    @media (orientation: portrait) and (pointer: coarse) {
+      #rotate {
+        position: fixed; inset: 0; z-index: 10000;
+        display: grid; place-items: center; gap: 0;
+        background: #070604; color: #f2ece1;
+        font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+        padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+      }
+    }
+    #rotate .inner { display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center; }
+    #rotate .phone {
+      width: 54px; height: 88px; border: 2px solid #d3ab61; border-radius: 9px;
+      position: relative; animation: casino-rotate 2.4s ease-in-out infinite;
+    }
+    #rotate .phone::after {
+      content: ""; position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%);
+      width: 16px; height: 2px; border-radius: 2px; background: rgba(211, 171, 97, .62);
+    }
+    #rotate .mark {
+      font: 600 clamp(19px, 5.4vw, 26px)/1 Georgia, "Times New Roman", serif;
+      letter-spacing: .19em; color: #e1c17d; text-indent: .19em;
+      text-shadow: 0 1px 0 #4e3516, 0 0 22px rgba(212, 168, 81, .24);
+    }
+    #rotate .rule { width: 68px; height: 1px; background: linear-gradient(90deg, transparent, #d3ab61, transparent); }
+    #rotate .tip { font-size: 15px; letter-spacing: .08em; color: #c9bca4; line-height: 1.7; }
+    #rotate .sub { font-size: 10px; letter-spacing: .34em; color: #9d7a3d; text-indent: .34em; }
+    @keyframes casino-rotate {
+      0%, 42% { transform: rotate(0deg); }
+      58%, 100% { transform: rotate(-90deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #rotate .phone { animation: none; transform: rotate(-90deg); }
+    }
   </style>
 </head>
 <body>
@@ -101,6 +147,16 @@
       <div id="Cocos3dGameContainer">
         <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="99"></canvas>
       </div>
+  </div>
+
+  <div id="rotate" role="alertdialog" aria-live="polite">
+    <div class="inner">
+      <div class="phone"></div>
+      <div class="mark">GOLDEN HALL</div>
+      <div class="rule"></div>
+      <div class="tip">請將裝置轉為橫向<br>牌桌是照 16:9 排的</div>
+      <div class="sub">ROTATE TO PLAY</div>
+    </div>
   </div>
 
   <div id="boot" role="status" aria-live="polite">
