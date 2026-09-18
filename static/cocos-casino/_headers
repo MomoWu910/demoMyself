@@ -1,19 +1,24 @@
 # Cloudflare Pages 預設給靜態資源 `max-age=0, must-revalidate`：重訪時 43 個檔
 # 一個都不會少抓（實測仍是 42 個 200）。這裡把資源類的檔案改成可快取。
 #
-# 為什麼是 1 小時而不是 immutable：Cocos 的資源檔名是資產 UUID，**內容改了 UUID 不會變**
+# 為什麼是 5 分鐘 + stale-while-revalidate，而不是 immutable：Cocos 的資源檔名是資產 UUID，**內容改了 UUID 不會變**
 # （這輪把四張 slot 貼圖從 PNG 換成 JPEG/WebP，UUID 一個字都沒動）。
 # 掛上 immutable 會讓改版永遠推不出去，所以只敢給一個短天期。
+#
+# 一開始給的是 1 小時，結果自己踩到：部署完之後在手機上看到的還是舊版，
+# 而且改 server 的標頭救不了已經躺在瀏覽器裡的那份快取。
+# 改成 max-age=300 + stale-while-revalidate=86400：五分鐘內直接用，
+# 過期之後先用舊的再背景更新，下一次進來就是新的——更新拿得回來，也還有快取效益。
 # index.html 不列在這裡，維持每次都問，確保新版一部署就生效。
 
 /assets/*
-  Cache-Control: public, max-age=3600
+  Cache-Control: public, max-age=300, stale-while-revalidate=86400
 
 /cocos-js/*
-  Cache-Control: public, max-age=3600
+  Cache-Control: public, max-age=300, stale-while-revalidate=86400
 
 /src/*
-  Cache-Control: public, max-age=3600
+  Cache-Control: public, max-age=300, stale-while-revalidate=86400
 
 /loading.webp
-  Cache-Control: public, max-age=3600
+  Cache-Control: public, max-age=300, stale-while-revalidate=86400
