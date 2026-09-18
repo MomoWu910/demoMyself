@@ -34,8 +34,9 @@
     改成帶 hash 的話這一行要跟著改，不然會變成多下載一份沒用的檔案。
   -->
   <link rel="preload" as="script" href="cocos-js/cc.js">
-  <link rel="preload" as="script" href="src/index.js">
+  <link rel="preload" as="script" href="index.js">
   <link rel="preload" as="fetch" href="src/import-map.json" crossorigin>
+  <link rel="preload" as="image" href="loading.webp" fetchpriority="high">
 
   <link rel="stylesheet" type="text/css" href="style.css"/>
 
@@ -46,27 +47,53 @@
   <style>
     #boot {
       position: fixed; inset: 0; z-index: 9999;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 22px; background: #0a0908; color: #f2ece1;
+      display: grid; place-items: center; overflow: hidden;
+      background: #070604; color: #f2ece1;
       font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
-      transition: opacity .45s ease;
+      opacity: 1; visibility: visible;
+      transition: opacity .45s ease, visibility 0s;
     }
-    #boot.done { opacity: 0; pointer-events: none; }
+    #boot::before {
+      content: ""; position: absolute; inset: -2%;
+      background: url("loading.webp") center / cover no-repeat;
+      opacity: .78; transform: scale(1.02);
+    }
+    #boot::after {
+      content: ""; position: absolute; inset: 0;
+      background:
+        radial-gradient(circle at 50% 48%, rgba(9, 7, 5, .08) 0 24%, rgba(7, 6, 4, .48) 57%, rgba(4, 3, 2, .78) 100%),
+        linear-gradient(180deg, rgba(0, 0, 0, .2), transparent 28%, transparent 72%, rgba(0, 0, 0, .46));
+    }
+    #boot.done { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .45s ease, visibility 0s .45s; }
+    #boot .panel {
+      position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center;
+      width: min(440px, 82vw); gap: 14px; padding-top: 1vh;
+      filter: drop-shadow(0 4px 18px rgba(0, 0, 0, .72));
+    }
     #boot .mark {
-      font-size: clamp(22px, 5vw, 34px); letter-spacing: .26em; font-weight: 600;
-      color: #d9b871; text-indent: .26em;
+      font: 600 clamp(22px, 4vw, 38px)/1 Georgia, "Times New Roman", serif;
+      letter-spacing: .19em; color: #e1c17d; text-indent: .19em;
+      text-shadow: 0 1px 0 #4e3516, 0 0 22px rgba(212, 168, 81, .24);
     }
-    #boot .sub { font-size: 12px; letter-spacing: .22em; color: #8a6a33; text-indent: .22em; }
+    #boot .sub { font-size: 10px; letter-spacing: .34em; color: #9d7a3d; text-indent: .34em; }
+    #boot .rule { width: 68px; height: 1px; background: linear-gradient(90deg, transparent, #d3ab61, transparent); }
     #boot .bar {
-      width: min(280px, 62vw); height: 3px; border-radius: 2px;
-      background: rgba(217, 184, 113, .16); overflow: hidden;
+      width: min(300px, 66vw); height: 2px; margin-top: 8px; border-radius: 2px;
+      background: rgba(217, 184, 113, .14); overflow: hidden;
     }
     #boot .bar i {
       display: block; height: 100%; width: 6%; border-radius: 2px;
-      background: linear-gradient(90deg, #8a6a33, #f0dcac);
-      transition: width .5s cubic-bezier(.22, .61, .36, 1);
+      background: linear-gradient(90deg, #75501f, #f1d99f, #9a6d2e);
+      box-shadow: 0 0 10px rgba(237, 204, 132, .5);
+      transition: width .45s cubic-bezier(.22, .61, .36, 1), transform .25s ease;
     }
-    #boot .note { font-size: 13px; color: #9a9083; min-height: 1.2em; }
+    #boot.busy .bar i { width: 34%; animation: casino-loading 1.25s ease-in-out infinite; }
+    #boot .note { font-size: 12px; letter-spacing: .12em; color: #b8aa95; min-height: 1.2em; }
+    @keyframes casino-loading { from { transform: translateX(-110%); } to { transform: translateX(300%); } }
+    @media (prefers-reduced-motion: reduce) {
+      #boot, #boot .bar i { transition-duration: .01ms; }
+      #boot.busy .bar i { animation: none; width: 70%; opacity: .72; }
+    }
   </style>
 </head>
 <body>
@@ -76,11 +103,14 @@
       </div>
   </div>
 
-  <div id="boot">
-    <div class="mark">GOLDEN HALL</div>
-    <div class="sub">COCOS CREATOR</div>
-    <div class="bar"><i></i></div>
-    <div class="note">載入引擎…</div>
+  <div id="boot" role="status" aria-live="polite">
+    <div class="panel">
+      <div class="mark">GOLDEN HALL</div>
+      <div class="rule"></div>
+      <div class="sub">PRIVATE GAMING SALON</div>
+      <div class="bar"><i></i></div>
+      <div class="note">載入引擎…</div>
+    </div>
   </div>
 
   <script>
@@ -91,9 +121,9 @@
      * 但「哪一個檔案到了」是知道的 —— PerformanceObserver 會在每個資源完成時通知。
      * 所以進度分段：引擎到了、設定讀完了、大廳的包到了、美術畫好了。
      *
-     * 最後那一段等的是 `window.__casinoReady`（大廳在美術載完後自己掛上去，
-     * 見 06-lobby/scripts/LobbyGame.ts）。只等 `cc.director.getScene()` 的話，
-     * 場景是有了但圖還沒貼上，淡出之後玩家會看到一瞬間的空卡片。
+     * 最後一段由 Cocos 主動呼叫 `__casinoLoading.finish()`：大廳與三款玩法都在
+     * 必要美術實際套到節點後才揭開。遮罩不移除，因此場景切換可以重用同一個 DOM，
+     * 不會為每款玩法再下載一張 loading 圖。
      */
     (function () {
       var boot = document.getElementById('boot');
@@ -102,12 +132,39 @@
       var note = boot.querySelector('.note');
       var pct = 6;
 
+      var generation = 0;
+
       function step(next, text) {
         if (next <= pct) return;
         pct = next;
+        boot.classList.remove('busy');
         bar.style.width = pct + '%';
         if (text) note.textContent = text;
       }
+
+      function show(text) {
+        generation += 1;
+        pct = 6;
+        boot.classList.remove('done');
+        boot.classList.add('busy');
+        boot.setAttribute('aria-hidden', 'false');
+        bar.style.width = '34%';
+        note.textContent = text || '正在準備…';
+      }
+
+      function finish() {
+        var mine = generation;
+        boot.classList.remove('busy');
+        bar.style.width = '100%';
+        note.textContent = '準備完成';
+        setTimeout(function () {
+          if (mine !== generation) return;
+          boot.classList.add('done');
+          boot.setAttribute('aria-hidden', 'true');
+        }, 180);
+      }
+
+      window.__casinoLoading = { show: show, finish: finish };
 
       var STAGES = [
         { re: /cocos-js\/cc\.js/, pct: 58, text: '讀取設定…' },
@@ -124,33 +181,9 @@
         po.observe({ type: 'resource', buffered: true });
       } catch (err) { /* 不支援就只靠下面的輪詢 */ }
 
-      function dismiss() {
-        step(100, '');
-        boot.classList.add('done');
-        setTimeout(function () { boot.remove(); }, 500);
-      }
-
-      var t = setInterval(function () {
-        /*
-         * 兩個退場條件，不是一個。
-         *
-         * 正常路徑是 `__casinoReady`（大廳把美術貼上去了）。但**大廳不是唯一的入口**：
-         * 直接切到某一款玩法的話，`LobbyGame.loadArt` 永遠不會跑，旗標也就永遠不會掛上，
-         * 遮罩會蓋在一個其實已經好了的畫面上——這是 `baccarat-render-check` 抓到的：
-         * 它截到的不是牌桌，是這張載入畫面。
-         *
-         * 所以再看一個條件：**跑起來的場景已經不是大廳**。那代表引擎活著、場景也換過了，
-         * 沒有理由再擋著。
-         */
-        var scene = window.cc && cc.director && cc.director.getScene();
-        if (!window.__casinoReady && !(scene && scene.name && scene.name !== 'Lobby')) return;
-        clearInterval(t);
-        dismiss();
-      }, 120);
-
-      // 保險：萬一某一步沒掛上旗標，也不要把玩家永遠關在載入畫面後面
+      // 保險：請求若卡死，45 秒後仍揭開程式繪製的降級畫面，不把玩家永遠關住。
       setTimeout(function () {
-        if (document.body.contains(boot)) dismiss();
+        if (!boot.classList.contains('done')) finish();
       }, 45000);
     })();
   </script>
