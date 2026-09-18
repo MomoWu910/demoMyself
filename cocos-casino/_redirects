@@ -1,0 +1,8 @@
+# 賭場搬到 Cloudflare 之後，大廳左上角那顆「← 遊樂園」仍然走 Cocos 產物裡寫死的
+# 相對路徑 `../park.html`（~/cocos-lab 的 assets/shared/BackToLobby.ts）。
+# 賭場在這裡是根目錄，所以那串會解析成 /park.html —— 由這條規則接回還在
+# GitHub Pages 上的樂園，Cocos 原始碼一行都不用改。
+#
+# 用 302 不用 301：301 會被瀏覽器永久快取，之後整站搬過來、park.html 就在本站時
+# 會拔不掉。這是暫時的橋，不是永久搬遷。
+/park.html  https://momowu910.github.io/demoMyself/park.html  302
