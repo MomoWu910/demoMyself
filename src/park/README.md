@@ -1,6 +1,6 @@
 # Cloud Park · 雲朵樂園
 
-首頁「遊樂場」→ `park.html` → 星光電玩廣場 → PixiJS `arcade.html` 或 Cocos Creator `cocos-casino/`。
+首頁「遊樂場」→ `park.html` → 星光電玩廣場 → PixiJS `arcade.html` 或 Cocos Creator 賭場（已搬到 Cloudflare Pages：`https://demomyself-casino.pages.dev/`，本站仍留一份備援在 `cocos-casino/`）。
 兩台街機都回得來：進場前記下 `sessionStorage['park:return']`，回來時直接站在廣場前面。PixiJS 那邊的出口在大廳頂列（`src/arcade/ui/TopBar.tsx`），Cocos 那邊在大廳左上角（`~/cocos-lab/assets/shared/BackToLobby.ts`，產物同步進 `static/`）。
 
 Three.js 第三人稱遊樂園。所有場景造型以程式幾何建立，沒有外部模型或貼圖下載；招牌使用 CanvasTexture。美術參考 hololive Dreams 官方園區的明亮玩具感，場景、角色與介面為本專案原創。

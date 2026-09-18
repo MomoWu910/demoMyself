@@ -20,7 +20,19 @@ export interface ArcadePortal {
 }
 export const ARCADE_PORTALS: ArcadePortal[] = [
     { id: 'pixi', name: 'PixiJS', href: './arcade.html', position: { x: -4, z: -31 }, arrival: { x: -4, z: -26 }, action: '開啟 PixiJS 街機' },
-    { id: 'cocos', name: 'Cocos Creator', href: './cocos-casino/', position: { x: 4, z: -31 }, arrival: { x: 4, z: -26 }, action: '開啟 Cocos 街機' },
+    /*
+     * Cocos 賭場搬到 Cloudflare 了，所以這裡是絕對網址而不是相對路徑。
+     *
+     * 搬的理由是量出來的：同一份檔案，GitHub Pages 要 14.5–19.1 秒才看得到大廳，
+     * Cloudflare 是 2.6 秒。GitHub Pages 的邊緣節點在新加坡（握手 65 ms、吞吐
+     * 100–800 KB/s），Cloudflare 在台北（握手 7 ms、3–4 MB/s）。
+     *
+     * 回程不必對稱處理：大廳左上角那顆「← 遊樂園」仍走 Cocos 產物裡寫死的
+     * `../park.html`，由賭場那邊的 `_redirects` 接回這裡（見 static/cocos-casino/_redirects）。
+     * `sessionStorage['park:return']` 跨 origin 來回不會掉——它綁的是分頁加 origin，
+     * 離開再回來還在，所以玩家仍然站在廣場前面。
+     */
+    { id: 'cocos', name: 'Cocos Creator', href: 'https://demomyself-casino.pages.dev/', position: { x: 4, z: -31 }, arrival: { x: 4, z: -26 }, action: '開啟 Cocos 街機' },
 ];
 /** Pick the closest cabinet so adjacent interaction zones never depend on array order. */
 export function nearbyArcadePortal(p: Point): ArcadePortal | undefined {

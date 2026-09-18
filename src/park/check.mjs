@@ -16,7 +16,8 @@ for (const p of PLACES) {
     assert.ok(isWalkable(p.arrival), `${p.id} arrival is obstructed`);
     assert.equal(nearby(p.arrival)?.id, p.id, `${p.id} fast travel cannot interact`);
 }
-assert.deepEqual(ARCADE_PORTALS.map((p) => p.href), ['./arcade.html', './cocos-casino/']);
+// Cocos 賭場在 Cloudflare，Pixi 這款還在本站——一個絕對網址、一個相對路徑是預期的。
+assert.deepEqual(ARCADE_PORTALS.map((p) => p.href), ['./arcade.html', 'https://demomyself-casino.pages.dev/']);
 for (const portal of ARCADE_PORTALS) {
     assert.ok(isWalkable(portal.arrival), `${portal.id} cabinet arrival is obstructed`);
     assert.equal(nearbyArcadePortal(portal.arrival)?.id, portal.id, `${portal.id} cabinet cannot interact`);

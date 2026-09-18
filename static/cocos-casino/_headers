@@ -1,0 +1,19 @@
+# Cloudflare Pages 預設給靜態資源 `max-age=0, must-revalidate`：重訪時 43 個檔
+# 一個都不會少抓（實測仍是 42 個 200）。這裡把資源類的檔案改成可快取。
+#
+# 為什麼是 1 小時而不是 immutable：Cocos 的資源檔名是資產 UUID，**內容改了 UUID 不會變**
+# （這輪把四張 slot 貼圖從 PNG 換成 JPEG/WebP，UUID 一個字都沒動）。
+# 掛上 immutable 會讓改版永遠推不出去，所以只敢給一個短天期。
+# index.html 不列在這裡，維持每次都問，確保新版一部署就生效。
+
+/assets/*
+  Cache-Control: public, max-age=3600
+
+/cocos-js/*
+  Cache-Control: public, max-age=3600
+
+/src/*
+  Cache-Control: public, max-age=3600
+
+/loading.webp
+  Cache-Control: public, max-age=3600

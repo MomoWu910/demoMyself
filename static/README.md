@@ -21,6 +21,16 @@
 > 產物，自包含、照樣跑得動，但**不會再跟著 cocos-lab 的改動更新**。
 > 要看最新的輪盤與老虎機，走 `cocos-casino/` 的大廳進去。
 
+**`cocos-casino/` 另外部署一份到 Cloudflare Pages**（`demomyself-casino`），樂園的 Cocos 街機指向那裡——
+同一份檔案在 GitHub Pages 要 14.5–19.1 秒才看得到大廳，在 Cloudflare 是 2.6 秒（量法與數字見根目錄 README）。
+本站這份留著當備援，`npm run deploy` 會一起更新；改完賭場要推 Cloudflare 的話：
+
+```bash
+wrangler pages deploy dist/cocos-casino --project-name=demomyself-casino --branch=main
+```
+
+`_redirects` 與 `_headers` 只有 Cloudflare 會讀（回程轉址、資源快取一小時），GitHub Pages 這邊視而不見，無害。
+
 > ⚠️ **`yarn sync:cocos` 一定要帶作品名。** 舊版是「掃描所有 `web-mobile*`，
 > 挑最新的那個」——那是為了應付 Cocos 建置面板的亂編號（`web-mobile-001`…）。
 > 但現在 cocos-lab 走 CLI 建置、`outputName` 由設定檔寫死，而且同時存在
